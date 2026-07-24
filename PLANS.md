@@ -43,7 +43,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 ## Active v1 milestone plan
 
 - [x] Repository bootstrap
-- [ ] GCP project configuration
+- [x] GCP project configuration
 - [x] Firestore-independent domain model and backend fixtures
 - [x] Firestore repository path, serialization, idempotency and demo seed baseline
 - [x] Deterministic policy engine and matching pipeline

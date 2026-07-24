@@ -37,8 +37,10 @@ python3 -m venv .venv
 ```text
 .venv/bin/python scripts/seed_demo.py --target memory
 .venv/bin/python scripts/firestore_smoke.py --target memory
-.venv/bin/python scripts/seed_demo.py --target firestore --project <gcp-project-id>
-.venv/bin/python scripts/firestore_smoke.py --target firestore --project <gcp-project-id>
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
+  .venv/bin/python scripts/seed_demo.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
+  .venv/bin/python scripts/firestore_smoke.py --target firestore
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
   .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
 ```

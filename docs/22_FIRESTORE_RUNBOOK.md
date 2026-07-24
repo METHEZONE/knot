@@ -232,6 +232,43 @@ GOOGLE_CLOUD_PROJECT=<gcp-project-id>
 `GCP_PROJECT_ID` is accepted as a local fallback, but Google client libraries use
 `GOOGLE_CLOUD_PROJECT` by convention.
 
+Local ADC setup:
+
+```text
+gcloud auth login
+gcloud auth application-default login
+gcloud auth application-default set-quota-project <gcp-project-id>
+```
+
+Firestore API and Native database bootstrap:
+
+```text
+gcloud services enable firestore.googleapis.com --project=<gcp-project-id>
+gcloud firestore databases list --project=<gcp-project-id>
+gcloud firestore databases create --database='(default)' --location=us-central1 --type=firestore-native --project=<gcp-project-id>
+```
+
+The database location and mode are one-time choices. For KNOT v1 demo work, use
+Native mode and the region from `docs/04_GCP_INFRASTRUCTURE.md` unless the GCP
+project owner has explicitly selected a different region.
+
+Seed and smoke against real GCP Firestore:
+
+```text
+env GOOGLE_CLOUD_PROJECT=<gcp-project-id> GCP_PROJECT_ID=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
+  .venv/bin/python scripts/firestore_smoke.py --target firestore
+```
+
+Current verified project:
+
+```text
+projectId: knot-dev-gcp
+database: projects/knot-dev-gcp/databases/(default)
+type: FIRESTORE_NATIVE
+location: us-central1
+verifiedAt: 2026-07-24
+```
+
 Runtime service accounts:
 
 - `knot-api-sa`: Firestore user
@@ -326,6 +363,8 @@ env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev
 .venv/bin/python scripts/firestore_smoke.py --target memory
 env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
   .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev
+env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore \
+  .venv/bin/python scripts/firestore_smoke.py --target firestore
 git diff --check
 ```
 

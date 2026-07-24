@@ -1,7 +1,24 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import BaseModel
+
+
+def _load_dotenv() -> None:
+    env_file = Path(__file__).resolve().parents[3] / ".env"
+    if not env_file.exists():
+        return
+    with open(env_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip("'\"")
+            if key and key not in os.environ:
+                os.environ[key] = val
 
 
 class Settings(BaseModel):
@@ -16,6 +33,7 @@ class Settings(BaseModel):
 
 @lru_cache
 def get_settings(service_name: str | None = None) -> Settings:
+    _load_dotenv()
     resolved_service_name = service_name or os.getenv("KNOT_SERVICE_NAME") or "knot-api"
     return Settings(
         service_name=resolved_service_name,

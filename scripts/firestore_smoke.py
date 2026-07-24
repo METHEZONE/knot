@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -14,7 +15,11 @@ from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run KNOT Firestore repository smoke checks.")
     parser.add_argument("--target", choices=["memory", "firestore"], default="memory")
-    parser.add_argument("--project", help="GCP project ID for Firestore target.")
+    parser.add_argument(
+        "--project",
+        default=_default_project_id(),
+        help="GCP project ID for Firestore target. Defaults to GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID.",
+    )
     args = parser.parse_args()
 
     repository = _repository(args.target, args.project)
@@ -42,6 +47,10 @@ def _firestore_client(project: str | None) -> object:
             "google-cloud-firestore is not installed. Run backend dependency install first."
         ) from exc
     return firestore.Client(project=project)
+
+
+def _default_project_id() -> str | None:
+    return os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
 
 
 def _assert_seed_readback(repository: KnotRepository) -> None:

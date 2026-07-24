@@ -15,7 +15,7 @@ Update this file at the end of every Codex task.
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
-| Terraform/GCP | not started | - | No infra files committed yet |
+| Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; infra files not committed yet |
 | end-to-end demo | not started | - | |
 
 ## Contract versions
@@ -42,6 +42,7 @@ env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 .venv/bin/python scripts/firestore_smoke.py --target memory: passed.
 env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev: passed.
+env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore .venv/bin/python scripts/firestore_smoke.py --target firestore: passed against real GCP Firestore.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
 cd web3/gateway && npm run lint: passed.
 cd web3/gateway && npm test: passed, 5 tests.
@@ -87,11 +88,14 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added web3 gateway lock validation service requiring `Idempotency-Key`, agreement/escrow IDs, terms hash, amount, mint, program ID, network, and wallet references.
 - Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
 - Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
+- Created root `.env` file from `.env.example` template and updated `backend/libs/settings/config.py` with automatic `.env` loading support for local GCP and Firebase development.
+- Enabled `firestore.googleapis.com` in GCP project `knot-dev-gcp`, created Firestore Native `(default)` in `us-central1`, configured local ADC quota project, and verified real Firestore seed/readback.
+- Added `GOOGLE_CLOUD_PROJECT` to `.env.example` and made Firestore seed/smoke scripts default to `GOOGLE_CLOUD_PROJECT` or `GCP_PROJECT_ID`.
+
 
 ## Known blockers
 
-- GCP project ID not configured.
-- Firestore Native database has not been created in GCP.
+- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet.
 - Firestore emulator requires Java 25 or higher after future gcloud releases; local Java is currently 21 and still works with the installed emulator but emitted a deprecation warning.
 - Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
 - Devnet program ID and mint not configured.
@@ -99,4 +103,4 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 ## Next task
 
-Wire API evidence observations to Gemini/pay.sh adapters when those service settings are available, or add global `auditEvents` persistence next.
+Add Cloud Run-oriented backend runtime configuration and service account/IAM bootstrap docs, then wire global `auditEvents` persistence.
