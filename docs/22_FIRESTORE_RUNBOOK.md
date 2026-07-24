@@ -73,7 +73,63 @@ idempotencyKeys/{key}
 All JSON and Firestore field names use `camelCase`. Python code may use snake
 case internally only through Pydantic aliases.
 
-## 4. Seed Data
+## 4. ERD
+
+```mermaid
+erDiagram
+    BRAND ||--o{ PROMOTION : owns
+    BRAND ||--|| AGENT : uses
+    CREATOR_PROFILE ||--|| AGENT : represented_by
+    AGENT ||--|| AGENT_POLICY : governed_by
+
+    PROMOTION ||--o{ PROMOTION_EVENT : records
+    PROMOTION ||--o{ MATCH_RUN : has
+    MATCH_RUN ||--o{ MATCH_CANDIDATE : ranks
+    MATCH_CANDIDATE }o--|| AGENT : candidate_agent
+
+    PROMOTION ||--o{ NEGOTIATION : opens
+    NEGOTIATION ||--o{ NEGOTIATION_MESSAGE : contains
+    NEGOTIATION ||--o{ NEGOTIATION_DECISION : records
+    NEGOTIATION ||--o| AGREEMENT : produces
+
+    A2A_TASK ||--o{ A2A_EVENT : records
+    A2A_TASK ||--o{ A2A_ARTIFACT : produces
+    NEGOTIATION ||--|| A2A_TASK : maps_to
+
+    AGREEMENT ||--o{ EVIDENCE : requires
+    AGREEMENT ||--o| ESCROW : funded_by
+    ESCROW ||--o{ SETTLEMENT : releases
+    ESCROW ||--o{ TRANSACTION_RECEIPT : records
+    SETTLEMENT ||--o{ TRANSACTION_RECEIPT : records
+
+    AUDIT_EVENT }o--o| PROMOTION : references
+    IDEMPOTENCY_KEY }o--|| ESCROW : protects
+    IDEMPOTENCY_KEY }o--|| SETTLEMENT : protects
+```
+
+Entity key fields:
+
+```text
+BRAND.brandId
+CREATOR_PROFILE.creatorId, creatorAgentId
+AGENT.agentId
+AGENT_POLICY.agentId, policyVersion
+PROMOTION.promotionId, brandId, brandAgentId
+MATCH_RUN.matchRunId, promotionId, selectedCreatorAgentId
+MATCH_CANDIDATE.creatorAgentId, eligible, score, rank
+NEGOTIATION.negotiationId, promotionId, contextId, taskId, status, currentRound
+NEGOTIATION_MESSAGE.messageId, contextId, taskId, role, sequence
+NEGOTIATION_DECISION.decisionId, messageId, type, policyDecision
+AGREEMENT.agreementId, negotiationId, termsHash, status
+EVIDENCE.evidenceId, agreementId, status, policyDecision
+ESCROW.escrowId, agreementId, termsHash, status
+SETTLEMENT.settlementId, escrowId, milestoneId, idempotencyKey, status
+TRANSACTION_RECEIPT.receiptId, signature, status
+AUDIT_EVENT.eventId, type, createdAt
+IDEMPOTENCY_KEY.key, payloadHash, ownerPath
+```
+
+## 5. Seed Data
 
 Committed demo fixtures live in `backend/fixtures/`:
 
@@ -113,7 +169,7 @@ promotions/promotion-001
 Do not manually edit Firestore during the recorded demo. Fix fixture or seed
 code, then reseed.
 
-## 5. Local Firestore Emulator
+## 6. Local Firestore Emulator
 
 Firestore emulator integration is not wired yet. When added, use this shape:
 
@@ -123,7 +179,11 @@ export FIRESTORE_EMULATOR_HOST=127.0.0.1:8085
 export KNOT_REPOSITORY_BACKEND=firestore
 export GOOGLE_CLOUD_PROJECT=knot-agentic-dev
 .venv/bin/python scripts/seed_demo.py --target firestore --project knot-agentic-dev
+.venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev
 ```
+
+If the Google Cloud CLI is not installed, install it before using the emulator.
+Java is also required by the emulator runtime.
 
 Emulator tests should verify repository behavior that cannot be proven by the
 in-memory store:
@@ -133,7 +193,7 @@ in-memory store:
 - negotiation round increments in transactions
 - escrow and settlement write ordering once payment endpoints are connected
 
-## 6. GCP Firestore Setup
+## 7. GCP Firestore Setup
 
 Create Firestore in Native mode once per project. The expected hackathon project
 and region are documented in `docs/04_GCP_INFRASTRUCTURE.md`, but the actual
@@ -158,7 +218,7 @@ Runtime service accounts:
 
 Do not commit service account JSON files or downloaded credentials.
 
-## 7. Indexes
+## 8. Indexes
 
 No composite indexes are currently required by implemented queries. Existing
 repository reads are direct document lookups or collection scans for the demo
@@ -178,7 +238,7 @@ transactionReceipts: idempotencyKey ASC
 auditEvents: promotionId ASC, createdAt DESC
 ```
 
-## 8. Write Rules and Invariants
+## 9. Write Rules and Invariants
 
 Repository/API code must preserve these invariants:
 
@@ -195,7 +255,7 @@ Repository/API code must preserve these invariants:
 LLM output must not authorize writes that move money. Policy code and the web3
 gateway must approve escrow lock and release.
 
-## 9. Implemented API Persistence
+## 10. Implemented API Persistence
 
 Current Product API routes write or read these collections:
 
@@ -226,7 +286,7 @@ Promotion timeline events.
 
 Payment mutation endpoints remain deferred until web3 signing work resumes.
 
-## 10. Verification
+## 11. Verification
 
 Run these checks after DB/API changes:
 
@@ -235,13 +295,14 @@ Run these checks after DB/API changes:
 .venv/bin/python -m mypy backend/apps backend/libs
 .venv/bin/python -m pytest backend/tests
 .venv/bin/python scripts/seed_demo.py --target memory
+.venv/bin/python scripts/firestore_smoke.py --target memory
 git diff --check
 ```
 
 Expected current test result:
 
 ```text
-38 passed
+39 passed
 ```
 
 Known warning: FastAPI/Starlette TestClient currently emits one deprecation

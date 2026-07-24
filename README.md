@@ -36,7 +36,9 @@ python3 -m venv .venv
 
 ```text
 .venv/bin/python scripts/seed_demo.py --target memory
+.venv/bin/python scripts/firestore_smoke.py --target memory
 .venv/bin/python scripts/seed_demo.py --target firestore --project <gcp-project-id>
+.venv/bin/python scripts/firestore_smoke.py --target firestore --project <gcp-project-id>
 ```
 
 ```text

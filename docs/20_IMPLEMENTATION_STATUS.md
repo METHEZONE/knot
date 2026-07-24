@@ -35,10 +35,11 @@ Escrow program: unset
 ## Latest validation
 
 ```text
-.venv/bin/python -m ruff check backend scripts/seed_demo.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 38 tests, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py: passed.
+.venv/bin/python -m pytest backend/tests: passed, 39 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
+.venv/bin/python scripts/firestore_smoke.py --target memory: passed.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
 cd web3/gateway && npm run lint: passed.
 cd web3/gateway && npm test: passed, 5 tests.
@@ -74,6 +75,7 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added Product API start-negotiation, negotiation get/messages/events and agreement get routes backed by repository documents.
 - Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
 - Added `docs/22_FIRESTORE_RUNBOOK.md` to document Firestore modes, collections, seed data, emulator/GCP setup, indexes, invariants and verification.
+- Added an ERD to the Firestore runbook and a `scripts/firestore_smoke.py` readback command for memory or Firestore targets.
 - Added deterministic `verification-v1` evidence policy checks for URL reachability, brand mention, required disclosure and prohibited claims.
 - Added Product API routes for evidence submission, evidence lookup and evidence verification backed by `evidence/{evidenceId}` documents and Promotion timeline events.
 - Added API and policy tests covering evidence success, persisted verification failure, creator-agent submitter validation and blocked observation rules.
@@ -84,7 +86,9 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 ## Known blockers
 
 - GCP project ID not configured.
-- Firestore Native database has not been created in GCP and emulator integration tests are not wired yet.
+- Firestore Native database has not been created in GCP.
+- Local Google Cloud CLI is not installed, so Firestore emulator execution is not available on this machine yet.
+- Firestore emulator integration tests are not wired yet.
 - Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
 - Devnet program ID and mint not configured.
 - pay.sh sandbox resource not selected.
