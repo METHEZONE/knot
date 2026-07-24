@@ -28,3 +28,10 @@ def test_vault_and_authority_distinct():
 def test_reputation_pda():
     rep, _ = pdas.reputation_pda(BRAND)
     assert rep != BRAND
+
+
+def test_config_pda_singleton():
+    a = pdas.config_pda()
+    b = pdas.config_pda()
+    assert a == b  # 싱글턴, 결정적
+    assert a[0] != pdas.reputation_pda(BRAND)[0]

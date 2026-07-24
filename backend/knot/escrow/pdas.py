@@ -35,3 +35,8 @@ def vault_pda(campaign: Pubkey) -> tuple[Pubkey, int]:
 def reputation_pda(wallet: Pubkey) -> tuple[Pubkey, int]:
     """seeds = [b"rep", wallet] — 지갑별 온체인 평판 PDA"""
     return Pubkey.find_program_address([b"rep", bytes(wallet)], PROGRAM_ID)
+
+
+def config_pda() -> tuple[Pubkey, int]:
+    """seeds = [b"config"] — 플랫폼 설정(수수료율·트레저리) 싱글턴 PDA"""
+    return Pubkey.find_program_address([b"config"], PROGRAM_ID)

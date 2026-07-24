@@ -45,19 +45,23 @@
 - **결제 토큰**: USDC-SPL (devnet mint `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`)
 
 ### 계정 (State)
-- `Campaign` PDA `[b"campaign", brand, campaign_id(u64 LE)]` — brand/creator/agent_authority/mint/vault, total·released·auto_approve_cap, status, `milestones: Vec<Milestone>`(최대 8).
-- `vault` 토큰계정 PDA `[b"vault", campaign]` — 권한은 `vault_authority` PDA `[b"vault-auth", campaign]`.
-- `Reputation` PDA `[b"rep", wallet]` — campaigns_completed, total_settled, rating.
+- `Config` PDA `[b"config"]` (싱글턴) — `admin`, `treasury`(수수료 수취 토큰계정), `brand_fee_bps`, `creator_fee_bps`.
+- `Campaign` PDA `[b"campaign", brand, campaign_id(u64 LE)]` — 당사자·mint·vault·treasury, total/released/auto_approve_cap, brand/creator_fee_bps(스냅샷), `terms_hash[32]`, `refund_available_at`, status, `milestones: Vec<Milestone>`(최대 8).
+- `vault` 토큰계정 PDA `[b"vault", campaign]` — 권한 = `vault_authority` PDA `[b"vault-auth", campaign]`.
+- `Reputation` PDA `[b"rep", wallet]` — campaigns_completed, total_settled(실수령 기준), rating.
 
 ### 인스트럭션
 | 이름 | 서명자 | 설명 |
-|------|--------|------|
-| `initialize_campaign(campaign_id, milestone_amounts, auto_approve_cap)` | brand | 캠페인 생성 + 총액 vault 예치 |
+|---|---|---|
+| `initialize_config(brand_fee_bps, creator_fee_bps)` | admin | 플랫폼 수수료율·트레저리 1회 설정 |
+| `initialize_campaign(campaign_id, milestone_amounts, auto_approve_cap, terms_hash, refund_timelock_secs)` | brand | 캠페인 생성 + (딜총액 + 브랜드측 수수료) vault 예치, terms_hash 기록 |
 | `submit_milestone(index)` | creator | 마일스톤 완료 제출 |
-| `approve_and_release(index)` | brand **또는** agent_authority(cap 이내) | 승인 + 크리에이터에게 USDC 전송, 평판 갱신 |
-| `refund()` | brand | vault 잔액 브랜드 환불(취소) |
+| `approve_and_release(index)` | brand **또는** agent_authority(cap 이내) | 승인 → 크리에이터 net 전송 + 트레저리에 양측 수수료 스킴 + 평판 갱신 |
+| `refund()` | brand | **타임락 경과 후** vault 잔액 브랜드 환불(분쟁/취소) |
 
-이벤트: `CampaignInitialized`, `MilestoneReleased{by_agent}`.
+**수수료 (양측·Airbnb식)**: 브랜드는 딜총액 **위에** 브랜드측 수수료를 얹어 예치, 크리에이터는 지급액에서 크리에이터측 수수료 **차감**. 릴리즈마다 마일스톤 비례로 온체인 스킴 → 트레저리. 요율은 `Config`에 저장(데모 기본값, 팀 조정).
+
+이벤트: `CampaignInitialized{deposit}`, `MilestoneReleased{creator_net, platform_cut, by_agent}`.
 
 ## 4. 인터페이스 계약 (예원 에이전트 → 효창 레이어)
 
@@ -70,13 +74,17 @@ res = paysh.fetch("https://<paid-api>", sandbox=True)   # 개발/데모는 sandb
 
 # 결제 흐름 2 — 온체인 마일스톤 정산
 from knot.escrow import client, pdas
-program  = await client.load_program(payer_keypair)              # IDL 로드
-campaign = await client.initialize_campaign(program, brand=..., creator=..., agent_authority=...,
+program = await client.load_program(payer_keypair)                       # IDL 로드
+# (관리자 1회) 플랫폼 수수료율·트레저리 설정 — 예: 양측 5%
+await client.initialize_config(program, admin=admin_kp, treasury_token=TREASURY,
+                               brand_fee_bps=500, creator_fee_bps=500)
+campaign = await client.initialize_campaign(program, brand=brand_kp, creator=..., agent_authority=...,
                                             mint=USDC, brand_token=..., campaign_id=1,
-                                            milestone_amounts=[..], auto_approve_cap=..)
-await client.submit_milestone(program, creator=..., campaign=campaign, index=0)
+                                            milestone_amounts=[..], auto_approve_cap=..,
+                                            terms_hash=sha256(terms_json), refund_timelock_secs=7*86400)
+await client.submit_milestone(program, creator=creator_kp, campaign=campaign, index=0)
 await client.approve_and_release(program, signer=agent_kp, campaign=campaign,
-                                 creator=..., creator_token=..., index=0)
+                                 creator=..., creator_token=..., treasury_token=TREASURY, index=0)
 
 # 신원/평판
 from knot.identity import fetch_reputation

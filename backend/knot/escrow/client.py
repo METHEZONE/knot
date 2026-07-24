@@ -41,6 +41,34 @@ async def load_program(payer: Keypair, rpc_url: str = DEVNET_RPC):
     return Program(idl, pdas.PROGRAM_ID, provider)
 
 
+async def initialize_config(
+    program,
+    *,
+    admin: Keypair,
+    treasury_token: Pubkey,
+    brand_fee_bps: int,
+    creator_fee_bps: int,
+) -> Pubkey:
+    """플랫폼 설정 1회 초기화. 양측 수수료율(bps) + 트레저리 토큰계정. config PDA 반환."""
+    from anchorpy import Context
+
+    config, _ = pdas.config_pda()
+    await program.rpc["initialize_config"](
+        brand_fee_bps,
+        creator_fee_bps,
+        ctx=Context(
+            accounts={
+                "admin": admin.pubkey(),
+                "treasury": treasury_token,
+                "config": config,
+                "system_program": SYSTEM_PROGRAM_ID,
+            },
+            signers=[admin],
+        ),
+    )
+    return config
+
+
 async def initialize_campaign(
     program,
     *,
@@ -52,10 +80,19 @@ async def initialize_campaign(
     campaign_id: int,
     milestone_amounts: List[int],
     auto_approve_cap: int,
+    terms_hash: bytes,
+    refund_timelock_secs: int,
 ) -> Pubkey:
-    """캠페인 생성 + 총액 USDC 예치. 생성된 campaign PDA를 반환."""
+    """캠페인 생성 + (딜 총액 + 브랜드측 수수료) 예치. 생성된 campaign PDA 반환.
+
+    terms_hash: 합의된 텀시트 JSON의 sha256 (32바이트).
+    """
     from anchorpy import Context
 
+    if len(terms_hash) != 32:
+        raise ValueError("terms_hash 는 32바이트(sha256)여야 함")
+
+    config, _ = pdas.config_pda()
     campaign, _ = pdas.campaign_pda(brand.pubkey(), campaign_id)
     vault_auth, _ = pdas.vault_authority_pda(campaign)
     vault, _ = pdas.vault_pda(campaign)
@@ -64,6 +101,8 @@ async def initialize_campaign(
         campaign_id,
         milestone_amounts,
         auto_approve_cap,
+        list(terms_hash),
+        refund_timelock_secs,
         ctx=Context(
             accounts={
                 "brand": brand.pubkey(),
@@ -71,6 +110,7 @@ async def initialize_campaign(
                 "agent_authority": agent_authority,
                 "mint": mint,
                 "brand_token": brand_token,
+                "config": config,
                 "campaign": campaign,
                 "vault_authority": vault_auth,
                 "vault": vault,
@@ -104,9 +144,14 @@ async def approve_and_release(
     campaign: Pubkey,
     creator: Pubkey,
     creator_token: Pubkey,
+    treasury_token: Pubkey,
     index: int,
 ) -> None:
-    """마일스톤 승인 + 정산. signer가 브랜드면 무조건, 에이전트면 auto_approve_cap 이내에서만."""
+    """마일스톤 승인 + 정산. 크리에이터에게 net, 트레저리에 양측 수수료.
+
+    signer가 브랜드면 무조건, 에이전트면 auto_approve_cap 이내에서만 통과.
+    treasury_token 은 config.treasury 와 일치해야 함.
+    """
     from anchorpy import Context
 
     vault_auth, _ = pdas.vault_authority_pda(campaign)
@@ -122,6 +167,7 @@ async def approve_and_release(
                 "vault_authority": vault_auth,
                 "vault": vault,
                 "creator_token": creator_token,
+                "treasury_token": treasury_token,
                 "creator_reputation": reputation,
                 "token_program": TOKEN_PROGRAM_ID,
                 "system_program": SYSTEM_PROGRAM_ID,
@@ -132,7 +178,7 @@ async def approve_and_release(
 
 
 async def refund(program, *, brand: Keypair, campaign: Pubkey, brand_token: Pubkey) -> None:
-    """미완료/취소 시 vault 잔액을 브랜드에 환불."""
+    """타임락 경과 후 vault 잔액을 브랜드에 환불."""
     from anchorpy import Context
 
     vault_auth, _ = pdas.vault_authority_pda(campaign)
