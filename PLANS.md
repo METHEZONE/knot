@@ -47,7 +47,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Firestore-independent domain model and backend fixtures
 - [x] Deterministic policy engine and matching pipeline
 - [x] Brand Agent and Creator Agent A2A negotiation baseline
-- [ ] Agreement hashing and Solana devnet escrow lock
+- [x] Agreement hashing and escrow lock validation skeleton
 - [ ] Evidence verification and milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo

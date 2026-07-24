@@ -1,14 +1,11 @@
 import express, { type Request, type Response } from "express";
-import { z } from "zod";
 import { loadConfig, type GatewayConfig } from "./config.js";
+import { EscrowLockService } from "./escrow.js";
 
-const lockRequestSchema = z.object({
-  agreementId: z.string().min(1),
-  termsHash: z.string().startsWith("sha256:"),
-  expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/)
-});
-
-export function createApp(config: GatewayConfig = loadConfig()) {
+export function createApp(
+  config: GatewayConfig = loadConfig(),
+  escrowLockService = new EscrowLockService()
+) {
   const app = express();
   app.use(express.json({ limit: "256kb" }));
 
@@ -30,19 +27,8 @@ export function createApp(config: GatewayConfig = loadConfig()) {
   });
 
   app.post("/internal/v1/escrows:lock", (request: Request, response: Response) => {
-    const result = lockRequestSchema.safeParse(request.body);
-    if (!result.success) {
-      response.status(400).json({
-        code: "VALIDATION_ERROR",
-        detail: "Invalid escrow lock request"
-      });
-      return;
-    }
-
-    response.status(501).json({
-      code: "NOT_IMPLEMENTED",
-      detail: "Escrow lock signing is not implemented in the M0 skeleton"
-    });
+    const result = escrowLockService.lock(config, request.header("Idempotency-Key"), request.body);
+    response.status(result.statusCode).json(result.body);
   });
 
   return app;

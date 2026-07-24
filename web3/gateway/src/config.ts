@@ -4,6 +4,8 @@ export type GatewayConfig = {
   buildTime: string;
   schemaVersion: string;
   solanaCluster: string;
+  allowedMint: string;
+  allowedProgramId: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -12,6 +14,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     gitSha: env.GIT_SHA ?? "local",
     buildTime: env.BUILD_TIME ?? "local",
     schemaVersion: "v1",
-    solanaCluster: env.SOLANA_CLUSTER ?? "devnet"
+    solanaCluster: env.SOLANA_CLUSTER ?? "devnet",
+    allowedMint: env.KNOT_USDC_MINT ?? "demo-usdc-mint",
+    allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "demo-escrow-program"
   };
 }
