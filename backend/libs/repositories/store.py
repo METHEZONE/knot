@@ -139,14 +139,14 @@ class KnotRepository:
     def create_audit_event(self, event_id: str, document: Mapping[str, object]) -> None:
         self._store.set_document(FirestorePaths.audit_event(event_id), document, exists_ok=False)
 
-    def claim_idempotency_key(
+    def claim_idempotency_record(
         self,
         key: str,
         *,
         payload_hash: str,
         owner_path: str,
     ) -> bool:
-        path = FirestorePaths.idempotency_key(key)
+        path = FirestorePaths.idempotency_record(key)
         existing = self._store.get_document(path)
         if existing is None:
             self._store.set_document(

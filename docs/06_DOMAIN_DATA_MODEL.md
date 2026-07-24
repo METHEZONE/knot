@@ -4,16 +4,48 @@
 
 ```mermaid
 erDiagram
+    BRAND ||--o{ PROMOTION : owns
+    BRAND ||--o| AGENT : represented_by
+    CREATOR_PROFILE ||--o| AGENT : represented_by
+    AGENT ||--o| AGENT_POLICY : governed_by
+
     PROMOTION ||--o{ MATCH_RUN : has
     MATCH_RUN ||--o{ MATCH_CANDIDATE : ranks
-    PROMOTION ||--o{ NEGOTIATION : opens
-    NEGOTIATION ||--o{ MESSAGE : contains
+    MATCH_CANDIDATE }o--|| CREATOR_PROFILE : candidate_creator
+
+    PROMOTION ||--o{ NEGOTIATION : contains
+    MATCH_CANDIDATE ||--o| NEGOTIATION : starts
+    NEGOTIATION }o--|| AGENT : client_brand_agent
+    NEGOTIATION }o--|| AGENT : server_creator_agent
+
+    NEGOTIATION ||--o{ NEGOTIATION_MESSAGE : contains
+    NEGOTIATION ||--o{ NEGOTIATION_DECISION : records
+    NEGOTIATION ||--|| A2A_TASK : maps_to
+
+    A2A_TASK ||--o{ A2A_EVENT : records
+    A2A_TASK ||--o{ A2A_ARTIFACT : produces
+
     NEGOTIATION ||--o| AGREEMENT : produces
-    AGREEMENT ||--o| ESCROW : funds
+    A2A_ARTIFACT ||--o| AGREEMENT : materializes
+
+    AGREEMENT ||--o{ MILESTONE : defines
+    MILESTONE ||--o{ EVIDENCE : verifies
+
+    AGREEMENT ||--o| ESCROW : funded_by
     ESCROW ||--o{ SETTLEMENT : releases
-    AGREEMENT ||--o{ EVIDENCE : requires
-    AGENT ||--|| AGENT_POLICY : governed_by
+    MILESTONE ||--o| SETTLEMENT : triggers
+
+    ESCROW ||--o{ PAYMENT_OPERATION : executes
+    SETTLEMENT o|--o{ PAYMENT_OPERATION : payout_attempts
+    PAYMENT_OPERATION ||--o| TRANSACTION_RECEIPT : results_in
+    PAYMENT_OPERATION ||--|| IDEMPOTENCY_RECORD : guarded_by
 ```
+
+This ERD is a logical relationship map. Firestore is not relational; actual
+documents store document ID references such as `promotionId`, `creatorId`,
+`creatorAgentId`, `matchRunId`, `taskId`, `artifactId`, `agreementId`,
+`milestoneId`, `paymentOperationId`, and immutable snapshot fields where policy
+or payment decisions must remain replayable.
 
 ## 2. Collections
 
@@ -25,7 +57,7 @@ agentPolicies/{agentId}
 promotions/{promotionId}
 promotions/{promotionId}/events/{eventId}
 matchRuns/{matchRunId}
-matchRuns/{matchRunId}/candidates/{creatorAgentId}
+matchRuns/{matchRunId}/candidates/{creatorId}
 negotiations/{negotiationId}
 negotiations/{negotiationId}/messages/{messageId}
 negotiations/{negotiationId}/decisions/{decisionId}
@@ -33,12 +65,14 @@ a2aTasks/{taskId}
 a2aTasks/{taskId}/events/{eventId}
 a2aTasks/{taskId}/artifacts/{artifactId}
 agreements/{agreementId}
+agreements/{agreementId}/milestones/{milestoneId}
 evidence/{evidenceId}
 escrows/{escrowId}
 settlements/{settlementId}
+paymentOperations/{operationId}
 transactionReceipts/{receiptId}
 auditEvents/{eventId}
-idempotencyKeys/{key}
+idempotencyRecords/{key}
 ```
 
 ## 3. Promotion
@@ -103,6 +137,7 @@ idempotencyKeys/{key}
   "brandAgentId": "brand-agent-001",
   "status": "COMPLETED",
   "weightsVersion": "matching-v1",
+  "selectedCreatorId": "creator-001",
   "selectedCreatorAgentId": "creator-agent-001",
   "createdAt": "timestamp",
   "completedAt": "timestamp"
@@ -113,7 +148,9 @@ Candidate document:
 
 ```json
 {
+  "creatorId": "creator-001",
   "creatorAgentId": "creator-agent-001",
+  "creatorProfilePath": "creatorProfiles/creator-001",
   "eligible": true,
   "score": 0.87,
   "componentScores": {
@@ -125,7 +162,8 @@ Candidate document:
   },
   "hardFilterReasons": [],
   "explanation": "Category, rate and schedule fit the Promotion.",
-  "rank": 1
+  "rank": 1,
+  "negotiationId": null
 }
 ```
 
@@ -134,6 +172,9 @@ Candidate document:
 ```json
 {
   "negotiationId": "uuid",
+  "matchRunId": "uuid",
+  "matchCandidateId": "creator-001",
+  "matchCandidatePath": "matchRuns/{matchRunId}/candidates/creator-001",
   "promotionId": "uuid",
   "brandAgentId": "brand-agent-001",
   "creatorAgentId": "creator-agent-001",
@@ -157,6 +198,8 @@ Candidate document:
 {
   "agreementId": "uuid",
   "negotiationId": "uuid",
+  "taskId": "uuid",
+  "artifactId": "uuid",
   "promotionId": "uuid",
   "brandAgentId": "brand-agent-001",
   "creatorAgentId": "creator-agent-001",
@@ -190,7 +233,50 @@ Candidate document:
 }
 ```
 
-## 8. Escrow and settlement
+Milestone document:
+
+```json
+{
+  "milestoneId": "content",
+  "agreementId": "uuid",
+  "trigger": "contentLiveVerified",
+  "releasePct": 70,
+  "status": "PENDING",
+  "createdAt": "timestamp"
+}
+```
+
+## 8. Evidence
+
+```json
+{
+  "evidenceId": "uuid",
+  "agreementId": "uuid",
+  "milestoneId": "content",
+  "milestonePath": "agreements/{agreementId}/milestones/content",
+  "milestoneSnapshot": {},
+  "promotionId": "uuid",
+  "creatorAgentId": "creator-agent-001",
+  "submittedByAgentId": "creator-agent-001",
+  "url": "https://social.example/post/123",
+  "status": "PASSED",
+  "observations": {
+    "urlReachable": true,
+    "brandMentioned": true,
+    "disclosurePresent": true,
+    "prohibitedClaimsFound": []
+  },
+  "policyDecision": {
+    "allowed": true,
+    "ruleVersion": "verification-v1"
+  },
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "verifiedAt": "timestamp"
+}
+```
+
+## 9. Escrow, settlement and payment operation
 
 Escrow:
 
@@ -216,16 +302,67 @@ Settlement:
 {
   "settlementId": "uuid",
   "escrowId": "uuid",
+  "agreementId": "uuid",
   "milestoneId": "content",
   "amountBaseUnits": "455000000",
   "status": "CONFIRMED",
-  "signature": "...",
-  "idempotencyKey": "release:<escrowId>:content",
   "createdAt": "timestamp"
 }
 ```
 
-## 9. Invariants
+Payment operation:
+
+```json
+{
+  "operationId": "uuid",
+  "operationType": "ESCROW_LOCK",
+  "escrowId": "uuid",
+  "settlementId": null,
+  "agreementId": "uuid",
+  "milestoneId": null,
+  "idempotencyKey": "lock:<agreementId>",
+  "idempotencyRecordPath": "idempotencyRecords/lock:<agreementId>",
+  "status": "CONFIRMED",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+
+Transaction receipt:
+
+```json
+{
+  "receiptId": "uuid",
+  "paymentOperationId": "uuid",
+  "network": "solanaDevnet",
+  "signature": "...",
+  "explorerUrl": "...",
+  "status": "CONFIRMED",
+  "createdAt": "timestamp"
+}
+```
+
+Idempotency record:
+
+```json
+{
+  "key": "lock:<agreementId>",
+  "payloadHash": "sha256:...",
+  "ownerPath": "paymentOperations/{operationId}",
+  "createdAt": "timestamp"
+}
+```
+
+## 10. Event boundaries
+
+`promotions/{promotionId}/events/{eventId}` is product timeline data for the
+frontend. It records user-visible milestones in a Promotion flow.
+
+`auditEvents/{eventId}` is append-only operational/security audit data. It may
+reference a Promotion, Agreement, PaymentOperation or service request, but the UI
+must not depend on it as the timeline source.
+
+## 11. Invariants
 
 1. Agreement milestone percentages sum to exactly 100.
 2. `currentRound` increments once per accepted unique message.
@@ -234,6 +371,6 @@ Settlement:
 5. Escrow lock amount equals the payable fixed amount for v1.
 6. Released amount never exceeds locked amount.
 7. One milestone can be released once.
-8. Every payment action has a unique idempotency key.
+8. Every payment action creates one PaymentOperation guarded by one IdempotencyRecord.
 9. Policy snapshots are immutable after negotiation starts.
 10. Audit events are append-only.

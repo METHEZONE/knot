@@ -37,7 +37,7 @@ Agents and Gemini cannot access signing material. A private gateway revalidates 
 
 ### ADR-008 — Promotion terminology
 
-Use Promotion as the brand initiative. Avoid `campaign` and `dealBrief` in new code and documents.
+Use Promotion as the brand initiative. Avoid legacy initiative terms in new code and documents.
 
 ### ADR-009 — Onboarding deferred
 

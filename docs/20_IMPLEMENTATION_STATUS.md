@@ -76,6 +76,8 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
 - Added `docs/22_FIRESTORE_RUNBOOK.md` to document Firestore modes, collections, seed data, emulator/GCP setup, indexes, invariants and verification.
 - Added an ERD to the Firestore runbook and a `scripts/firestore_smoke.py` readback command for memory or Firestore targets.
+- Aligned the logical Firestore ERD with v1 relationship semantics: optional Brand/Creator-to-Agent representation, MatchCandidate-to-CreatorProfile references, MatchCandidate-to-Negotiation tracking, A2AArtifact-to-Agreement materialization, Agreement Milestone documents, PaymentOperation as the payment execution unit, IdempotencyRecord guarding PaymentOperation, and separated PromotionEvent from AuditEvent.
+- Updated backend Firestore path helpers and API persistence so MatchCandidate documents use `creatorId`, Agreements persist `artifactId`, milestones are written under Agreements, Evidence references milestones, and idempotency records use `idempotencyRecords/{key}`.
 - Added deterministic `verification-v1` evidence policy checks for URL reachability, brand mention, required disclosure and prohibited claims.
 - Added Product API routes for evidence submission, evidence lookup and evidence verification backed by `evidence/{evidenceId}` documents and Promotion timeline events.
 - Added API and policy tests covering evidence success, persisted verification failure, creator-agent submitter validation and blocked observation rules.

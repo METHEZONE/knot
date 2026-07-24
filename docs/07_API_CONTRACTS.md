@@ -78,10 +78,12 @@ POST   /match-runs/{matchRunId}:start-negotiation
 The normal demo path auto-selects the top eligible candidate, while manual selection remains available for debugging.
 
 `POST /promotions/{promotionId}/matches:run` persists one `matchRuns/{matchRunId}`
-document and one candidate document per seeded Creator Agent under
-`matchRuns/{matchRunId}/candidates/{creatorAgentId}`. Gemini-generated explanations
-are not required for the current baseline; deterministic placeholder explanations
-must not affect eligibility, score or rank.
+document and one candidate document per seeded Creator Profile under
+`matchRuns/{matchRunId}/candidates/{creatorId}`. Candidate documents include both
+`creatorId` and `creatorAgentId` so the logical candidate is the Creator Profile
+while negotiation still routes to the selected Creator Agent. Gemini-generated
+explanations are not required for the current baseline; deterministic placeholder
+explanations must not affect eligibility, score or rank.
 
 ## 5. Negotiation endpoints
 
@@ -97,10 +99,11 @@ POST   /negotiations/{negotiationId}:resume
 `resume` is only allowed for `ESCALATED` or input-required state and requires an explicit user decision payload.
 
 Current backend baseline implements `start-negotiation` by persisting the
-Negotiation, offer/decision Messages and decision Events through the repository
-boundary. External A2A HTTP orchestration is a later integration step; persisted
-document shapes must remain compatible with the A2A payloads in
-`docs/09_A2A_PROTOCOL_v1.md`.
+Negotiation, offer/decision Messages, decision Events, A2A Task, A2A Artifact,
+Agreement and Agreement Milestone documents through the repository boundary.
+The MatchCandidate document is updated with the started `negotiationId`. External
+A2A HTTP orchestration is a later integration step; persisted document shapes
+must remain compatible with the A2A payloads in `docs/09_A2A_PROTOCOL_v1.md`.
 
 ## 6. Agreement and payment endpoints
 
@@ -117,7 +120,9 @@ Every payment POST requires an `Idempotency-Key` header.
 `GET /agreements/{agreementId}` returns the persisted Agreement document,
 including structured `terms`, `canonicalTermsJson`, `termsHash`, and `status`.
 Payment mutation endpoints are intentionally deferred until web3 gateway signing
-is wired.
+is wired. When wired, payment attempts must be represented by
+`paymentOperations/{operationId}`; `transactionReceipts/{receiptId}` points to
+the PaymentOperation instead of directly to Escrow or Settlement.
 
 ## 7. Evidence endpoints
 
@@ -132,9 +137,12 @@ Evidence request:
 ```json
 {
   "url": "https://social.example/post/123",
-  "submittedByAgentId": "creator-agent-001"
+  "submittedByAgentId": "creator-agent-001",
+  "milestoneId": "content"
 }
 ```
+
+`milestoneId` defaults to `content` for the current demo path.
 
 Verification result:
 
@@ -156,6 +164,7 @@ Verification result:
 ```
 
 Current backend baseline persists submitted evidence under `evidence/{evidenceId}`.
+Evidence references `agreementId`, `milestoneId`, and a milestone snapshot.
 Verification is deterministic and does not fetch live social content yet. If the
 request body omits observations, the API derives demo observations from the URL:
 

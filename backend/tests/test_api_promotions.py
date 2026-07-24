@@ -78,6 +78,8 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert candidates_response.status_code == 200
     candidates = candidates_response.json()["data"]["candidates"]
     assert candidates[0]["creatorAgentId"] == "creator-agent-003"
+    assert candidates[0]["creatorId"] == "creator-003"
+    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-003"
     assert candidates[0]["rank"] == 1
     assert candidates[0]["eligible"] is True
 
@@ -113,8 +115,11 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     negotiation = body["negotiation"]
     agreement = body["agreement"]
     assert negotiation["status"] == "AGREED"
+    assert negotiation["matchRunId"] == match_run["matchRunId"]
+    assert negotiation["matchCandidateId"] == "creator-003"
     assert negotiation["creatorAgentId"] == "creator-agent-003"
     assert agreement["status"] == "AGREED"
+    assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
     assert agreement["canonicalTermsJson"].startswith("{")
 
@@ -142,11 +147,14 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
         json={
             "url": "https://social.example/post/with-brand-and-ad",
             "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
         },
     )
     assert submit_response.status_code == 201
     evidence = submit_response.json()["data"]["evidence"]
     assert evidence["status"] == "SUBMITTED"
+    assert evidence["milestoneId"] == "content"
+    assert evidence["milestoneSnapshot"]["releasePct"] == 70
 
     verify_response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
     assert verify_response.status_code == 200
@@ -173,6 +181,7 @@ def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
         json={
             "url": "https://social.example/post/missing-disclosure",
             "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
         },
     ).json()["data"]["evidence"]
 

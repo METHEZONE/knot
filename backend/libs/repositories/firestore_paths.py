@@ -41,12 +41,14 @@ class FirestoreCollection:
     a2a_events: str = "events"
     a2a_artifacts: str = "artifacts"
     agreements: str = "agreements"
+    milestones: str = "milestones"
     evidence: str = "evidence"
     escrows: str = "escrows"
     settlements: str = "settlements"
+    payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
-    idempotency_keys: str = "idempotencyKeys"
+    idempotency_records: str = "idempotencyRecords"
 
 
 COLLECTIONS = FirestoreCollection()
@@ -87,12 +89,12 @@ class FirestorePaths:
         return document_path(COLLECTIONS.match_runs, match_run_id)
 
     @staticmethod
-    def match_candidate(match_run_id: str, creator_agent_id: str) -> str:
+    def match_candidate(match_run_id: str, creator_id: str) -> str:
         return subcollection_document_path(
             COLLECTIONS.match_runs,
             match_run_id,
             COLLECTIONS.match_candidates,
-            creator_agent_id,
+            creator_id,
         )
 
     @staticmethod
@@ -144,6 +146,15 @@ class FirestorePaths:
         return document_path(COLLECTIONS.agreements, agreement_id)
 
     @staticmethod
+    def milestone(agreement_id: str, milestone_id: str) -> str:
+        return subcollection_document_path(
+            COLLECTIONS.agreements,
+            agreement_id,
+            COLLECTIONS.milestones,
+            milestone_id,
+        )
+
+    @staticmethod
     def evidence(evidence_id: str) -> str:
         return document_path(COLLECTIONS.evidence, evidence_id)
 
@@ -156,6 +167,10 @@ class FirestorePaths:
         return document_path(COLLECTIONS.settlements, settlement_id)
 
     @staticmethod
+    def payment_operation(operation_id: str) -> str:
+        return document_path(COLLECTIONS.payment_operations, operation_id)
+
+    @staticmethod
     def transaction_receipt(receipt_id: str) -> str:
         return document_path(COLLECTIONS.transaction_receipts, receipt_id)
 
@@ -164,5 +179,5 @@ class FirestorePaths:
         return document_path(COLLECTIONS.audit_events, event_id)
 
     @staticmethod
-    def idempotency_key(key: str) -> str:
-        return document_path(COLLECTIONS.idempotency_keys, key)
+    def idempotency_record(key: str) -> str:
+        return document_path(COLLECTIONS.idempotency_records, key)

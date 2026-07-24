@@ -44,7 +44,7 @@ The application must never require the team to edit Firestore manually during th
 
 | Use | Meaning | Do not use for new work |
 |---|---|---|
-| Promotion | One brand promotional initiative | campaign, deal brief |
+| Promotion | One brand promotional initiative | legacy initiative terms |
 | Creator candidate | Creator considered during matching | influencer row |
 | Match run | One Brand Agent ranking execution | search job |
 | Negotiation | Multi-turn Brand–Creator term exchange | chat only |

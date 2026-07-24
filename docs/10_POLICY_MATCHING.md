@@ -60,6 +60,8 @@ Before release:
 - evidence decision permits release
 - requested amount equals milestone formula
 - resulting total does not exceed locked amount
+- release attempts are recorded as PaymentOperation documents
+- PaymentOperation is guarded by one IdempotencyRecord
 
 ## 6. Evidence verification rules
 
@@ -67,7 +69,7 @@ Evidence verification policy version is `verification-v1`.
 
 Deterministic checks:
 
-- submitted Evidence must belong to an `AGREED` Agreement
+- submitted Evidence must belong to an `AGREED` Agreement milestone
 - `submittedByAgentId` must match the Agreement `creatorAgentId`
 - `observations.urlReachable` must be true
 - `observations.brandMentioned` must be true

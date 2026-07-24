@@ -16,7 +16,7 @@ from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
 from libs.agents.negotiation import CreatorNegotiationContext, evaluate_creator_message
 from libs.domain.hashing import canonical_terms_json
-from libs.domain.models import AgreementTerms, Promotion
+from libs.domain.models import AgreementTerms, CreatorProfile, Promotion
 from libs.policies.brand import validate_brand_terms
 from libs.policies.evidence import validate_evidence_observations
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
@@ -91,6 +91,9 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         creators = repository.list_creator_profiles()
         ranked = rank_creators(promotion, creators)
         selected = next((candidate for candidate in ranked if candidate.eligible), None)
+        selected_creator = (
+            _creator_by_agent_id(creators, selected.creator_agent_id) if selected else None
+        )
         match_run_id = f"match-{uuid4()}"
         now = _now()
         match_run = {
@@ -99,16 +102,21 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             "brandAgentId": promotion.brand_agent_id,
             "status": "COMPLETED",
             "weightsVersion": MATCHING_WEIGHTS_VERSION,
+            "selectedCreatorId": selected_creator.creator_id if selected_creator else None,
             "selectedCreatorAgentId": selected.creator_agent_id if selected else None,
             "createdAt": now,
             "completedAt": now,
         }
         repository.save_raw_document(FirestorePaths.match_run(match_run_id), match_run)
         for candidate in ranked:
+            creator = _creator_by_agent_id(creators, candidate.creator_agent_id)
             document = candidate.model_dump(by_alias=True, mode="json")
+            document["creatorId"] = creator.creator_id
+            document["creatorProfilePath"] = FirestorePaths.creator_profile(creator.creator_id)
             document["explanation"] = _candidate_explanation(document)
+            document["negotiationId"] = None
             repository.save_raw_document(
-                FirestorePaths.match_candidate(match_run_id, candidate.creator_agent_id),
+                FirestorePaths.match_candidate(match_run_id, creator.creator_id),
                 document,
             )
         _append_promotion_event(
@@ -145,8 +153,10 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         match_run = repository.get_raw_document(match_run_path)
         if match_run is None:
             raise _not_found("matchRun", match_run_id)
-        candidate = repository.get_raw_document(
-            FirestorePaths.match_candidate(match_run_id, creator_agent_id)
+        candidate_path, candidate = _match_candidate_by_agent_id(
+            repository,
+            match_run_id,
+            creator_agent_id,
         )
         if candidate is None:
             raise _not_found("candidate", creator_agent_id)
@@ -156,8 +166,10 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
                 "POLICY_VIOLATION",
                 "Cannot select an ineligible creator candidate.",
             )
+        match_run["selectedCreatorId"] = candidate["creatorId"]
         match_run["selectedCreatorAgentId"] = creator_agent_id
         match_run["updatedAt"] = _now()
+        repository.save_raw_document(candidate_path, {**candidate, "selected": True})
         repository.save_raw_document(match_run_path, match_run)
         return _ok({"matchRun": match_run})
 
@@ -171,10 +183,15 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             raise _not_found("matchRun", match_run_id)
         promotion_id = _require_document_str(match_run, "promotionId")
         creator_agent_id = _require_document_str(match_run, "selectedCreatorAgentId")
+        match_candidate_id = _require_document_str(match_run, "selectedCreatorId")
         promotion = _get_promotion(repository, promotion_id)
         creator = repository.get_creator_profile_by_agent_id(creator_agent_id)
         if creator is None:
             raise _not_found("creatorAgent", creator_agent_id)
+        candidate_path = FirestorePaths.match_candidate(match_run_id, match_candidate_id)
+        candidate = repository.get_raw_document(candidate_path)
+        if candidate is None:
+            raise _not_found("candidate", match_candidate_id)
         agent_policy = repository.get_agent_policy(creator_agent_id)
         if agent_policy is None:
             raise _not_found("agentPolicy", creator_agent_id)
@@ -191,6 +208,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         negotiation_id = f"negotiation-{uuid4()}"
         context_id = f"context-{uuid4()}"
         task_id = f"task-{uuid4()}"
+        artifact_id = f"artifact-{uuid4()}"
         offer_message_id = f"message-{uuid4()}"
         decision_id = f"decision-{uuid4()}"
         now = _now()
@@ -216,6 +234,9 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         negotiation_status = _negotiation_status(creator_decision.type)
         negotiation = {
             "negotiationId": negotiation_id,
+            "matchRunId": match_run_id,
+            "matchCandidateId": match_candidate_id,
+            "matchCandidatePath": candidate_path,
             "promotionId": promotion.promotion_id,
             "brandAgentId": promotion.brand_agent_id,
             "creatorAgentId": creator_agent_id,
@@ -235,6 +256,17 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             "updatedAt": now,
         }
         repository.save_raw_document(FirestorePaths.negotiation(negotiation_id), negotiation)
+        repository.save_raw_document(
+            FirestorePaths.a2a_task(task_id),
+            {
+                "taskId": task_id,
+                "contextId": context_id,
+                "negotiationId": negotiation_id,
+                "status": {"state": "TASK_STATE_COMPLETED"},
+                "createdAt": now,
+                "updatedAt": now,
+            },
+        )
         repository.save_raw_document(
             FirestorePaths.negotiation_message(negotiation_id, offer_message_id),
             {
@@ -259,6 +291,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
                 "createdAt": now,
             },
         )
+        creator_decision_document = creator_decision.model_dump(by_alias=True, mode="json")
         repository.save_raw_document(
             FirestorePaths.negotiation_decision(negotiation_id, decision_id),
             {
@@ -272,16 +305,39 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
                 "createdAt": now,
             },
         )
+        repository.save_raw_document(
+            candidate_path,
+            {
+                **candidate,
+                "negotiationId": negotiation_id,
+                "negotiationPath": FirestorePaths.negotiation(negotiation_id),
+                "negotiationStatus": negotiation_status,
+                "updatedAt": now,
+            },
+        )
         agreement = _agreement_document(
             negotiation=negotiation,
-            decision=creator_decision.model_dump(by_alias=True, mode="json"),
+            decision=creator_decision_document,
+            artifact_id=artifact_id,
+            task_id=task_id,
             created_at=now,
         )
         if agreement is not None:
             repository.save_raw_document(
+                FirestorePaths.a2a_task_artifact(task_id, artifact_id),
+                _term_sheet_artifact_document(
+                    artifact_id=artifact_id,
+                    task_id=task_id,
+                    negotiation_id=negotiation_id,
+                    decision=creator_decision_document,
+                    created_at=now,
+                ),
+            )
+            repository.save_raw_document(
                 FirestorePaths.agreement(str(agreement["agreementId"])),
                 agreement,
             )
+            _write_agreement_milestones(repository, agreement)
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
@@ -362,6 +418,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
     ) -> dict[str, object]:
         agreement = _get_agreement_document(repository, agreement_id)
         creator_agent_id = _require_document_str(agreement, "creatorAgentId")
+        milestone = _get_milestone_document(repository, agreement_id, payload.milestone_id)
         if payload.submitted_by_agent_id != creator_agent_id:
             raise _problem(
                 status.HTTP_409_CONFLICT,
@@ -374,6 +431,9 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         evidence = {
             "evidenceId": evidence_id,
             "agreementId": agreement_id,
+            "milestoneId": payload.milestone_id,
+            "milestonePath": FirestorePaths.milestone(agreement_id, payload.milestone_id),
+            "milestoneSnapshot": milestone,
             "promotionId": agreement["promotionId"],
             "creatorAgentId": creator_agent_id,
             "submittedByAgentId": payload.submitted_by_agent_id,
@@ -389,7 +449,12 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             repository,
             promotion_id=str(agreement["promotionId"]),
             event_type="EVIDENCE_SUBMITTED",
-            data={"agreementId": agreement_id, "evidenceId": evidence_id, "status": "SUBMITTED"},
+            data={
+                "agreementId": agreement_id,
+                "milestoneId": payload.milestone_id,
+                "evidenceId": evidence_id,
+                "status": "SUBMITTED",
+            },
         )
         return _ok({"evidence": evidence})
 
@@ -434,6 +499,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             event_type="EVIDENCE_VERIFIED",
             data={
                 "agreementId": verified["agreementId"],
+                "milestoneId": verified["milestoneId"],
                 "evidenceId": evidence_id,
                 "status": verified["status"],
                 "violationCodes": [
@@ -494,6 +560,17 @@ def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> di
     return agreement
 
 
+def _get_milestone_document(
+    repository: KnotRepository,
+    agreement_id: str,
+    milestone_id: str,
+) -> dict[str, object]:
+    milestone = repository.get_raw_document(FirestorePaths.milestone(agreement_id, milestone_id))
+    if milestone is None:
+        raise _not_found("milestone", milestone_id)
+    return milestone
+
+
 def _require_document_str(document: dict[str, object], field_name: str) -> str:
     value = document.get(field_name)
     if not isinstance(value, str) or not value:
@@ -519,6 +596,8 @@ def _agreement_document(
     *,
     negotiation: dict[str, object],
     decision: dict[str, object],
+    artifact_id: str,
+    task_id: str,
     created_at: str,
 ) -> dict[str, object] | None:
     if decision.get("type") != NegotiationMessageType.ACCEPT.value:
@@ -540,6 +619,8 @@ def _agreement_document(
     return {
         "agreementId": agreement_id,
         "negotiationId": negotiation["negotiationId"],
+        "taskId": task_id,
+        "artifactId": artifact_id,
         "promotionId": negotiation["promotionId"],
         "brandAgentId": negotiation["brandAgentId"],
         "creatorAgentId": negotiation["creatorAgentId"],
@@ -549,6 +630,81 @@ def _agreement_document(
         "status": "AGREED",
         "createdAt": created_at,
     }
+
+
+def _term_sheet_artifact_document(
+    *,
+    artifact_id: str,
+    task_id: str,
+    negotiation_id: str,
+    decision: dict[str, object],
+    created_at: str,
+) -> dict[str, object]:
+    return {
+        "artifactId": artifact_id,
+        "taskId": task_id,
+        "negotiationId": negotiation_id,
+        "name": "Negotiation Result",
+        "parts": [
+            {
+                "mediaType": "application/json",
+                "data": {
+                    "schema": "knot.term-sheet.v1",
+                    "result": "AGREED",
+                    "agreementId": decision["agreementId"],
+                    "terms": decision["terms"],
+                    "termsHash": decision["termsHash"],
+                    "rationale": decision["rationale"],
+                },
+            }
+        ],
+        "createdAt": created_at,
+    }
+
+
+def _write_agreement_milestones(
+    repository: KnotRepository,
+    agreement: dict[str, object],
+) -> None:
+    agreement_id = _require_document_str(agreement, "agreementId")
+    terms = AgreementTerms.model_validate(agreement["terms"])
+    for milestone in terms.milestones:
+        repository.save_raw_document(
+            FirestorePaths.milestone(agreement_id, milestone.id),
+            {
+                "milestoneId": milestone.id,
+                "agreementId": agreement_id,
+                "trigger": milestone.trigger,
+                "releasePct": milestone.release_pct,
+                "status": "PENDING",
+                "createdAt": agreement["createdAt"],
+            },
+        )
+
+
+def _match_candidate_by_agent_id(
+    repository: KnotRepository,
+    match_run_id: str,
+    creator_agent_id: str,
+) -> tuple[str, dict[str, object] | None]:
+    candidates = repository.list_raw_documents(
+        f"{COLLECTIONS.match_runs}/{match_run_id}/{COLLECTIONS.match_candidates}"
+    )
+    for candidate in candidates:
+        if candidate.get("creatorAgentId") == creator_agent_id:
+            creator_id = _require_document_str(candidate, "creatorId")
+            return FirestorePaths.match_candidate(match_run_id, creator_id), candidate
+    return "", None
+
+
+def _creator_by_agent_id(
+    creators: Sequence[CreatorProfile],
+    creator_agent_id: str,
+) -> CreatorProfile:
+    for creator in creators:
+        if creator.creator_agent_id == creator_agent_id:
+            return creator
+    raise ValueError(f"creator profile for {creator_agent_id} was not found")
 
 
 def _evidence_observations(

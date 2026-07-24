@@ -54,7 +54,7 @@ agentPolicies/{agentId}
 promotions/{promotionId}
 promotions/{promotionId}/events/{eventId}
 matchRuns/{matchRunId}
-matchRuns/{matchRunId}/candidates/{creatorAgentId}
+matchRuns/{matchRunId}/candidates/{creatorId}
 negotiations/{negotiationId}
 negotiations/{negotiationId}/messages/{messageId}
 negotiations/{negotiationId}/decisions/{decisionId}
@@ -62,12 +62,14 @@ a2aTasks/{taskId}
 a2aTasks/{taskId}/events/{eventId}
 a2aTasks/{taskId}/artifacts/{artifactId}
 agreements/{agreementId}
+agreements/{agreementId}/milestones/{milestoneId}
 evidence/{evidenceId}
 escrows/{escrowId}
 settlements/{settlementId}
+paymentOperations/{operationId}
 transactionReceipts/{receiptId}
 auditEvents/{eventId}
-idempotencyKeys/{key}
+idempotencyRecords/{key}
 ```
 
 All JSON and Firestore field names use `camelCase`. Python code may use snake
@@ -78,34 +80,45 @@ case internally only through Pydantic aliases.
 ```mermaid
 erDiagram
     BRAND ||--o{ PROMOTION : owns
-    BRAND ||--|| AGENT : uses
-    CREATOR_PROFILE ||--|| AGENT : represented_by
-    AGENT ||--|| AGENT_POLICY : governed_by
+    BRAND ||--o| AGENT : represented_by
+    CREATOR_PROFILE ||--o| AGENT : represented_by
+    AGENT ||--o| AGENT_POLICY : governed_by
 
     PROMOTION ||--o{ PROMOTION_EVENT : records
     PROMOTION ||--o{ MATCH_RUN : has
     MATCH_RUN ||--o{ MATCH_CANDIDATE : ranks
-    MATCH_CANDIDATE }o--|| AGENT : candidate_agent
+    MATCH_CANDIDATE }o--|| CREATOR_PROFILE : candidate_creator
 
-    PROMOTION ||--o{ NEGOTIATION : opens
+    PROMOTION ||--o{ NEGOTIATION : contains
+    MATCH_CANDIDATE ||--o| NEGOTIATION : starts
+    NEGOTIATION }o--|| AGENT : client_brand_agent
+    NEGOTIATION }o--|| AGENT : server_creator_agent
+
     NEGOTIATION ||--o{ NEGOTIATION_MESSAGE : contains
     NEGOTIATION ||--o{ NEGOTIATION_DECISION : records
-    NEGOTIATION ||--o| AGREEMENT : produces
+    NEGOTIATION ||--|| A2A_TASK : maps_to
 
     A2A_TASK ||--o{ A2A_EVENT : records
     A2A_TASK ||--o{ A2A_ARTIFACT : produces
-    NEGOTIATION ||--|| A2A_TASK : maps_to
 
-    AGREEMENT ||--o{ EVIDENCE : requires
+    NEGOTIATION ||--o| AGREEMENT : produces
+    A2A_ARTIFACT ||--o| AGREEMENT : materializes
+
+    AGREEMENT ||--o{ MILESTONE : defines
+    MILESTONE ||--o{ EVIDENCE : verifies
+
     AGREEMENT ||--o| ESCROW : funded_by
     ESCROW ||--o{ SETTLEMENT : releases
-    ESCROW ||--o{ TRANSACTION_RECEIPT : records
-    SETTLEMENT ||--o{ TRANSACTION_RECEIPT : records
+    MILESTONE ||--o| SETTLEMENT : triggers
 
-    AUDIT_EVENT }o--o| PROMOTION : references
-    IDEMPOTENCY_KEY }o--|| ESCROW : protects
-    IDEMPOTENCY_KEY }o--|| SETTLEMENT : protects
+    ESCROW ||--o{ PAYMENT_OPERATION : executes
+    SETTLEMENT o|--o{ PAYMENT_OPERATION : payout_attempts
+    PAYMENT_OPERATION ||--o| TRANSACTION_RECEIPT : results_in
+    PAYMENT_OPERATION ||--|| IDEMPOTENCY_RECORD : guarded_by
 ```
+
+This is a logical ERD. Firestore stores document ID references and immutable
+snapshots; it does not enforce foreign keys.
 
 Entity key fields:
 
@@ -115,18 +128,20 @@ CREATOR_PROFILE.creatorId, creatorAgentId
 AGENT.agentId
 AGENT_POLICY.agentId, policyVersion
 PROMOTION.promotionId, brandId, brandAgentId
-MATCH_RUN.matchRunId, promotionId, selectedCreatorAgentId
-MATCH_CANDIDATE.creatorAgentId, eligible, score, rank
-NEGOTIATION.negotiationId, promotionId, contextId, taskId, status, currentRound
+MATCH_RUN.matchRunId, promotionId, selectedCreatorId, selectedCreatorAgentId
+MATCH_CANDIDATE.creatorId, creatorAgentId, eligible, score, rank, negotiationId
+NEGOTIATION.negotiationId, matchRunId, matchCandidateId, promotionId, contextId, taskId, status, currentRound
 NEGOTIATION_MESSAGE.messageId, contextId, taskId, role, sequence
 NEGOTIATION_DECISION.decisionId, messageId, type, policyDecision
-AGREEMENT.agreementId, negotiationId, termsHash, status
-EVIDENCE.evidenceId, agreementId, status, policyDecision
+AGREEMENT.agreementId, negotiationId, taskId, artifactId, termsHash, status
+MILESTONE.milestoneId, agreementId, trigger, releasePct, status
+EVIDENCE.evidenceId, agreementId, milestoneId, status, policyDecision
 ESCROW.escrowId, agreementId, termsHash, status
-SETTLEMENT.settlementId, escrowId, milestoneId, idempotencyKey, status
-TRANSACTION_RECEIPT.receiptId, signature, status
+SETTLEMENT.settlementId, escrowId, milestoneId, status
+PAYMENT_OPERATION.operationId, operationType, idempotencyKey, status
+TRANSACTION_RECEIPT.receiptId, paymentOperationId, signature, status
 AUDIT_EVENT.eventId, type, createdAt
-IDEMPOTENCY_KEY.key, payloadHash, ownerPath
+IDEMPOTENCY_RECORD.key, payloadHash, ownerPath
 ```
 
 ## 5. Seed Data
@@ -231,10 +246,11 @@ track the deployable index file in source. Likely future indexes:
 promotions: brandId ASC, status ASC, createdAt DESC
 matchRuns: promotionId ASC, createdAt DESC
 negotiations: promotionId ASC, createdAt DESC
-evidence: agreementId ASC, createdAt DESC
+evidence: agreementId ASC, milestoneId ASC, createdAt DESC
 escrows: agreementId ASC
 settlements: escrowId ASC, milestoneId ASC
-transactionReceipts: idempotencyKey ASC
+paymentOperations: escrowId ASC, settlementId ASC, createdAt DESC
+transactionReceipts: paymentOperationId ASC
 auditEvents: promotionId ASC, createdAt DESC
 ```
 
@@ -246,8 +262,10 @@ Repository/API code must preserve these invariants:
 - `currentRound` increments once per accepted unique message
 - policy snapshots are immutable after negotiation start
 - Agreement `canonicalTermsJson` and `termsHash` are deterministic
-- audit events are append-only
-- payment actions require idempotency keys
+- Promotion events are product timeline entries under a Promotion.
+- Audit events are global append-only operational/security records.
+- payment actions create PaymentOperation records
+- each PaymentOperation is guarded by one IdempotencyRecord
 - duplicate idempotency key with the same payload is a replay
 - duplicate idempotency key with a different payload is a conflict
 - escrow and settlement writes must be protected by transactions when wired
@@ -291,7 +309,7 @@ Payment mutation endpoints remain deferred until web3 signing work resumes.
 Run these checks after DB/API changes:
 
 ```text
-.venv/bin/python -m ruff check backend scripts/seed_demo.py
+.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py
 .venv/bin/python -m mypy backend/apps backend/libs
 .venv/bin/python -m pytest backend/tests
 .venv/bin/python scripts/seed_demo.py --target memory

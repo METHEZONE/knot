@@ -81,6 +81,7 @@ class ManualCandidateSelection(DomainModel):
 class EvidenceSubmissionRequest(DomainModel):
     url: str
     submitted_by_agent_id: str = Field(alias="submittedByAgentId")
+    milestone_id: str = Field(default="content", alias="milestoneId")
 
     @field_validator("url")
     @classmethod

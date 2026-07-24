@@ -52,6 +52,11 @@ Append-only `auditEvents` records for:
 - milestone release
 - manual cancellation/escalation resolution
 
+Promotion timeline events are separate product data stored under
+`promotions/{promotionId}/events/{eventId}`. They are optimized for the frontend
+Promotion Timeline. `auditEvents/{eventId}` is a global append-only operational
+and security trail and should not be used as the primary UI timeline source.
+
 ## 4. Metrics
 
 - matching duration and candidate count

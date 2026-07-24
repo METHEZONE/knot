@@ -15,7 +15,7 @@ For multi-service, multi-day, or architecture-changing work, create or update an
 
 - This is KNOT **v1**.
 - Do not implement onboarding. Use seed data and demo accounts.
-- Use `Promotion` / `promotionId`; do not introduce `campaign` or `dealBrief` in new code.
+- Use `Promotion` / `promotionId`; do not introduce legacy initiative terms in new code.
 - All off-chain runtime and deployment must use Google Cloud services.
 - Frontend: Next.js + TypeScript, deployed to Cloud Run when frontend work starts. The `frontend/` directory may be intentionally empty before that milestone.
 - Backend and agents: Python + FastAPI + Google ADK + Vertex AI Gemini, deployed to Cloud Run.

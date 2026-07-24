@@ -23,8 +23,8 @@ def test_firestore_paths_match_documented_collections() -> None:
         FirestorePaths.promotion_event("promotion-001", "event-001")
         == "promotions/promotion-001/events/event-001"
     )
-    assert FirestorePaths.match_candidate("match-001", "creator-agent-001") == (
-        "matchRuns/match-001/candidates/creator-agent-001"
+    assert FirestorePaths.match_candidate("match-001", "creator-001") == (
+        "matchRuns/match-001/candidates/creator-001"
     )
     assert FirestorePaths.negotiation_message("negotiation-001", "message-001") == (
         "negotiations/negotiation-001/messages/message-001"
@@ -32,11 +32,17 @@ def test_firestore_paths_match_documented_collections() -> None:
     assert FirestorePaths.a2a_task_artifact("task-001", "artifact-001") == (
         "a2aTasks/task-001/artifacts/artifact-001"
     )
+    assert FirestorePaths.milestone("agreement-001", "content") == (
+        "agreements/agreement-001/milestones/content"
+    )
+    assert FirestorePaths.payment_operation("operation-001") == (
+        "paymentOperations/operation-001"
+    )
     assert FirestorePaths.transaction_receipt("receipt-001") == (
         "transactionReceipts/receipt-001"
     )
-    assert FirestorePaths.idempotency_key("lock:escrow-001") == (
-        "idempotencyKeys/lock:escrow-001"
+    assert FirestorePaths.idempotency_record("lock:escrow-001") == (
+        "idempotencyRecords/lock:escrow-001"
     )
 
 
@@ -96,22 +102,22 @@ def test_repository_returns_copies_not_mutable_store_references() -> None:
     assert creator.display_name == "Demo Beauty Creator"
 
 
-def test_idempotency_claim_allows_replay_but_rejects_conflicting_payload() -> None:
+def test_idempotency_record_allows_replay_but_rejects_conflicting_payload() -> None:
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
 
-    assert repository.claim_idempotency_key(
+    assert repository.claim_idempotency_record(
         "lock:escrow-001",
         payload_hash="sha256:first",
         owner_path=FirestorePaths.escrow("escrow-001"),
     )
-    assert not repository.claim_idempotency_key(
+    assert not repository.claim_idempotency_record(
         "lock:escrow-001",
         payload_hash="sha256:first",
         owner_path=FirestorePaths.escrow("escrow-001"),
     )
     with pytest.raises(IdempotencyConflictError):
-        repository.claim_idempotency_key(
+        repository.claim_idempotency_record(
             "lock:escrow-001",
             payload_hash="sha256:changed",
             owner_path=FirestorePaths.escrow("escrow-001"),
