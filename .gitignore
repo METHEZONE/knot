@@ -1,0 +1,47 @@
+# Environment and local state
+.env
+.env.*
+!.env.example
+.local/
+.codex-local/
+
+# Secrets and key material
+secrets/
+*.key.json
+*service-account*.json
+id.json
+**/target/deploy/*.json
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+dist/
+coverage/
+
+# Rust / Anchor
+target/
+.anchor/
+test-ledger/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Optional local-only sensitive notes
+docs/private/

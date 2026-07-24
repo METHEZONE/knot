@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+**/node_modules
+.next
+dist
+target
+.anchor
+test-ledger
+.env
+.env.*
+!.env.example
+secrets

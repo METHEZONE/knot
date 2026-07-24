@@ -1,0 +1,26 @@
+[
+  {
+    "creatorId": "creator-001",
+    "creatorAgentId": "creator-agent-001",
+    "displayName": "Demo Beauty Creator",
+    "categories": ["beauty", "skincare"],
+    "completedDealCount": 12,
+    "estimatedBaseUsdc": 650
+  },
+  {
+    "creatorId": "creator-002",
+    "creatorAgentId": "creator-agent-002",
+    "displayName": "Demo Fitness Creator",
+    "categories": ["fitness"],
+    "completedDealCount": 8,
+    "estimatedBaseUsdc": 500
+  },
+  {
+    "creatorId": "creator-003",
+    "creatorAgentId": "creator-agent-003",
+    "displayName": "Demo Lifestyle Creator",
+    "categories": ["lifestyle", "beauty"],
+    "completedDealCount": 5,
+    "estimatedBaseUsdc": 400
+  }
+]
