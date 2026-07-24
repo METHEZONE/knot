@@ -1,0 +1,27 @@
+{
+  "promotionId": "promotion-001",
+  "weightsVersion": "matching-v1",
+  "expectedOrder": [
+    {
+      "creatorAgentId": "creator-agent-003",
+      "eligible": true,
+      "score": 0.8625,
+      "rank": 1,
+      "hardFilterReasons": []
+    },
+    {
+      "creatorAgentId": "creator-agent-001",
+      "eligible": true,
+      "score": 0.858437,
+      "rank": 2,
+      "hardFilterReasons": []
+    },
+    {
+      "creatorAgentId": "creator-agent-002",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["CATEGORY_MISMATCH", "USAGE_RIGHTS_UNSUPPORTED"]
+    }
+  ]
+}

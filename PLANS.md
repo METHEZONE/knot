@@ -44,8 +44,8 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 
 - [x] Repository bootstrap
 - [ ] GCP project configuration
-- [ ] Firestore domain model and seed fixtures
-- [ ] Deterministic policy engine and matching pipeline
+- [x] Firestore-independent domain model and backend fixtures
+- [x] Deterministic policy engine and matching pipeline
 - [ ] Brand Agent and Creator Agent A2A negotiation
 - [ ] Agreement hashing and Solana devnet escrow lock
 - [ ] Evidence verification and milestone release

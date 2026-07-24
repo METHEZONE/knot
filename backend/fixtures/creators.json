@@ -4,23 +4,56 @@
     "creatorAgentId": "creator-agent-001",
     "displayName": "Demo Beauty Creator",
     "categories": ["beauty", "skincare"],
+    "prohibitedIndustries": [],
+    "supportedDeliverableFormats": ["reel", "story"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 5,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 4,
+    "activeDeliverablesThisMonth": 1,
     "completedDealCount": 12,
-    "estimatedBaseUsdc": 650
+    "rateCard": {
+      "minBaseUsdc": 650,
+      "maxBaseUsdc": 900
+    },
+    "active": true
   },
   {
     "creatorId": "creator-002",
     "creatorAgentId": "creator-agent-002",
     "displayName": "Demo Fitness Creator",
     "categories": ["fitness"],
+    "prohibitedIndustries": [],
+    "supportedDeliverableFormats": ["reel"],
+    "allowedUsageRights": ["organicOnly"],
+    "minDaysToPost": 5,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 4,
+    "activeDeliverablesThisMonth": 0,
     "completedDealCount": 8,
-    "estimatedBaseUsdc": 500
+    "rateCard": {
+      "minBaseUsdc": 500,
+      "maxBaseUsdc": 750
+    },
+    "active": true
   },
   {
     "creatorId": "creator-003",
     "creatorAgentId": "creator-agent-003",
     "displayName": "Demo Lifestyle Creator",
     "categories": ["lifestyle", "beauty"],
+    "prohibitedIndustries": [],
+    "supportedDeliverableFormats": ["reel", "short"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 7,
+    "availableFrom": "2026-08-04",
+    "monthlyCapacity": 4,
+    "activeDeliverablesThisMonth": 0,
     "completedDealCount": 5,
-    "estimatedBaseUsdc": 400
+    "rateCard": {
+      "minBaseUsdc": 400,
+      "maxBaseUsdc": 600
+    },
+    "active": true
   }
 ]

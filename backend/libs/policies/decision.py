@@ -24,3 +24,21 @@ class PolicyDecision(BaseModel):
 
 def allow(rule_version: str) -> PolicyDecision:
     return PolicyDecision(allowed=True, action=PolicyAction.ALLOW, ruleVersion=rule_version)
+
+
+def block(rule_version: str, violations: list[Violation]) -> PolicyDecision:
+    return PolicyDecision(
+        allowed=False,
+        action=PolicyAction.BLOCK,
+        violations=violations,
+        ruleVersion=rule_version,
+    )
+
+
+def escalate(rule_version: str, violations: list[Violation]) -> PolicyDecision:
+    return PolicyDecision(
+        allowed=False,
+        action=PolicyAction.ESCALATE,
+        violations=violations,
+        ruleVersion=rule_version,
+    )

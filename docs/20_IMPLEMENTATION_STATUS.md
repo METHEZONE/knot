@@ -4,14 +4,14 @@ Update this file at the end of every Codex task.
 
 ## Current milestone
 
-`M0 — Repository skeleton initialized`
+`M1 — Domain, policy, and matching implemented`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | skeleton initialized | 2026-07-24 | FastAPI health/version and `/api/v1` root |
+| knot-api | M1 backend domain complete | 2026-07-24 | FastAPI health/version plus pure domain, policy, and matching libraries |
 | creator A2A service | skeleton initialized | 2026-07-24 | FastAPI health/version and AgentCard route |
 | web3 gateway | skeleton initialized | 2026-07-24 | TypeScript Express health/version and lock stub |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
@@ -35,24 +35,10 @@ Escrow program: unset
 ## Latest validation
 
 ```text
-Read and copied selected files from `/Users/yewonchoi/Desktop/docs` into the repository.
-Verified prompt originals, `MANIFEST.json`, and OS temporary files were not copied.
-Checked tracked candidates for obvious secret material; only placeholders and security guidance were found.
-Initialized backend and web3 skeleton files.
-Removed frontend implementation files; `frontend/` is intentionally empty.
-Removed root Makefile, root npm workspace, placeholder infra files, and placeholder scripts.
-Backend ruff: passed.
-Backend pytest: passed, with one FastAPI/Starlette deprecation warning from TestClient.
-Backend mypy: passed.
-Web3 gateway npm install: passed, with an engine warning because the active local Node was v20.13.0 while one transitive ESLint package requests v20.19.0, v22.13.0, or newer.
-Web3 gateway lint: passed.
-Web3 gateway test: passed.
-Web3 gateway build: passed.
-Web3 gateway npm audit --audit-level=moderate: passed, 0 vulnerabilities.
+.venv/bin/python -m ruff check backend: passed.
+.venv/bin/python -m pytest backend/tests: passed, 12 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
-make seed: command exists and reports M0 seed placeholder with 3 creator fixtures.
-make demo-smoke: command exists and reports M0 smoke-test placeholder.
-npm audit --audit-level=moderate: reports 3 high vulnerabilities from Next's transitive postcss/sharp dependencies; latest stable Next is already pinned and npm's suggested force fix downgrades Next.
+web3 gateway lint/test/build were not rerun in this M1 backend-only task.
 ```
 
 ## Decisions made during implementation
@@ -63,6 +49,10 @@ npm audit --audit-level=moderate: reports 3 high vulnerabilities from Next's tra
 - Treated `frontend`, `backend`, and `web3` as the three primary code areas; `infra` and `scripts` will be added only when needed.
 - Removed unused `@solana/web3.js` from the M0 gateway skeleton; add it back when real Solana RPC/signing code starts.
 - Added commit rules to `AGENTS.md`, including domain-prefixed commit messages and mandatory user approval before committing.
+- Added typed Promotion, CreatorProfile, AgentPolicy, AgreementTerms, compensation, deliverable, milestone, and policy decision models.
+- Added pure Brand and Creator policy functions with deterministic violation codes.
+- Added deterministic creator matching with hard filters, weighted score `matching-v1`, rank assignment, and stable tie-break.
+- Expanded creator fixtures and added `matching_golden.json` for backend golden tests.
 
 ## Known blockers
 
@@ -72,4 +62,4 @@ npm audit --audit-level=moderate: reports 3 high vulnerabilities from Next's tra
 
 ## Next task
 
-Install dependencies, verify toolchains, then implement M1 domain models, policy functions, and deterministic matching.
+Implement M2 Creator A2A negotiation state and Brand Agent orchestration without Firestore repositories or web3 actions.
