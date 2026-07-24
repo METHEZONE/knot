@@ -46,7 +46,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [ ] GCP project configuration
 - [x] Firestore-independent domain model and backend fixtures
 - [x] Deterministic policy engine and matching pipeline
-- [ ] Brand Agent and Creator Agent A2A negotiation
+- [x] Brand Agent and Creator Agent A2A negotiation baseline
 - [ ] Agreement hashing and Solana devnet escrow lock
 - [ ] Evidence verification and milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline

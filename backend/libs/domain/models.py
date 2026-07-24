@@ -174,3 +174,8 @@ class AgreementTerms(DomainModel):
         if sum(milestone.release_pct for milestone in self.milestones) != 100:
             raise ValueError("agreement milestone percentages must sum to 100")
         return self
+
+
+class AgreementResult(StrEnum):
+    AGREED = "AGREED"
+    REJECTED = "REJECTED"

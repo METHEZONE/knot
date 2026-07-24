@@ -4,15 +4,15 @@ Update this file at the end of every Codex task.
 
 ## Current milestone
 
-`M1 — Domain, policy, and matching implemented`
+`M2 — A2A negotiation baseline implemented`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | M1 backend domain complete | 2026-07-24 | FastAPI health/version plus pure domain, policy, and matching libraries |
-| creator A2A service | skeleton initialized | 2026-07-24 | FastAPI health/version and AgentCard route |
+| knot-api | M2 agent orchestration baseline | 2026-07-24 | Pure Brand Agent selection, initial terms, and A2A offer request helpers |
+| creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | skeleton initialized | 2026-07-24 | TypeScript Express health/version and lock stub |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
 | Terraform/GCP | not started | - | No infra files committed yet |
@@ -36,9 +36,9 @@ Escrow program: unset
 
 ```text
 .venv/bin/python -m ruff check backend: passed.
-.venv/bin/python -m pytest backend/tests: passed, 12 tests, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python -m pytest backend/tests: passed, 22 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
-web3 gateway lint/test/build were not rerun in this M1 backend-only task.
+web3 gateway lint/test/build were not rerun in this M2 backend-only task.
 ```
 
 ## Decisions made during implementation
@@ -53,6 +53,11 @@ web3 gateway lint/test/build were not rerun in this M1 backend-only task.
 - Added pure Brand and Creator policy functions with deterministic violation codes.
 - Added deterministic creator matching with hard filters, weighted score `matching-v1`, rank assignment, and stable tie-break.
 - Expanded creator fixtures and added `matching_golden.json` for backend golden tests.
+- Added A2A v1 request, message, part, task, status, artifact, and negotiation payload models.
+- Added in-memory A2A task store with `messageId` idempotency, task/context consistency, terminal task rejection, task listing, lookup, subscribe, and cancel support.
+- Extended Creator Agent service from placeholder response to deterministic creator-policy negotiation decisions.
+- Added Brand Agent pure orchestration helpers for top creator selection, initial terms construction, and A2A offer request construction.
+- Added deterministic `termsHash` helper for accepted A2A artifacts; deeper agreement/payment hashing remains part of the next payment milestone.
 
 ## Known blockers
 
@@ -62,4 +67,4 @@ web3 gateway lint/test/build were not rerun in this M1 backend-only task.
 
 ## Next task
 
-Implement M2 Creator A2A negotiation state and Brand Agent orchestration without Firestore repositories or web3 actions.
+Implement M3 agreement hashing integration and Solana devnet escrow lock skeleton without real signer secrets.
