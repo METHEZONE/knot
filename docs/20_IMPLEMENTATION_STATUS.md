@@ -73,6 +73,7 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added API tests verifying seeded Promotion reads, Promotion creation/activation events, deterministic match persistence and ineligible candidate selection blocking.
 - Added Product API start-negotiation, negotiation get/messages/events and agreement get routes backed by repository documents.
 - Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
+- Added `docs/22_FIRESTORE_RUNBOOK.md` to document Firestore modes, collections, seed data, emulator/GCP setup, indexes, invariants and verification.
 - Added web3 gateway lock validation service requiring `Idempotency-Key`, agreement/escrow IDs, terms hash, amount, mint, program ID, network, and wallet references.
 - Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
 - Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
@@ -81,6 +82,7 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 - GCP project ID not configured.
 - Firestore Native database has not been created in GCP and emulator integration tests are not wired yet.
+- Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
 - Devnet program ID and mint not configured.
 - pay.sh sandbox resource not selected.
 

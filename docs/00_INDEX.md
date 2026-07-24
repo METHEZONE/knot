@@ -23,6 +23,7 @@
 | `19_ARCHITECTURE_DECISIONS.md` | Accepted ADRs and open questions | Architecture changes |
 | `20_IMPLEMENTATION_STATUS.md` | Living status and handoff memory | End of every task |
 | `21_REFERENCES.md` | Official and internal source list | Verification and research |
+| `22_FIRESTORE_RUNBOOK.md` | Firestore setup, seed, indexes, invariants and verification | DB/API persistence work |
 
 ## Minimal context set per task
 
