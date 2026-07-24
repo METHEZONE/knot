@@ -3,6 +3,10 @@
 효창(블록체인 백엔드) 개발 셋팅 세션 기록 + **다른 노트북에서 이어가기** 위한 가이드.
 (프로젝트 개요·컨벤션은 루트 `CLAUDE.md`, 아키텍처·인터페이스는 `docs/architecture.md` 참고.)
 
+> **갱신(2026-07-24):** 이 브랜치는 `be`(앱 백엔드)와 병합되어 `integrate/be-blockchain`이 되었다.
+> 통합 현황·남은 작업은 `docs/INTEGRATION_PLAN.md` 참고. 아래 "빌드 ✅"는 **원저자 로컬 기준**이며
+> `target/`은 gitignore이므로 새 클론에서는 `anchor build`를 다시 실행해야 IDL이 생긴다.
+
 ## 이 세션 요약
 - 빈 레포(`METHEZONE/knot`, README만) 클론 → **hyo0831** 계정으로 레포-로컬 인증 설정.
 - 해커톤 정체 파악: **Solana Foundation + Google Cloud "Agentic Commerce" 해커톤**.
