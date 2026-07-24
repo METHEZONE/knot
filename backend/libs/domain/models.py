@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -69,6 +69,8 @@ class Promotion(DomainModel):
     constraints: PromotionConstraints = Field(default_factory=PromotionConstraints)
     autonomy: PromotionAutonomy = Field(default_factory=PromotionAutonomy)
     status: str = "DRAFT"
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+    updated_at: datetime | None = Field(default=None, alias="updatedAt")
 
     @field_validator("deliverables")
     @classmethod
@@ -128,6 +130,7 @@ class AgentPolicy(DomainModel):
     agent_type: str = Field(alias="agentType")
     creator: CreatorPolicy
     active: bool = True
+    created_at: datetime | None = Field(default=None, alias="createdAt")
 
 
 class Compensation(DomainModel):

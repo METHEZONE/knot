@@ -87,6 +87,12 @@ class KnotRepository:
     def get_promotion(self, promotion_id: str) -> Promotion | None:
         return self._get_model(FirestorePaths.promotion(promotion_id), Promotion)
 
+    def list_promotions(self) -> list[Promotion]:
+        return [
+            document_to_model(Promotion, document)
+            for document in self._store.list_documents(COLLECTIONS.promotions)
+        ]
+
     def save_creator_profile(self, creator: CreatorProfile) -> None:
         self._store.set_document(
             FirestorePaths.creator_profile(creator.creator_id),
@@ -113,6 +119,12 @@ class KnotRepository:
 
     def save_raw_document(self, path: str, document: Mapping[str, object]) -> None:
         self._store.set_document(path, document)
+
+    def get_raw_document(self, path: str) -> DocumentData | None:
+        return self._store.get_document(path)
+
+    def list_raw_documents(self, collection_path: str) -> list[DocumentData]:
+        return self._store.list_documents(collection_path)
 
     def create_audit_event(self, event_id: str, document: Mapping[str, object]) -> None:
         self._store.set_document(FirestorePaths.audit_event(event_id), document, exists_ok=False)

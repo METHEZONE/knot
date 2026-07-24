@@ -46,6 +46,26 @@ GET    /promotions/{promotionId}/timeline
 
 `POST /promotions` creates a Promotion but does not start matching.
 
+Promotion create request accepts the same camelCase domain fields as the Firestore
+`Promotion` document. For v1 demo flows, `promotionId`, `brandId`, and `brandAgentId`
+may be omitted; the API defaults brand fields to seeded demo IDs and generates a
+Promotion ID.
+
+Promotion responses are wrapped as:
+
+```json
+{
+  "data": {
+    "promotion": {}
+  },
+  "meta": {
+    "requestId": "uuid",
+    "timestamp": "RFC3339",
+    "schemaVersion": "v1"
+  }
+}
+```
+
 ## 4. Matching endpoints
 
 ```text
@@ -56,6 +76,12 @@ POST   /match-runs/{matchRunId}:start-negotiation
 ```
 
 The normal demo path auto-selects the top eligible candidate, while manual selection remains available for debugging.
+
+`POST /promotions/{promotionId}/matches:run` persists one `matchRuns/{matchRunId}`
+document and one candidate document per seeded Creator Agent under
+`matchRuns/{matchRunId}/candidates/{creatorAgentId}`. Gemini-generated explanations
+are not required for the current baseline; deterministic placeholder explanations
+must not affect eligibility, score or rank.
 
 ## 5. Negotiation endpoints
 

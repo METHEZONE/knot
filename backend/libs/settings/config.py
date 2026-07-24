@@ -10,6 +10,8 @@ class Settings(BaseModel):
     build_time: str = "local"
     schema_version: str = "v1"
     creator_agent_base_url: str = "http://localhost:8081/a2a/v1"
+    repository_backend: str = "memory"
+    firestore_project_id: str | None = None
 
 
 @lru_cache
@@ -22,4 +24,6 @@ def get_settings(service_name: str | None = None) -> Settings:
         creator_agent_base_url=os.getenv(
             "CREATOR_AGENT_BASE_URL", "http://localhost:8081/a2a/v1"
         ),
+        repository_backend=os.getenv("KNOT_REPOSITORY_BACKEND", "memory"),
+        firestore_project_id=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID"),
     )

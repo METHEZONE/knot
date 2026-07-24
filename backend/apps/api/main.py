@@ -1,11 +1,18 @@
 from fastapi import FastAPI
 
+from apps.api.repository_factory import build_repository
+from apps.api.routes import build_api_router
 from libs.observability.middleware import add_request_context
+from libs.repositories.store import KnotRepository
 from libs.settings.config import Settings, get_settings
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    repository: KnotRepository | None = None,
+) -> FastAPI:
     settings = settings or get_settings()
+    repository = repository or build_repository(settings)
     app = FastAPI(title="KNOT API", version=settings.schema_version)
     add_request_context(app, service_name=settings.service_name)
 
@@ -26,9 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "schemaVersion": settings.schema_version,
         }
 
-    @app.get("/api/v1")
-    def api_root() -> dict[str, object]:
-        return {"data": {"service": settings.service_name}, "meta": {"schemaVersion": "v1"}}
+    app.include_router(build_api_router(repository))
 
     return app
 
