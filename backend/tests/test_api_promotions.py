@@ -89,3 +89,36 @@ def test_select_candidate_rejects_ineligible_candidate() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+
+
+def test_start_negotiation_persists_messages_events_and_agreement() -> None:
+    client = client_with_seed()
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
+
+    assert start_response.status_code == 201
+    body = start_response.json()["data"]
+    negotiation = body["negotiation"]
+    agreement = body["agreement"]
+    assert negotiation["status"] == "AGREED"
+    assert negotiation["creatorAgentId"] == "creator-agent-003"
+    assert agreement["status"] == "AGREED"
+    assert agreement["termsHash"].startswith("sha256:")
+    assert agreement["canonicalTermsJson"].startswith("{")
+
+    negotiation_id = negotiation["negotiationId"]
+    messages_response = client.get(f"/api/v1/negotiations/{negotiation_id}/messages")
+    assert messages_response.status_code == 200
+    messages = messages_response.json()["data"]["messages"]
+    assert [message["role"] for message in messages] == ["ROLE_USER", "ROLE_AGENT"]
+
+    events_response = client.get(f"/api/v1/negotiations/{negotiation_id}/events")
+    assert events_response.status_code == 200
+    assert events_response.json()["data"]["events"][0]["type"] == "NEGOTIATION_ACCEPT"
+
+    agreement_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}")
+    assert agreement_response.status_code == 200
+    assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]

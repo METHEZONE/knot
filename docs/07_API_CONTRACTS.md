@@ -96,6 +96,12 @@ POST   /negotiations/{negotiationId}:resume
 
 `resume` is only allowed for `ESCALATED` or input-required state and requires an explicit user decision payload.
 
+Current backend baseline implements `start-negotiation` by persisting the
+Negotiation, offer/decision Messages and decision Events through the repository
+boundary. External A2A HTTP orchestration is a later integration step; persisted
+document shapes must remain compatible with the A2A payloads in
+`docs/09_A2A_PROTOCOL_v1.md`.
+
 ## 6. Agreement and payment endpoints
 
 ```text
@@ -107,6 +113,11 @@ GET    /transaction-receipts/{receiptId}
 ```
 
 Every payment POST requires an `Idempotency-Key` header.
+
+`GET /agreements/{agreementId}` returns the persisted Agreement document,
+including structured `terms`, `canonicalTermsJson`, `termsHash`, and `status`.
+Payment mutation endpoints are intentionally deferred until web3 gateway signing
+is wired.
 
 ## 7. Evidence endpoints
 

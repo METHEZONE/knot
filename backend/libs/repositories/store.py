@@ -102,6 +102,16 @@ class KnotRepository:
     def get_creator_profile(self, creator_id: str) -> CreatorProfile | None:
         return self._get_model(FirestorePaths.creator_profile(creator_id), CreatorProfile)
 
+    def get_creator_profile_by_agent_id(self, creator_agent_id: str) -> CreatorProfile | None:
+        return next(
+            (
+                creator
+                for creator in self.list_creator_profiles()
+                if creator.creator_agent_id == creator_agent_id
+            ),
+            None,
+        )
+
     def list_creator_profiles(self) -> list[CreatorProfile]:
         return [
             document_to_model(CreatorProfile, document)

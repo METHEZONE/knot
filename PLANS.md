@@ -48,6 +48,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Firestore repository path, serialization, idempotency and demo seed baseline
 - [x] Deterministic policy engine and matching pipeline
 - [x] Brand Agent and Creator Agent A2A negotiation baseline
+- [x] Product API baseline for Promotion, match run, negotiation and Agreement reads
 - [x] Agreement hashing and escrow lock validation skeleton
 - [ ] Evidence verification and milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline

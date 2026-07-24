@@ -11,7 +11,7 @@ Update this file at the end of every Codex task.
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | Firestore-backed API baseline | 2026-07-24 | Promotion create/list/get/activate, match run/candidates/timeline APIs wired to repository boundary |
+| knot-api | Firestore-backed API baseline | 2026-07-24 | Promotion, match run, negotiation, message/event, agreement read APIs wired to repository boundary |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
@@ -36,7 +36,7 @@ Escrow program: unset
 
 ```text
 .venv/bin/python -m ruff check backend scripts/seed_demo.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 33 tests, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python -m pytest backend/tests: passed, 34 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
@@ -71,6 +71,8 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added repository tests for path contracts, model serialization, idempotency keys, append-only audit events, copy isolation and idempotent demo seed loading.
 - Added Product API routes for Promotion create/list/get/activate, match run execution, match run lookup, candidate listing, candidate selection and Promotion timeline.
 - Added API tests verifying seeded Promotion reads, Promotion creation/activation events, deterministic match persistence and ineligible candidate selection blocking.
+- Added Product API start-negotiation, negotiation get/messages/events and agreement get routes backed by repository documents.
+- Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
 - Added web3 gateway lock validation service requiring `Idempotency-Key`, agreement/escrow IDs, terms hash, amount, mint, program ID, network, and wallet references.
 - Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
 - Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
@@ -84,4 +86,4 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 ## Next task
 
-Wire negotiation/agreement persistence to the API repository boundary, then add Firestore emulator integration tests once GCP project configuration is available.
+Add Firestore emulator integration tests and then continue with evidence verification APIs; payment mutation endpoints remain deferred until web3 signing resumes.

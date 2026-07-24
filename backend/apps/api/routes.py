@@ -1,13 +1,18 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import cast
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 
 from apps.api.schemas import PromotionCreateRequest
+from libs.a2a.models import NegotiationMessageType, NegotiationPayload
+from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
-from libs.domain.models import Promotion
+from libs.agents.negotiation import CreatorNegotiationContext, evaluate_creator_message
+from libs.domain.hashing import canonical_terms_json
+from libs.domain.models import AgreementTerms, Promotion
+from libs.policies.brand import validate_brand_terms
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import KnotRepository
@@ -150,6 +155,200 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         repository.save_raw_document(match_run_path, match_run)
         return _ok({"matchRun": match_run})
 
+    @router.post(
+        "/match-runs/{match_run_id}:start-negotiation",
+        status_code=status.HTTP_201_CREATED,
+    )
+    def start_negotiation(match_run_id: str) -> dict[str, object]:
+        match_run = repository.get_raw_document(FirestorePaths.match_run(match_run_id))
+        if match_run is None:
+            raise _not_found("matchRun", match_run_id)
+        promotion_id = _require_document_str(match_run, "promotionId")
+        creator_agent_id = _require_document_str(match_run, "selectedCreatorAgentId")
+        promotion = _get_promotion(repository, promotion_id)
+        creator = repository.get_creator_profile_by_agent_id(creator_agent_id)
+        if creator is None:
+            raise _not_found("creatorAgent", creator_agent_id)
+        agent_policy = repository.get_agent_policy(creator_agent_id)
+        if agent_policy is None:
+            raise _not_found("agentPolicy", creator_agent_id)
+
+        terms = build_initial_terms(promotion, creator)
+        brand_decision = validate_brand_terms(promotion, creator, terms, current_round=1)
+        if not brand_decision.allowed:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Initial terms do not satisfy Brand policy.",
+            )
+
+        negotiation_id = f"negotiation-{uuid4()}"
+        context_id = f"context-{uuid4()}"
+        task_id = f"task-{uuid4()}"
+        offer_message_id = f"message-{uuid4()}"
+        decision_id = f"decision-{uuid4()}"
+        now = _now()
+        payload = NegotiationPayload(
+            type=NegotiationMessageType.OFFER,
+            round=1,
+            promotion=promotion,
+            terms=terms,
+            changedFields=[],
+            rationale="Initial promotion offer",
+        )
+        creator_decision = evaluate_creator_message(
+            CreatorNegotiationContext(
+                creatorAgentId=creator_agent_id,
+                policy=agent_policy.creator,
+                today=_policy_today(promotion),
+                currentMonthDeliverables=creator.active_deliverables_this_month,
+                maxRounds=promotion.autonomy.max_negotiation_rounds,
+            ),
+            payload,
+        )
+        response_message_id = f"message-{uuid4()}"
+        negotiation_status = _negotiation_status(creator_decision.type)
+        negotiation = {
+            "negotiationId": negotiation_id,
+            "promotionId": promotion.promotion_id,
+            "brandAgentId": promotion.brand_agent_id,
+            "creatorAgentId": creator_agent_id,
+            "contextId": context_id,
+            "taskId": task_id,
+            "status": negotiation_status,
+            "currentRound": 1,
+            "maxRounds": promotion.autonomy.max_negotiation_rounds,
+            "currentTerms": terms.model_dump(by_alias=True, mode="json"),
+            "brandPolicySnapshot": {
+                "ruleVersion": brand_decision.rule_version,
+                "decision": brand_decision.model_dump(by_alias=True, mode="json"),
+            },
+            "creatorPolicySnapshot": agent_policy.model_dump(by_alias=True, mode="json"),
+            "lastMessageId": response_message_id,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.negotiation(negotiation_id), negotiation)
+        repository.save_raw_document(
+            FirestorePaths.negotiation_message(negotiation_id, offer_message_id),
+            {
+                "messageId": offer_message_id,
+                "contextId": context_id,
+                "taskId": task_id,
+                "role": "ROLE_USER",
+                "sequence": 1,
+                "payload": payload.model_dump(by_alias=True, mode="json"),
+                "createdAt": now,
+            },
+        )
+        repository.save_raw_document(
+            FirestorePaths.negotiation_message(negotiation_id, response_message_id),
+            {
+                "messageId": response_message_id,
+                "contextId": context_id,
+                "taskId": task_id,
+                "role": "ROLE_AGENT",
+                "sequence": 2,
+                "payload": creator_decision.model_dump(by_alias=True, mode="json"),
+                "createdAt": now,
+            },
+        )
+        repository.save_raw_document(
+            FirestorePaths.negotiation_decision(negotiation_id, decision_id),
+            {
+                "decisionId": decision_id,
+                "messageId": response_message_id,
+                "type": creator_decision.type.value,
+                "policyDecision": creator_decision.policy_decision.model_dump(
+                    by_alias=True,
+                    mode="json",
+                ),
+                "createdAt": now,
+            },
+        )
+        agreement = _agreement_document(
+            negotiation=negotiation,
+            decision=creator_decision.model_dump(by_alias=True, mode="json"),
+            created_at=now,
+        )
+        if agreement is not None:
+            repository.save_raw_document(
+                FirestorePaths.agreement(str(agreement["agreementId"])),
+                agreement,
+            )
+        _append_promotion_event(
+            repository,
+            promotion_id=promotion_id,
+            event_type="NEGOTIATION_STARTED",
+            data={
+                "matchRunId": match_run_id,
+                "negotiationId": negotiation_id,
+                "status": negotiation_status,
+            },
+        )
+        return _ok({"negotiation": negotiation, "agreement": agreement})
+
+    @router.get("/negotiations/{negotiation_id}")
+    def get_negotiation(negotiation_id: str) -> dict[str, object]:
+        negotiation = repository.get_raw_document(FirestorePaths.negotiation(negotiation_id))
+        if negotiation is None:
+            raise _not_found("negotiation", negotiation_id)
+        return _ok({"negotiation": negotiation})
+
+    @router.get("/negotiations/{negotiation_id}/messages")
+    def list_negotiation_messages(negotiation_id: str) -> dict[str, object]:
+        _require_negotiation(repository, negotiation_id)
+        messages = repository.list_raw_documents(
+            f"{COLLECTIONS.negotiations}/{negotiation_id}/{COLLECTIONS.negotiation_messages}"
+        )
+        messages.sort(key=lambda item: (str(item.get("createdAt", "")), item.get("sequence", 0)))
+        return _ok({"messages": messages})
+
+    @router.get("/negotiations/{negotiation_id}/events")
+    def list_negotiation_events(negotiation_id: str) -> dict[str, object]:
+        _require_negotiation(repository, negotiation_id)
+        decisions = repository.list_raw_documents(
+            f"{COLLECTIONS.negotiations}/{negotiation_id}/{COLLECTIONS.negotiation_decisions}"
+        )
+        decisions.sort(key=lambda item: str(item.get("createdAt", "")))
+        return _ok(
+            {
+                "events": [
+                    {
+                        "eventId": decision["decisionId"],
+                        "type": f"NEGOTIATION_{decision['type']}",
+                        "data": decision,
+                        "createdAt": decision["createdAt"],
+                    }
+                    for decision in decisions
+                ]
+            }
+        )
+
+    @router.post("/negotiations/{negotiation_id}:cancel")
+    def cancel_negotiation(negotiation_id: str) -> dict[str, object]:
+        path = FirestorePaths.negotiation(negotiation_id)
+        negotiation = repository.get_raw_document(path)
+        if negotiation is None:
+            raise _not_found("negotiation", negotiation_id)
+        if negotiation.get("status") in {"AGREED", "REJECTED", "CANCELED"}:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "INVALID_STATE_TRANSITION",
+                "Terminal negotiations cannot be canceled.",
+            )
+        negotiation["status"] = "CANCELED"
+        negotiation["updatedAt"] = _now()
+        repository.save_raw_document(path, negotiation)
+        return _ok({"negotiation": negotiation})
+
+    @router.get("/agreements/{agreement_id}")
+    def get_agreement(agreement_id: str) -> dict[str, object]:
+        agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
+        if agreement is None:
+            raise _not_found("agreement", agreement_id)
+        return _ok({"agreement": agreement})
+
     @router.get("/promotions/{promotion_id}/timeline")
     def get_promotion_timeline(promotion_id: str) -> dict[str, object]:
         _get_promotion(repository, promotion_id)
@@ -167,6 +366,70 @@ def _get_promotion(repository: KnotRepository, promotion_id: str) -> Promotion:
     if promotion is None:
         raise _not_found("promotion", promotion_id)
     return promotion
+
+
+def _require_negotiation(repository: KnotRepository, negotiation_id: str) -> dict[str, object]:
+    negotiation = repository.get_raw_document(FirestorePaths.negotiation(negotiation_id))
+    if negotiation is None:
+        raise _not_found("negotiation", negotiation_id)
+    return negotiation
+
+
+def _require_document_str(document: dict[str, object], field_name: str) -> str:
+    value = document.get(field_name)
+    if not isinstance(value, str) or not value:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            f"{field_name} is not set.",
+        )
+    return value
+
+
+def _negotiation_status(message_type: NegotiationMessageType) -> str:
+    if message_type == NegotiationMessageType.ACCEPT:
+        return "AGREED"
+    if message_type == NegotiationMessageType.REJECT:
+        return "REJECTED"
+    if message_type == NegotiationMessageType.COUNTER:
+        return "COUNTERED"
+    return "ESCALATED"
+
+
+def _agreement_document(
+    *,
+    negotiation: dict[str, object],
+    decision: dict[str, object],
+    created_at: str,
+) -> dict[str, object] | None:
+    if decision.get("type") != NegotiationMessageType.ACCEPT.value:
+        return None
+    agreement_id = decision.get("agreementId")
+    terms = decision.get("terms")
+    terms_hash = decision.get("termsHash")
+    if (
+        not isinstance(agreement_id, str)
+        or not isinstance(terms, dict)
+        or not isinstance(terms_hash, str)
+    ):
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            "Accepted negotiation is missing agreement terms.",
+        )
+    agreement_terms = AgreementTerms.model_validate(terms)
+    return {
+        "agreementId": agreement_id,
+        "negotiationId": negotiation["negotiationId"],
+        "promotionId": negotiation["promotionId"],
+        "brandAgentId": negotiation["brandAgentId"],
+        "creatorAgentId": negotiation["creatorAgentId"],
+        "terms": terms,
+        "canonicalTermsJson": canonical_terms_json(agreement_terms),
+        "termsHash": terms_hash,
+        "status": "AGREED",
+        "createdAt": created_at,
+    }
 
 
 def _append_promotion_event(
@@ -212,6 +475,12 @@ def _now() -> str:
 
 def _now_datetime() -> datetime:
     return datetime.now(UTC)
+
+
+def _policy_today(promotion: Promotion) -> date:
+    if promotion.created_at is not None:
+        return promotion.created_at.date()
+    return date(2026, 7, 24)
 
 
 def _not_found(resource: str, resource_id: str) -> HTTPException:
