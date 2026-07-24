@@ -1,0 +1,27 @@
+# === Rust / Anchor ===
+target/
+**/target/
+.anchor/
+test-ledger/
+.DS_Store
+
+# === Node ===
+node_modules/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# === Solana / secrets (절대 커밋 금지) ===
+*keypair*.json
+id.json
+wallet.json
+.env
+.env.*
+!.env.example
