@@ -3,6 +3,7 @@ from datetime import date
 from libs.domain.models import AgreementTerms, CreatorPolicy, CreatorProfile, Promotion
 from libs.policies.brand import validate_brand_terms
 from libs.policies.creator import validate_creator_terms
+from libs.policies.evidence import validate_evidence_observations
 from tests.test_domain_models import promotion_payload, terms_payload
 
 
@@ -94,3 +95,21 @@ def test_creator_policy_blocks_unsupported_rights() -> None:
     )
     assert decision.allowed is False
     assert decision.violations[0].code == "CREATOR_USAGE_RIGHTS_NOT_ALLOWED"
+
+
+def test_evidence_policy_blocks_missing_disclosure_and_prohibited_claim() -> None:
+    decision = validate_evidence_observations(
+        {
+            "urlReachable": True,
+            "brandMentioned": True,
+            "disclosurePresent": False,
+            "prohibitedClaimsFound": ["cures-acne"],
+        }
+    )
+
+    assert decision.allowed is False
+    assert decision.rule_version == "verification-v1"
+    assert {violation.code for violation in decision.violations} == {
+        "EVIDENCE_DISCLOSURE_MISSING",
+        "EVIDENCE_PROHIBITED_CLAIM_FOUND",
+    }

@@ -12,6 +12,15 @@ def client_with_seed() -> TestClient:
     return TestClient(create_app(repository=repository))
 
 
+def accepted_agreement(client: TestClient) -> dict[str, object]:
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+    return client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation").json()[
+        "data"
+    ]["agreement"]
+
+
 def test_list_and_get_seeded_promotions() -> None:
     client = client_with_seed()
 
@@ -122,3 +131,76 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}")
     assert agreement_response.status_code == 200
     assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]
+
+
+def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:
+    client = client_with_seed()
+    agreement = accepted_agreement(client)
+
+    submit_response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/with-brand-and-ad",
+            "submittedByAgentId": agreement["creatorAgentId"],
+        },
+    )
+    assert submit_response.status_code == 201
+    evidence = submit_response.json()["data"]["evidence"]
+    assert evidence["status"] == "SUBMITTED"
+
+    verify_response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+    assert verify_response.status_code == 200
+    verified = verify_response.json()["data"]["evidence"]
+    assert verified["status"] == "PASSED"
+    assert verified["policyDecision"]["allowed"] is True
+    assert verified["policyDecision"]["ruleVersion"] == "verification-v1"
+
+    get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
+    assert get_response.status_code == 200
+    assert get_response.json()["data"]["evidence"]["status"] == "PASSED"
+
+    timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
+    event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
+    assert "EVIDENCE_SUBMITTED" in event_types
+    assert "EVIDENCE_VERIFIED" in event_types
+
+
+def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
+    client = client_with_seed()
+    agreement = accepted_agreement(client)
+    evidence = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/missing-disclosure",
+            "submittedByAgentId": agreement["creatorAgentId"],
+        },
+    ).json()["data"]["evidence"]
+
+    response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "EVIDENCE_VERIFICATION_FAILED"
+    assert detail["evidence"]["status"] == "FAILED"
+    assert detail["evidence"]["policyDecision"]["violations"][0]["code"] == (
+        "EVIDENCE_DISCLOSURE_MISSING"
+    )
+
+    get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
+    assert get_response.json()["data"]["evidence"]["status"] == "FAILED"
+
+
+def test_submit_evidence_rejects_wrong_creator_agent() -> None:
+    client = client_with_seed()
+    agreement = accepted_agreement(client)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/with-brand-and-ad",
+            "submittedByAgentId": "creator-agent-001",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"

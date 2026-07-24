@@ -215,7 +215,14 @@ GET  /api/v1/negotiations/{negotiationId}/messages
 GET  /api/v1/negotiations/{negotiationId}/events
 POST /api/v1/negotiations/{negotiationId}:cancel
 GET  /api/v1/agreements/{agreementId}
+POST /api/v1/agreements/{agreementId}/evidence
+GET  /api/v1/evidence/{evidenceId}
+POST /api/v1/evidence/{evidenceId}:verify
 ```
+
+Evidence verification writes `status`, `observations`, `policyDecision`,
+`verifiedAt` and `updatedAt` back to `evidence/{evidenceId}`, and appends
+Promotion timeline events.
 
 Payment mutation endpoints remain deferred until web3 signing work resumes.
 
@@ -234,7 +241,7 @@ git diff --check
 Expected current test result:
 
 ```text
-34 passed
+38 passed
 ```
 
 Known warning: FastAPI/Starlette TestClient currently emits one deprecation

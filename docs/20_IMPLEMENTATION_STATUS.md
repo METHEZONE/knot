@@ -4,14 +4,14 @@ Update this file at the end of every Codex task.
 
 ## Current milestone
 
-`M3 — Firestore-backed Product API baseline and escrow lock validation skeleton implemented`
+`M4 — Evidence verification API baseline with Firestore persistence`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | Firestore-backed API baseline | 2026-07-24 | Promotion, match run, negotiation, message/event, agreement read APIs wired to repository boundary |
+| knot-api | Evidence API baseline | 2026-07-24 | Promotion, match run, negotiation, agreement and evidence APIs wired to repository boundary |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
@@ -36,7 +36,7 @@ Escrow program: unset
 
 ```text
 .venv/bin/python -m ruff check backend scripts/seed_demo.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 34 tests, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python -m pytest backend/tests: passed, 38 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
@@ -74,6 +74,9 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added Product API start-negotiation, negotiation get/messages/events and agreement get routes backed by repository documents.
 - Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
 - Added `docs/22_FIRESTORE_RUNBOOK.md` to document Firestore modes, collections, seed data, emulator/GCP setup, indexes, invariants and verification.
+- Added deterministic `verification-v1` evidence policy checks for URL reachability, brand mention, required disclosure and prohibited claims.
+- Added Product API routes for evidence submission, evidence lookup and evidence verification backed by `evidence/{evidenceId}` documents and Promotion timeline events.
+- Added API and policy tests covering evidence success, persisted verification failure, creator-agent submitter validation and blocked observation rules.
 - Added web3 gateway lock validation service requiring `Idempotency-Key`, agreement/escrow IDs, terms hash, amount, mint, program ID, network, and wallet references.
 - Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
 - Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
@@ -88,4 +91,4 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 ## Next task
 
-Add Firestore emulator integration tests and then continue with evidence verification APIs; payment mutation endpoints remain deferred until web3 signing resumes.
+Add Firestore emulator integration tests, then wire API evidence observations to Gemini/pay.sh adapters when those service settings are available.

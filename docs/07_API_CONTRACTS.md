@@ -155,6 +155,19 @@ Verification result:
 }
 ```
 
+Current backend baseline persists submitted evidence under `evidence/{evidenceId}`.
+Verification is deterministic and does not fetch live social content yet. If the
+request body omits observations, the API derives demo observations from the URL:
+
+- `unreachable` in the URL sets `urlReachable=false`
+- `missing-brand` in the URL sets `brandMentioned=false`
+- `missing-disclosure` in the URL sets `disclosurePresent=false`
+- configured prohibited claim strings found in the URL are copied into `prohibitedClaimsFound`
+
+The response is wrapped in standard metadata as `data.evidence`. Failed
+verification is persisted with `status=FAILED` and returns
+`EVIDENCE_VERIFICATION_FAILED`.
+
 ## 8. Health endpoints
 
 Each Cloud Run service exposes:

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from libs.domain.models import (
     Deliverable,
@@ -76,6 +76,29 @@ class ActivationResponse(DomainModel):
 
 class ManualCandidateSelection(DomainModel):
     selected_at: str = Field(alias="selectedAt")
+
+
+class EvidenceSubmissionRequest(DomainModel):
+    url: str
+    submitted_by_agent_id: str = Field(alias="submittedByAgentId")
+
+    @field_validator("url")
+    @classmethod
+    def validate_http_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("evidence URL must use http or https")
+        return value
+
+
+class EvidenceObservations(DomainModel):
+    url_reachable: bool = Field(default=True, alias="urlReachable")
+    brand_mentioned: bool = Field(default=True, alias="brandMentioned")
+    disclosure_present: bool = Field(default=True, alias="disclosurePresent")
+    prohibited_claims_found: list[str] = Field(default_factory=list, alias="prohibitedClaimsFound")
+
+
+class EvidenceVerificationRequest(DomainModel):
+    observations: EvidenceObservations | None = None
 
 
 def default_promotion_request() -> PromotionCreateRequest:

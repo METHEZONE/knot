@@ -61,7 +61,23 @@ Before release:
 - requested amount equals milestone formula
 - resulting total does not exceed locked amount
 
-## 6. Matching pipeline
+## 6. Evidence verification rules
+
+Evidence verification policy version is `verification-v1`.
+
+Deterministic checks:
+
+- submitted Evidence must belong to an `AGREED` Agreement
+- `submittedByAgentId` must match the Agreement `creatorAgentId`
+- `observations.urlReachable` must be true
+- `observations.brandMentioned` must be true
+- `observations.disclosurePresent` must be true
+- `observations.prohibitedClaimsFound` must be empty
+
+Gemini or a paid verification API may generate observations later, but the
+payment release decision can only use deterministic policy output.
+
+## 7. Matching pipeline
 
 ### Hard filters
 
@@ -89,7 +105,7 @@ Every component is normalized to `[0, 1]`. Tie-break order: higher score, higher
 
 After ranking, Gemini receives the exact component scores and produces one or two sentences. It cannot change eligibility, score or rank.
 
-## 7. Negotiation decision order
+## 8. Negotiation decision order
 
 ```text
 Incoming A2A message
@@ -102,7 +118,7 @@ Incoming A2A message
 -> persist decision and A2A state
 ```
 
-## 8. Escalation
+## 9. Escalation
 
 Escalate rather than guess when:
 

@@ -5,7 +5,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 
-from apps.api.schemas import PromotionCreateRequest
+from apps.api.schemas import (
+    EvidenceObservations,
+    EvidenceSubmissionRequest,
+    EvidenceVerificationRequest,
+    PromotionCreateRequest,
+)
 from libs.a2a.models import NegotiationMessageType, NegotiationPayload
 from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
@@ -13,6 +18,7 @@ from libs.agents.negotiation import CreatorNegotiationContext, evaluate_creator_
 from libs.domain.hashing import canonical_terms_json
 from libs.domain.models import AgreementTerms, Promotion
 from libs.policies.brand import validate_brand_terms
+from libs.policies.evidence import validate_evidence_observations
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import KnotRepository
@@ -349,6 +355,106 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             raise _not_found("agreement", agreement_id)
         return _ok({"agreement": agreement})
 
+    @router.post("/agreements/{agreement_id}/evidence", status_code=status.HTTP_201_CREATED)
+    def submit_evidence(
+        agreement_id: str,
+        payload: EvidenceSubmissionRequest,
+    ) -> dict[str, object]:
+        agreement = _get_agreement_document(repository, agreement_id)
+        creator_agent_id = _require_document_str(agreement, "creatorAgentId")
+        if payload.submitted_by_agent_id != creator_agent_id:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Evidence submitter must match the Agreement creator agent.",
+            )
+
+        evidence_id = f"evidence-{uuid4()}"
+        now = _now()
+        evidence = {
+            "evidenceId": evidence_id,
+            "agreementId": agreement_id,
+            "promotionId": agreement["promotionId"],
+            "creatorAgentId": creator_agent_id,
+            "submittedByAgentId": payload.submitted_by_agent_id,
+            "url": payload.url,
+            "status": "SUBMITTED",
+            "observations": None,
+            "policyDecision": None,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.evidence(evidence_id), evidence)
+        _append_promotion_event(
+            repository,
+            promotion_id=str(agreement["promotionId"]),
+            event_type="EVIDENCE_SUBMITTED",
+            data={"agreementId": agreement_id, "evidenceId": evidence_id, "status": "SUBMITTED"},
+        )
+        return _ok({"evidence": evidence})
+
+    @router.get("/evidence/{evidence_id}")
+    def get_evidence(evidence_id: str) -> dict[str, object]:
+        evidence = repository.get_raw_document(FirestorePaths.evidence(evidence_id))
+        if evidence is None:
+            raise _not_found("evidence", evidence_id)
+        return _ok({"evidence": evidence})
+
+    @router.post("/evidence/{evidence_id}:verify")
+    def verify_evidence(
+        evidence_id: str,
+        payload: EvidenceVerificationRequest | None = None,
+    ) -> dict[str, object]:
+        evidence_path = FirestorePaths.evidence(evidence_id)
+        evidence = repository.get_raw_document(evidence_path)
+        if evidence is None:
+            raise _not_found("evidence", evidence_id)
+        agreement = _get_agreement_document(
+            repository,
+            _require_document_str(evidence, "agreementId"),
+        )
+        observations = _evidence_observations(
+            evidence=evidence,
+            agreement=agreement,
+            payload=payload,
+        )
+        policy_decision = validate_evidence_observations(observations)
+        verified = {
+            **evidence,
+            "status": "PASSED" if policy_decision.allowed else "FAILED",
+            "observations": observations,
+            "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
+            "verifiedAt": _now(),
+            "updatedAt": _now(),
+        }
+        repository.save_raw_document(evidence_path, verified)
+        _append_promotion_event(
+            repository,
+            promotion_id=str(verified["promotionId"]),
+            event_type="EVIDENCE_VERIFIED",
+            data={
+                "agreementId": verified["agreementId"],
+                "evidenceId": evidence_id,
+                "status": verified["status"],
+                "violationCodes": [
+                    violation.code for violation in policy_decision.violations
+                ],
+            },
+        )
+        if not policy_decision.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "type": "https://knot.example/errors/evidence-verification-failed",
+                    "title": "Evidence Verification Failed",
+                    "status": status.HTTP_409_CONFLICT,
+                    "detail": "Evidence does not satisfy verification policy.",
+                    "code": "EVIDENCE_VERIFICATION_FAILED",
+                    "evidence": verified,
+                },
+            )
+        return _ok({"evidence": verified})
+
     @router.get("/promotions/{promotion_id}/timeline")
     def get_promotion_timeline(promotion_id: str) -> dict[str, object]:
         _get_promotion(repository, promotion_id)
@@ -373,6 +479,19 @@ def _require_negotiation(repository: KnotRepository, negotiation_id: str) -> dic
     if negotiation is None:
         raise _not_found("negotiation", negotiation_id)
     return negotiation
+
+
+def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> dict[str, object]:
+    agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
+    if agreement is None:
+        raise _not_found("agreement", agreement_id)
+    if agreement.get("status") != "AGREED":
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            "Evidence requires an agreed Agreement.",
+        )
+    return agreement
 
 
 def _require_document_str(document: dict[str, object], field_name: str) -> str:
@@ -430,6 +549,30 @@ def _agreement_document(
         "status": "AGREED",
         "createdAt": created_at,
     }
+
+
+def _evidence_observations(
+    *,
+    evidence: dict[str, object],
+    agreement: dict[str, object],
+    payload: EvidenceVerificationRequest | None,
+) -> dict[str, object]:
+    if payload is not None and payload.observations is not None:
+        return payload.observations.model_dump(by_alias=True, mode="json")
+
+    terms = AgreementTerms.model_validate(agreement["terms"])
+    url = _require_document_str(evidence, "url").lower()
+    prohibited_claims_found = [
+        claim
+        for claim in terms.constraints.prohibited_claims
+        if claim.lower() in url
+    ]
+    return EvidenceObservations(
+        urlReachable="unreachable" not in url,
+        brandMentioned="missing-brand" not in url,
+        disclosurePresent="missing-disclosure" not in url,
+        prohibitedClaimsFound=prohibited_claims_found,
+    ).model_dump(by_alias=True, mode="json")
 
 
 def _append_promotion_event(

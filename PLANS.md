@@ -50,6 +50,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Brand Agent and Creator Agent A2A negotiation baseline
 - [x] Product API baseline for Promotion, match run, negotiation and Agreement reads
 - [x] Agreement hashing and escrow lock validation skeleton
-- [ ] Evidence verification and milestone release
+- [x] Evidence submission and deterministic verification API baseline
+- [ ] Milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo
