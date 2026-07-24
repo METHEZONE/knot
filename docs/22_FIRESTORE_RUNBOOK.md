@@ -200,13 +200,21 @@ export GOOGLE_CLOUD_PROJECT=knot-agentic-dev
 If the Google Cloud CLI is not installed, install it before using the emulator.
 Java is also required by the emulator runtime.
 
-Emulator tests should verify repository behavior that cannot be proven by the
+Emulator tests verify repository behavior that cannot be fully proven by the
 in-memory store:
 
 - create-if-absent semantics for append-only audit events
-- idempotency key conflict behavior under concurrent writes
+- idempotency record replay and conflict behavior
+- Product API Promotion -> match -> negotiation -> Agreement -> Evidence flow
 - negotiation round increments in transactions
 - escrow and settlement write ordering once payment endpoints are connected
+
+Current integration tests are gated by `FIRESTORE_EMULATOR_HOST`:
+
+```text
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+  .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
+```
 
 ## 7. GCP Firestore Setup
 
@@ -312,15 +320,25 @@ Run these checks after DB/API changes:
 .venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py
 .venv/bin/python -m mypy backend/apps backend/libs
 .venv/bin/python -m pytest backend/tests
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+  .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
 .venv/bin/python scripts/seed_demo.py --target memory
 .venv/bin/python scripts/firestore_smoke.py --target memory
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+  .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev
 git diff --check
 ```
 
-Expected current test result:
+Expected current test result without emulator env:
 
 ```text
-39 passed
+39 passed, 3 skipped
+```
+
+Expected current emulator integration result with emulator env:
+
+```text
+3 passed
 ```
 
 Known warning: FastAPI/Starlette TestClient currently emits one deprecation

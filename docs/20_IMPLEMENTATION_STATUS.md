@@ -36,10 +36,12 @@ Escrow program: unset
 
 ```text
 .venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 39 tests, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python -m pytest backend/tests: passed, 39 tests and 3 skipped emulator tests, with one FastAPI/Starlette deprecation warning from TestClient.
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py: passed, 3 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 .venv/bin/python scripts/firestore_smoke.py --target memory: passed.
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev: passed.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
 cd web3/gateway && npm run lint: passed.
 cd web3/gateway && npm test: passed, 5 tests.
@@ -78,6 +80,7 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added an ERD to the Firestore runbook and a `scripts/firestore_smoke.py` readback command for memory or Firestore targets.
 - Aligned the logical Firestore ERD with v1 relationship semantics: optional Brand/Creator-to-Agent representation, MatchCandidate-to-CreatorProfile references, MatchCandidate-to-Negotiation tracking, A2AArtifact-to-Agreement materialization, Agreement Milestone documents, PaymentOperation as the payment execution unit, IdempotencyRecord guarding PaymentOperation, and separated PromotionEvent from AuditEvent.
 - Updated backend Firestore path helpers and API persistence so MatchCandidate documents use `creatorId`, Agreements persist `artifactId`, milestones are written under Agreements, Evidence references milestones, and idempotency records use `idempotencyRecords/{key}`.
+- Installed local Google Cloud CLI and Firestore emulator component, verified Firestore SDK seed/readback and Product API flow against the emulator, and added gated emulator integration tests.
 - Added deterministic `verification-v1` evidence policy checks for URL reachability, brand mention, required disclosure and prohibited claims.
 - Added Product API routes for evidence submission, evidence lookup and evidence verification backed by `evidence/{evidenceId}` documents and Promotion timeline events.
 - Added API and policy tests covering evidence success, persisted verification failure, creator-agent submitter validation and blocked observation rules.
@@ -89,12 +92,11 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 - GCP project ID not configured.
 - Firestore Native database has not been created in GCP.
-- Local Google Cloud CLI is not installed, so Firestore emulator execution is not available on this machine yet.
-- Firestore emulator integration tests are not wired yet.
+- Firestore emulator requires Java 25 or higher after future gcloud releases; local Java is currently 21 and still works with the installed emulator but emitted a deprecation warning.
 - Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
 - Devnet program ID and mint not configured.
 - pay.sh sandbox resource not selected.
 
 ## Next task
 
-Add Firestore emulator integration tests, then wire API evidence observations to Gemini/pay.sh adapters when those service settings are available.
+Wire API evidence observations to Gemini/pay.sh adapters when those service settings are available, or add global `auditEvents` persistence next.

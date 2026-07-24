@@ -51,6 +51,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Product API baseline for Promotion, match run, negotiation and Agreement reads
 - [x] Agreement hashing and escrow lock validation skeleton
 - [x] Evidence submission and deterministic verification API baseline
+- [x] Firestore emulator smoke and gated integration tests
 - [ ] Milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo
