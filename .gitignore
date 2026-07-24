@@ -5,20 +5,25 @@
 .local/
 .codex-local/
 
-# Secrets and key material
+# Secrets and key material (절대 커밋 금지)
 secrets/
 *.key.json
 *service-account*.json
+*keypair*.json
+wallet.json
 id.json
 **/target/deploy/*.json
 
 # Python
 .venv/
+venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+build/
 
 # Node
 node_modules/
@@ -28,6 +33,7 @@ coverage/
 
 # Rust / Anchor
 target/
+**/target/
 .anchor/
 test-ledger/
 
