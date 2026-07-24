@@ -4,9 +4,9 @@ from . import pdas
 from .pdas import (
     PROGRAM_ID,
     campaign_pda,
-    vault_pda,
-    vault_authority_pda,
     reputation_pda,
+    vault_authority_pda,
+    vault_pda,
 )
 
 __all__ = [

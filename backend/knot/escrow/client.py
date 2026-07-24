@@ -1,7 +1,8 @@
 """knot-escrow 온체인 클라이언트 (anchorpy).
 
 빌드 후 생성되는 IDL(``<repo>/target/idl/knot_escrow.json``)을 로드해 인스트럭션을 호출한다.
-예원의 에이전트 계층은 이 모듈을 import 해서 온체인 정산을 수행한다(인터페이스 계약: docs/architecture.md).
+에이전트 계층(예원)은 이 모듈을 import 해서 온체인 정산을 수행한다.
+인터페이스 계약: docs/architecture.md.
 
 주의:
   - 실제 호출은 배포된 프로그램 + 펀딩된 devnet 지갑 + USDC-SPL 토큰계정이 필요.
@@ -11,7 +12,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
@@ -78,7 +78,7 @@ async def initialize_campaign(
     mint: Pubkey,
     brand_token: Pubkey,
     campaign_id: int,
-    milestone_amounts: List[int],
+    milestone_amounts: list[int],
     auto_approve_cap: int,
     terms_hash: bytes,
     refund_timelock_secs: int,

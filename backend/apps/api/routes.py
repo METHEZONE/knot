@@ -1,9 +1,11 @@
+import hashlib
+import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import cast
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 
 from apps.api.schemas import (
     EvidenceObservations,
@@ -15,16 +17,26 @@ from libs.a2a.models import NegotiationMessageType, NegotiationPayload
 from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
 from libs.agents.negotiation import CreatorNegotiationContext, evaluate_creator_message
-from libs.domain.hashing import canonical_terms_json
+from libs.domain.hashing import canonical_terms_json, terms_hash
 from libs.domain.models import AgreementTerms, CreatorProfile, Promotion
+from libs.payments.settlement import (
+    PLATFORM_FEE_BPS,
+    lock_amount_base_units,
+    milestone_amounts_base_units,
+)
 from libs.policies.brand import validate_brand_terms
 from libs.policies.evidence import validate_evidence_observations
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
-from libs.repositories.store import KnotRepository
+from libs.repositories.store import IdempotencyConflictError, KnotRepository
+from libs.settings.config import Settings, get_settings
 
 
-def build_api_router(repository: KnotRepository) -> APIRouter:
+def build_api_router(
+    repository: KnotRepository,
+    settings: Settings | None = None,
+) -> APIRouter:
+    settings = settings or get_settings()
     router = APIRouter(prefix="/api/v1")
 
     @router.get("")
@@ -530,6 +542,317 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         events.sort(key=lambda item: str(item.get("createdAt", "")))
         return _ok({"events": events})
 
+    @router.post("/agreements/{agreement_id}/escrow:lock")
+    def lock_escrow(
+        agreement_id: str,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        if not idempotency_key:
+            raise _problem(
+                status.HTTP_400_BAD_REQUEST,
+                "VALIDATION_ERROR",
+                "Idempotency-Key header is required.",
+            )
+        agreement = _get_agreement_document(repository, agreement_id)
+        promotion = _get_promotion(repository, _require_document_str(agreement, "promotionId"))
+        if not promotion.autonomy.auto_escrow:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Auto-escrow is disabled for this Promotion; human approval is required.",
+            )
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        if terms_hash(terms) != agreement.get("termsHash"):
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Recomputed terms hash does not match the Agreement.",
+            )
+        locked_amount = lock_amount_base_units(terms)
+        if locked_amount <= 0:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Escrow lock amount must be positive.",
+            )
+
+        existing = _find_escrow_by_agreement(repository, agreement_id)
+        if existing is not None:
+            if existing.get("idempotencyKey") == idempotency_key:
+                return _ok({"escrow": existing, "receipt": _lock_receipt(repository, existing)})
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "ESCROW_ALREADY_LOCKED",
+                f"Agreement {agreement_id} already has an escrow.",
+            )
+
+        payload_hash = _payload_hash(
+            {
+                "op": "ESCROW_LOCK",
+                "agreementId": agreement_id,
+                "amount": locked_amount,
+                "programId": settings.escrow_program_id,
+                "mint": settings.usdc_mint,
+            }
+        )
+        try:
+            repository.claim_idempotency_record(
+                idempotency_key,
+                payload_hash=payload_hash,
+                owner_path=f"lock:{agreement_id}",
+            )
+        except IdempotencyConflictError as error:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "IDEMPOTENCY_CONFLICT",
+                "Idempotency-Key was already used for a different request.",
+            ) from error
+
+        now = _now()
+        escrow_id = f"escrow-{uuid4()}"
+        receipt_id = f"receipt-{uuid4()}"
+        operation_id = f"op-{uuid4()}"
+        milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        escrow = {
+            "escrowId": escrow_id,
+            "agreementId": agreement_id,
+            "promotionId": agreement["promotionId"],
+            "brandAgentId": agreement["brandAgentId"],
+            "creatorAgentId": agreement["creatorAgentId"],
+            "network": settings.escrow_network,
+            "programId": settings.escrow_program_id,
+            "mint": settings.usdc_mint,
+            "escrowPda": None,
+            "lockedAmountBaseUnits": str(locked_amount),
+            "releasedAmountBaseUnits": "0",
+            "platformFeeBps": PLATFORM_FEE_BPS,
+            "termsHash": agreement["termsHash"],
+            "milestoneAmounts": {mid: str(amount) for mid, amount in milestone_amounts.items()},
+            "status": "LOCKED",
+            "lockSignature": None,
+            "lockReceiptId": receipt_id,
+            "paymentOperationId": operation_id,
+            "idempotencyKey": idempotency_key,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        receipt = _simulated_receipt(receipt_id, operation_id, settings.escrow_network, now)
+        operation = {
+            "operationId": operation_id,
+            "operationType": "ESCROW_LOCK",
+            "escrowId": escrow_id,
+            "agreementId": agreement_id,
+            "idempotencyKey": idempotency_key,
+            "idempotencyRecordPath": FirestorePaths.idempotency_record(idempotency_key),
+            "receiptId": receipt_id,
+            "status": "SIMULATED",
+            "createdAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.escrow(escrow_id), escrow)
+        repository.save_raw_document(FirestorePaths.transaction_receipt(receipt_id), receipt)
+        repository.save_raw_document(FirestorePaths.payment_operation(operation_id), operation)
+        _append_promotion_event(
+            repository,
+            promotion_id=str(agreement["promotionId"]),
+            event_type="ESCROW_LOCKED",
+            data={
+                "agreementId": agreement_id,
+                "escrowId": escrow_id,
+                "lockedAmountBaseUnits": str(locked_amount),
+                "receiptStatus": "SIMULATED",
+            },
+        )
+        _append_audit(
+            repository,
+            action="ESCROW_LOCK",
+            data={"escrowId": escrow_id, "agreementId": agreement_id, "operationId": operation_id},
+        )
+        return _ok({"escrow": escrow, "receipt": receipt})
+
+    @router.get("/escrows/{escrow_id}")
+    def get_escrow(escrow_id: str) -> dict[str, object]:
+        escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+        if escrow is None:
+            raise _not_found("escrow", escrow_id)
+        return _ok({"escrow": escrow})
+
+    @router.post("/escrows/{escrow_id}/milestones/{milestone_id}:release")
+    def release_milestone(
+        escrow_id: str,
+        milestone_id: str,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        if not idempotency_key:
+            raise _problem(
+                status.HTTP_400_BAD_REQUEST,
+                "VALIDATION_ERROR",
+                "Idempotency-Key header is required.",
+            )
+        escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+        if escrow is None:
+            raise _not_found("escrow", escrow_id)
+        if escrow.get("status") != "LOCKED":
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "INVALID_STATE_TRANSITION",
+                "Escrow is not in a releasable state.",
+            )
+        agreement_id = _require_document_str(escrow, "agreementId")
+        agreement = _get_agreement_document(repository, agreement_id)
+        promotion = _get_promotion(repository, _require_document_str(escrow, "promotionId"))
+        if not promotion.autonomy.auto_release:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Auto-release is disabled for this Promotion; human approval is required.",
+            )
+        milestone = _get_milestone_document(repository, agreement_id, milestone_id)
+
+        existing_settlement = _find_settlement(repository, escrow_id, milestone_id)
+        if existing_settlement is not None:
+            if existing_settlement.get("idempotencyKey") == idempotency_key:
+                return _ok(
+                    {
+                        "settlement": existing_settlement,
+                        "escrow": escrow,
+                        "receipt": _settlement_receipt(repository, existing_settlement),
+                    }
+                )
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "MILESTONE_ALREADY_RELEASED",
+                f"Milestone {milestone_id} was already released.",
+            )
+
+        if not _milestone_evidence_passed(repository, agreement_id, milestone_id):
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Milestone evidence has not passed verification.",
+            )
+
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        locked = int(str(escrow["lockedAmountBaseUnits"]))
+        amounts = milestone_amounts_base_units(locked, terms.milestones)
+        if milestone_id not in amounts:
+            raise _not_found("milestone", milestone_id)
+        amount = amounts[milestone_id]
+        released = int(str(escrow.get("releasedAmountBaseUnits", "0")))
+        if released + amount > locked:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Release amount exceeds the locked balance.",
+            )
+
+        payload_hash = _payload_hash(
+            {
+                "op": "MILESTONE_RELEASE",
+                "escrowId": escrow_id,
+                "milestoneId": milestone_id,
+                "amount": amount,
+            }
+        )
+        try:
+            repository.claim_idempotency_record(
+                idempotency_key,
+                payload_hash=payload_hash,
+                owner_path=f"release:{escrow_id}:{milestone_id}",
+            )
+        except IdempotencyConflictError as error:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "IDEMPOTENCY_CONFLICT",
+                "Idempotency-Key was already used for a different request.",
+            ) from error
+
+        now = _now()
+        settlement_id = f"settlement-{uuid4()}"
+        receipt_id = f"receipt-{uuid4()}"
+        operation_id = f"op-{uuid4()}"
+        new_released = released + amount
+        settlement = {
+            "settlementId": settlement_id,
+            "escrowId": escrow_id,
+            "agreementId": agreement_id,
+            "milestoneId": milestone_id,
+            "amountBaseUnits": str(amount),
+            "network": settings.escrow_network,
+            "status": "SIMULATED",
+            "signature": None,
+            "receiptId": receipt_id,
+            "paymentOperationId": operation_id,
+            "idempotencyKey": idempotency_key,
+            "createdAt": now,
+        }
+        receipt = _simulated_receipt(receipt_id, operation_id, settings.escrow_network, now)
+        operation = {
+            "operationId": operation_id,
+            "operationType": "MILESTONE_RELEASE",
+            "escrowId": escrow_id,
+            "settlementId": settlement_id,
+            "agreementId": agreement_id,
+            "milestoneId": milestone_id,
+            "idempotencyKey": idempotency_key,
+            "idempotencyRecordPath": FirestorePaths.idempotency_record(idempotency_key),
+            "receiptId": receipt_id,
+            "status": "SIMULATED",
+            "createdAt": now,
+        }
+        updated_escrow = {
+            **escrow,
+            "releasedAmountBaseUnits": str(new_released),
+            "status": "COMPLETED" if new_released >= locked else "LOCKED",
+            "updatedAt": now,
+        }
+        updated_milestone = {
+            **milestone,
+            "status": "RELEASED",
+            "releasedAmountBaseUnits": str(amount),
+            "settlementId": settlement_id,
+            "releaseReceiptId": receipt_id,
+            "releasedAt": now,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.settlement(settlement_id), settlement)
+        repository.save_raw_document(FirestorePaths.transaction_receipt(receipt_id), receipt)
+        repository.save_raw_document(FirestorePaths.payment_operation(operation_id), operation)
+        repository.save_raw_document(FirestorePaths.escrow(escrow_id), updated_escrow)
+        repository.save_raw_document(
+            FirestorePaths.milestone(agreement_id, milestone_id),
+            updated_milestone,
+        )
+        _append_promotion_event(
+            repository,
+            promotion_id=str(escrow["promotionId"]),
+            event_type="MILESTONE_RELEASED",
+            data={
+                "escrowId": escrow_id,
+                "milestoneId": milestone_id,
+                "amountBaseUnits": str(amount),
+                "settlementId": settlement_id,
+                "receiptStatus": "SIMULATED",
+            },
+        )
+        _append_audit(
+            repository,
+            action="MILESTONE_RELEASE",
+            data={
+                "escrowId": escrow_id,
+                "milestoneId": milestone_id,
+                "settlementId": settlement_id,
+                "operationId": operation_id,
+            },
+        )
+        return _ok({"settlement": settlement, "escrow": updated_escrow, "receipt": receipt})
+
+    @router.get("/transaction-receipts/{receipt_id}")
+    def get_transaction_receipt(receipt_id: str) -> dict[str, object]:
+        receipt = repository.get_raw_document(FirestorePaths.transaction_receipt(receipt_id))
+        if receipt is None:
+            raise _not_found("transactionReceipt", receipt_id)
+        return _ok({"receipt": receipt})
+
     return router
 
 
@@ -755,6 +1078,98 @@ def _candidate_explanation(candidate: dict[str, object]) -> str:
     hard_filter_reasons = cast(Sequence[object], candidate["hardFilterReasons"])
     reasons = ", ".join(str(reason) for reason in hard_filter_reasons)
     return f"Excluded by deterministic hard filters: {reasons}."
+
+
+def _find_escrow_by_agreement(
+    repository: KnotRepository,
+    agreement_id: str,
+) -> dict[str, object] | None:
+    for document in repository.list_raw_documents(COLLECTIONS.escrows):
+        if document.get("agreementId") == agreement_id:
+            return document
+    return None
+
+
+def _find_settlement(
+    repository: KnotRepository,
+    escrow_id: str,
+    milestone_id: str,
+) -> dict[str, object] | None:
+    for document in repository.list_raw_documents(COLLECTIONS.settlements):
+        if document.get("escrowId") == escrow_id and document.get("milestoneId") == milestone_id:
+            return document
+    return None
+
+
+def _milestone_evidence_passed(
+    repository: KnotRepository,
+    agreement_id: str,
+    milestone_id: str,
+) -> bool:
+    for document in repository.list_raw_documents(COLLECTIONS.evidence):
+        if (
+            document.get("agreementId") == agreement_id
+            and document.get("milestoneId") == milestone_id
+            and document.get("status") == "PASSED"
+        ):
+            return True
+    return False
+
+
+def _lock_receipt(
+    repository: KnotRepository,
+    escrow: dict[str, object],
+) -> dict[str, object] | None:
+    receipt_id = escrow.get("lockReceiptId")
+    if not isinstance(receipt_id, str):
+        return None
+    return repository.get_raw_document(FirestorePaths.transaction_receipt(receipt_id))
+
+
+def _settlement_receipt(
+    repository: KnotRepository,
+    settlement: dict[str, object],
+) -> dict[str, object] | None:
+    receipt_id = settlement.get("receiptId")
+    if not isinstance(receipt_id, str):
+        return None
+    return repository.get_raw_document(FirestorePaths.transaction_receipt(receipt_id))
+
+
+def _simulated_receipt(
+    receipt_id: str,
+    operation_id: str,
+    network: str,
+    created_at: str,
+) -> dict[str, object]:
+    return {
+        "receiptId": receipt_id,
+        "paymentOperationId": operation_id,
+        "network": network,
+        "signature": None,
+        "explorerUrl": None,
+        "status": "SIMULATED",
+        "detail": "On-chain signing is not wired yet; see docs/INTEGRATION_PLAN.md.",
+        "createdAt": created_at,
+    }
+
+
+def _payload_hash(payload: dict[str, object]) -> str:
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _append_audit(
+    repository: KnotRepository,
+    *,
+    action: str,
+    data: dict[str, object],
+) -> None:
+    event_id = f"audit-{uuid4()}"
+    repository.create_audit_event(
+        event_id,
+        {"eventId": event_id, "action": action, "data": data, "createdAt": _now()},
+    )
 
 
 def _ok(data: dict[str, object]) -> dict[str, object]:

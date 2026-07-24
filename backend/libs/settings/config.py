@@ -21,6 +21,13 @@ def _load_dotenv() -> None:
                 os.environ[key] = val
 
 
+# Real devnet knot-escrow program id and USDC-SPL mint (see programs/knot-escrow
+# and backend/.env.example). Used to stamp escrow/receipt records so they stay
+# consistent when on-chain signing is wired.
+DEFAULT_ESCROW_PROGRAM_ID = "Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu"
+DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+
+
 class Settings(BaseModel):
     service_name: str = "knot-api"
     git_sha: str = "local"
@@ -29,6 +36,9 @@ class Settings(BaseModel):
     creator_agent_base_url: str = "http://localhost:8081/a2a/v1"
     repository_backend: str = "memory"
     firestore_project_id: str | None = None
+    escrow_network: str = "solanaDevnet"
+    escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
+    usdc_mint: str = DEFAULT_USDC_MINT
 
 
 @lru_cache
@@ -44,4 +54,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         ),
         repository_backend=os.getenv("KNOT_REPOSITORY_BACKEND", "memory"),
         firestore_project_id=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID"),
+        escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
+        escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
+        usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
     )

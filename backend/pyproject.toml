@@ -42,6 +42,9 @@ select = ["E", "F", "I", "B", "UP"]
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# anchorpy ships a pytest plugin that imports the removed `pytest_xprocess`
+# module; we don't use its localnet fixtures, so disable it.
+addopts = "-p no:pytest_anchorpy"
 markers = [
     "integration: pay.sh/네트워크 필요",
     "devnet: 배포된 프로그램 + 펀딩된 지갑 필요 (KNOT_RUN_DEVNET=1)",

@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from typing import Protocol, TypeVar, cast, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -167,7 +167,7 @@ class KnotRepository:
 
 
 def _copy_document(document: Mapping[str, object]) -> DocumentData:
-    return cast(DocumentData, deepcopy(dict(document)))
+    return deepcopy(dict(document))
 
 
 def write_documents(

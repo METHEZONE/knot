@@ -11,7 +11,6 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 
 class PayCliNotFound(RuntimeError):
@@ -51,7 +50,7 @@ def fetch(url: str, *, sandbox: bool = True, timeout: int = 90) -> PayResult:
     )
 
 
-def skills(query: Optional[str] = None, *, sandbox: bool = True, timeout: int = 60) -> str:
+def skills(query: str | None = None, *, sandbox: bool = True, timeout: int = 60) -> str:
     """pay 스킬 카탈로그(유료 API 제공자) 탐색/검색."""
     args = [_pay_bin()]
     if sandbox:

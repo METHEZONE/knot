@@ -1,6 +1,7 @@
 """온체인 신원/평판 — Reputation PDA 조회.
 
-평판은 마일스톤 정산(approve_and_release) 시 프로그램이 갱신한다(campaigns_completed, total_settled).
+평판은 마일스톤 정산(approve_and_release) 시 프로그램이 갱신한다.
+갱신 필드: campaigns_completed, total_settled.
 매칭/신뢰 판단 시 브랜드/크리에이터 에이전트가 상대 평판을 읽어 참고한다.
 """
 from __future__ import annotations

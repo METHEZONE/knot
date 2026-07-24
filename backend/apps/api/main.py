@@ -33,7 +33,7 @@ def create_app(
             "schemaVersion": settings.schema_version,
         }
 
-    app.include_router(build_api_router(repository))
+    app.include_router(build_api_router(repository, settings))
 
     return app
 
