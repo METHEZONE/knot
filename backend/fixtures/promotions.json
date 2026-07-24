@@ -1,0 +1,39 @@
+[
+  {
+    "promotionId": "promotion-001",
+    "brandId": "brand-001",
+    "brandAgentId": "brand-agent-001",
+    "title": "Summer skincare launch",
+    "objective": "awareness",
+    "category": "beauty",
+    "targetAudience": ["20s", "skincare"],
+    "budget": {
+      "totalUsdc": 2000,
+      "maxPerCreatorUsdc": 800
+    },
+    "deliverables": [
+      {
+        "format": "reel",
+        "count": 1
+      }
+    ],
+    "postingWindow": {
+      "start": "2026-08-05",
+      "end": "2026-08-10"
+    },
+    "usageRights": "paidBoost30d",
+    "constraints": {
+      "requiredDisclosures": ["ad"],
+      "prohibitedClaims": [],
+      "requiredCategories": ["beauty"],
+      "prohibitedCategories": [],
+      "maxPerformancePct": 0
+    },
+    "autonomy": {
+      "maxNegotiationRounds": 5,
+      "autoEscrow": true,
+      "autoRelease": true
+    },
+    "status": "DRAFT"
+  }
+]

@@ -35,6 +35,11 @@ python3 -m venv .venv
 ```
 
 ```text
+.venv/bin/python scripts/seed_demo.py --target memory
+.venv/bin/python scripts/seed_demo.py --target firestore --project <gcp-project-id>
+```
+
+```text
 cd web3/gateway
 npm install
 npm run lint

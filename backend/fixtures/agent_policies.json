@@ -1,0 +1,47 @@
+[
+  {
+    "agentId": "creator-agent-001",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 650,
+      "blockedIndustries": ["gambling", "cryptoTrading"],
+      "maxDeliverablesPerMonth": 4,
+      "minDaysToPost": 5,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-002",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 500,
+      "blockedIndustries": ["gambling", "cryptoTrading"],
+      "maxDeliverablesPerMonth": 4,
+      "minDaysToPost": 5,
+      "allowedUsageRights": ["organicOnly"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-003",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 400,
+      "blockedIndustries": ["gambling", "cryptoTrading"],
+      "maxDeliverablesPerMonth": 4,
+      "minDaysToPost": 7,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  }
+]

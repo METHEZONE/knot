@@ -45,6 +45,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Repository bootstrap
 - [ ] GCP project configuration
 - [x] Firestore-independent domain model and backend fixtures
+- [x] Firestore repository path, serialization, idempotency and demo seed baseline
 - [x] Deterministic policy engine and matching pipeline
 - [x] Brand Agent and Creator Agent A2A negotiation baseline
 - [x] Agreement hashing and escrow lock validation skeleton
