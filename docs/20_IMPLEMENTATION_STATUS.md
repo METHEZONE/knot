@@ -10,7 +10,7 @@ Update this file at the end of every Codex task.
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | deferred | 2026-07-25 | Folder kept empty by request |
+| frontend | Scaffolded (v1 audit screens) | 2026-07-25 | Next 16 + TS + Tailwind 4; typed client for all 19 routes; demo fixture provider; brand/creator dashboards, Promotion wizard, negotiation theater, public replay, Agent Society Map, in-app notifications; build/tsc/lint green, 9 routes smoke-tested. Experience spec: docs/23_EXPERIENCE_PRD_v2.md. FE handoff: docs/HANDOFF_FE.md |
 | knot-api | Escrow/evidence API baseline | 2026-07-25 | Promotion, match run, negotiation, agreement, evidence and simulated escrow release APIs wired to repository boundary |
 | creator A2A service | M2 negotiation baseline | 2026-07-25 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | M3 lock validation skeleton | 2026-07-25 | Validates escrow lock requests and returns idempotent simulated receipts |
@@ -93,6 +93,8 @@ cd web3/gateway && npm run build: passed.
 - Updated GCP target project references from the previous dev IDs to `knot-dev-503505`.
 - Normalized docs so Product/API/Firestore/frontend terminology is Promotion; current Anchor `campaign` names are documented as legacy on-chain API names only.
 
+
+- Added docs/23_EXPERIENCE_PRD_v2.md (onboarding/hatching/expedition/replay/dashboards experience layer, tiered against the 8/3 gates) and scaffolded `frontend/` per AGENTS.md stack rules; user-visible copy audited for canonical "Promotion" terminology; SIMULATED receipts render without fabricated explorer links.
 
 ## Known blockers
 
