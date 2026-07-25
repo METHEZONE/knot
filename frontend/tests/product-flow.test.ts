@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
+import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { knotDataSource } from "../src/product/dataSource";
 
 test("product route surface exposes separated MVP role pages", () => {
@@ -32,16 +32,20 @@ test("workspace nav is menu-like and role-specific", () => {
     "/brand/onboarding",
     "/brand/products/new",
     "/brand/negotiate",
-    "/brand/result",
     "/brand/settlement",
-    "/brand/me",
-    "/brand/settings",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
     "/creator/onboarding",
     "/creator/criteria",
     "/creator/result",
     "/creator/brands/glow-bar",
+  ]);
+});
+
+test("account routes are kept out of role workspace menus", () => {
+  assert.deepEqual(accountRoutes.map((route) => route.href), [
+    "/brand/me",
+    "/brand/settings",
     "/creator/me",
     "/creator/settings",
   ]);

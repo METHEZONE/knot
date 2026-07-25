@@ -10,7 +10,7 @@ Update this file at the end of every task.
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | Product MVP flow | 2026-07-25 | Branch `frontend/gcp-migration`; route surface is now `/`, `/login`, `/signup`, separated Brand pages (`/brand/onboarding`, `/brand/products/new`, `/brand/negotiate`, `/brand/result`, `/brand/settlement`, `/brand/me`, `/brand/settings`), separated Creator pages (`/creator/onboarding`, `/creator/criteria`, `/creator/result`, `/creator/brands/{brandId}`, `/creator/me`, `/creator/settings`) and `/dev/admin`. Negotiation UX presents A2A agent progress with animation and sanitized result output. Mock data is behind a `KnotDataSource` boundary for later Firestore/API integration. |
+| frontend | Product MVP flow | 2026-07-26 | Branch `frontend/gcp-migration`; route surface is now `/`, `/login`, `/signup`, separated Brand pages (`/brand/onboarding`, `/brand/products/new`, `/brand/negotiate`, `/brand/result`, `/brand/settlement`, `/brand/me`, `/brand/settings`), separated Creator pages (`/creator/onboarding`, `/creator/criteria`, `/creator/result`, `/creator/brands/{brandId}`, `/creator/me`, `/creator/settings`) and `/dev/admin`. Negotiation UX presents A2A agent progress with animation and sanitized result output. Mock data is behind a `KnotDataSource` boundary for later Firestore/API integration. |
 | knot-api | Escrow lock/release API added | 2026-07-25 | Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release wired to the repository boundary; escrow receipts are SIMULATED pending on-chain signing |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
@@ -44,10 +44,10 @@ anchor build: passed; target/idl/knot_escrow.json generated.
 anchor deploy (devnet): deployed program Aj63…; program account rent-exempt ~2.035 SOL (recoverable via `solana program close`).
 KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py: 1 passed — real on-chain milestone settlement (agent released 0.7 USDC to the creator within cap; Reputation.total_settled updated).
 cd frontend && npm run lint: passed.
-cd frontend && npm test: passed; 5 product flow/data-source tests.
+cd frontend && npm test: passed; 6 product flow/data-source tests.
 cd frontend && npm run build: passed; 27 app routes generated including login/signup, brand product/result/settlement, creator criteria/result/brand detail, role my/settings and dev admin.
 cd frontend && npm run typecheck: passed.
-cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/brands/glow-bar, /dev/admin.
+cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/brands/glow-bar, /dev/admin, /brand/negotiate, /creator/result, /brand/me, /creator/settings.
 ```
 
 ## Decisions made during implementation
@@ -93,9 +93,10 @@ cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /log
   mock state can be replaced by Firestore/API-backed data without changing page
   components.
 - Reworked the product frontend away from a connected 01/02/03 stepper. The
-  workspace nav is now a role-specific menu, while the actual business pages
-  are independent surfaces for profile, product/criteria, negotiation, result,
-  settlement/milestones, my page and settings.
+  workspace nav no longer renders as an internal sidebar or linear sequence.
+  The global header keeps only broad navigation, each business page carries the
+  current page title at the top, and account routes (`My`, `Settings`) are
+  exposed as small page-header actions outside the deal/Promotion flow.
 - Added product-like login/signup pages. Signup selects Brand or Creator first,
   then continues into role onboarding/profile creation.
 - Added Creator result list and brand detail page with agreed-deal milestones

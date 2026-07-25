@@ -35,20 +35,22 @@ export function roleResult(role: Role) {
 }
 
 export const brandWorkspaceRoutes = [
-  { href: "/brand/onboarding", label: "Brand profile" },
-  { href: "/brand/products/new", label: "Product" },
-  { href: "/brand/negotiate", label: "Negotiation" },
-  { href: "/brand/result", label: "Result" },
-  { href: "/brand/settlement", label: "Settlement" },
-  { href: "/brand/me", label: "My page" },
-  { href: "/brand/settings", label: "Settings" },
+  { href: "/brand/onboarding", label: "Profile" },
+  { href: "/brand/products/new", label: "Promotions" },
+  { href: "/brand/negotiate", label: "Negotiations" },
+  { href: "/brand/settlement", label: "Settlements" },
 ] as const;
 
 export const creatorWorkspaceRoutes = [
-  { href: "/creator/onboarding", label: "SNS profile" },
+  { href: "/creator/onboarding", label: "Profile" },
   { href: "/creator/criteria", label: "Criteria" },
-  { href: "/creator/result", label: "Results" },
-  { href: "/creator/brands/glow-bar", label: "Brand deal" },
-  { href: "/creator/me", label: "My page" },
-  { href: "/creator/settings", label: "Settings" },
+  { href: "/creator/result", label: "Offers" },
+  { href: "/creator/brands/glow-bar", label: "Deals" },
+] as const;
+
+export const accountRoutes = [
+  { href: "/brand/me", label: "Brand My" },
+  { href: "/brand/settings", label: "Brand Settings" },
+  { href: "/creator/me", label: "Creator My" },
+  { href: "/creator/settings", label: "Creator Settings" },
 ] as const;

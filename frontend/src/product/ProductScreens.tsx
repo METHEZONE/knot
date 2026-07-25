@@ -526,7 +526,6 @@ function AuthFrame({ eyebrow, title, body, children }: { eyebrow: string; title:
 
 function WorkspaceShell({
   role,
-  active,
   title,
   session,
   children,
@@ -537,48 +536,28 @@ function WorkspaceShell({
   session: RoleSession | null;
   children: ReactNode;
 }) {
-  const routes = role === "brand" ? brandWorkspaceRoutes : creatorWorkspaceRoutes;
   return (
-    <div className="grid gap-6 py-6 lg:grid-cols-[220px_1fr]">
-      <aside className="h-fit border-b border-border-subtle pb-4 lg:sticky lg:top-20 lg:border-b-0 lg:pb-0">
-        <div className="mb-4">
-          <Pill>{role} workspace</Pill>
-          <h1 className="mt-3 text-4xl font-semibold leading-none">{title}</h1>
-          {session && <p className="mt-2 text-sm text-muted">{session.organizationLabel}</p>}
+    <div className="flex flex-col gap-6 py-6">
+      <header className="border-b border-border-subtle pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Pill>{role} workspace</Pill>
+            <h1 className="mt-3 text-4xl font-semibold leading-none">{title}</h1>
+            {session && <p className="mt-2 text-sm text-muted">{session.organizationLabel}</p>}
+          </div>
+          <nav aria-label={`${role} account actions`} className="flex flex-wrap gap-2 text-sm font-semibold">
+            <Link href={`/${role}/me`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
+              My
+            </Link>
+            <Link href={`/${role}/settings`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
+              Settings
+            </Link>
+          </nav>
         </div>
-        <nav className="flex gap-2 overflow-x-auto lg:flex-col" aria-label={`${role} workspace`}>
-          {routes.map((route) => {
-            const isActive = routeKey(route.href) === active;
-            return (
-              <Link
-                key={route.href}
-                href={route.href}
-                className={`shrink-0 rounded border px-3 py-2 text-sm font-semibold ${
-                  isActive
-                    ? "border-accent bg-accent text-background"
-                    : "border-border-subtle bg-surface hover:bg-surface-raised"
-                }`}
-              >
-                {route.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
+      </header>
       <main className="flex min-w-0 flex-col gap-5">{children}</main>
     </div>
   );
-}
-
-function routeKey(href: string): WorkspacePage {
-  if (href.includes("/products")) return "product";
-  if (href.includes("/criteria")) return "criteria";
-  if (href.includes("/negotiate")) return "negotiation";
-  if (href.includes("/result") || href.includes("/brands/")) return "result";
-  if (href.includes("/settlement")) return "settlement";
-  if (href.includes("/settings")) return "settings";
-  if (href.includes("/me")) return "me";
-  return "onboarding";
 }
 
 function RoleChoiceCard({ role, title, body, href }: { role: Role; title: string; body: string; href: string }) {

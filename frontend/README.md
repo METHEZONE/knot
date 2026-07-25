@@ -47,9 +47,12 @@ Compatibility redirects:
 /creator/milestones -> /creator/brands/glow-bar
 ```
 
-The workspace navigation is intentionally menu-like rather than a numbered
-stepper. Brand and Creator flows each expose separate product pages for
-onboarding, negotiation, results, settlement/milestones, my page, and settings.
+The workspace navigation is intentionally not a numbered stepper. Role pages do
+not render an internal sidebar, because onboarding is not the beginning of a
+single transaction funnel. After onboarding, a Brand can create many Promotions
+and a Creator can receive many agent-negotiated offers. The global header keeps
+only broad navigation; `My` and `Settings` are account actions near the page
+title, not deal-flow steps.
 Mock data flows through `src/product/dataSource.ts`; replacing it with a
 Firestore/API-backed implementation should not require route component changes.
 

@@ -195,3 +195,9 @@ handoff notes.
 - 2026-07-25: A2A negotiation remains agent-led. The UI shows animated
   "진행중이에요!" status and sanitized task progress only; private criteria,
   hard caps, internal scores and full A2A message bodies stay hidden.
+- 2026-07-26: Removed the internal role sidebar because it still implied a
+  single linear funnel. The global header now keeps only broad navigation,
+  account pages (`My`, `Settings`) are exposed as small page-header actions,
+  and each workspace page carries the current page title at the top. This
+  better reflects that one Brand can manage many Promotions and one Creator can
+  receive many agent-negotiated offers.

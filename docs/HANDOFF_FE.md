@@ -5,7 +5,7 @@
 
 ## 무엇을 했나 (2026-07-25 완료분)
 
-0. **제품형 MVP 리셋** — 너무 넓은 route pack을 버리고 실제 제품처럼 보이는 최소 플로우로 재구성. 숫자 stepper를 제거하고 워크스페이스 메뉴로 분리했다. Brand: 브랜드 온보딩, 제품/제안서 추가, 크리에이터 매칭+A2A 협상, 협상 결과, escrow 정산. Creator: SNS 분석 온보딩, private 협상 기준, 브랜드별 협상 결과 리스트, 합의 브랜드 상세의 마일스톤/작업 진행/정산. `src/product/dataSource.ts`가 mock data source boundary이고 Firestore/API 구현체로 교체할 수 있다.
+0. **제품형 MVP 리셋** — 너무 넓은 route pack을 버리고 실제 제품처럼 보이는 최소 플로우로 재구성. 숫자 stepper와 내부 sidebar를 제거했다. 온보딩 이후 Brand는 여러 Promotion을 만들 수 있고 Creator는 여러 agent-negotiated offer를 받을 수 있으므로, 전역 헤더는 broad navigation만 처리하고 각 페이지 상단에는 현재 항목 제목만 둔다. Brand: 브랜드 온보딩, 제품/제안서 추가, 크리에이터 매칭+A2A 협상, 협상 결과, escrow 정산. Creator: SNS 분석 온보딩, private 협상 기준, 브랜드별 협상 결과 리스트, 합의 브랜드 상세의 마일스톤/작업 진행/정산. `My`/`Settings`는 계정 route로 페이지 헤더의 작은 action에 둔다. `src/product/dataSource.ts`가 mock data source boundary이고 Firestore/API 구현체로 교체할 수 있다.
 
 1. **PRD v2.1** — `docs/23_EXPERIENCE_PRD_v2.md`. 부화 온보딩(양쪽), Agent Workflow 실행 로그, 협상 시어터+공개 리플레이, 듀얼 대시보드/알림/마일스톤, Tier B(어필리에이트 `go.thezonebio.com/r/{code}`, 온체인 Reputation 리더보드). 8/3 하드 게이트(`17_DEMO_ACCEPTANCE.md`)는 불변. 결정사항: SNS 진단은 **사전 캐시+리플레이**(aside-browser 로컬 수집기, 클라우드는 절대 스크랩 안 함), 플랫폼 IG→YT→X→TikTok, 로그인 = 구글(Firebase)+솔라나 지갑(+데모 계정 유지).
 2. **frontend/ 스캐폴드** — Next 16 + TS + Tailwind 4(다크 온리), App Router.
