@@ -52,6 +52,9 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Agreement hashing and escrow lock validation skeleton
 - [x] Evidence submission and deterministic verification API baseline
 - [x] Firestore emulator smoke and gated integration tests
-- [ ] Milestone release
+- [x] Escrow lock/release API (fee 0, termsHash re-check, evidence-gated, idempotent; receipts SIMULATED)
+- [x] Anchor program deployed to devnet (`Aj63…`) and on-chain milestone settlement verified
+- [ ] Wire escrow API SIMULATED receipts to real on-chain signing
+- [ ] pay.sh flow-1 (agent-paid verification) wired into Brand Agent flow
 - [ ] Frontend Agent Society Map and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo

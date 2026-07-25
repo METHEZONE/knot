@@ -2,6 +2,16 @@
 
 이 패키지는 KNOT 해커톤 MVP를 Codex에 위임하기 위한 개발 기준 문서 모음이다.
 
+## 구현 현황 (2026-07-25)
+
+`be`(앱 백엔드) + `hyo/blockchain-setup`(온체인/결제)이 `integrate/be-blockchain`으로 병합됨 (PR #1).
+
+- ✅ Promotion → 매칭 → A2A 협상 → Agreement → Evidence → **에스크로 lock/release** API (결정론; `ruff`/`mypy`/`pytest` 59 passed)
+- ✅ Anchor 에스크로 프로그램 **devnet 배포**(`Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`) + **온체인 마일스톤 정산 검증** (에이전트가 cap 이내 사람 없이 릴리스)
+- ⬜ 남음: 실제 서명 배선(현재 escrow receipt는 SIMULATED) · pay.sh 흐름1 · Cloud Run · 프론트
+
+상세: `docs/INTEGRATION_PLAN.md`, `docs/20_IMPLEMENTATION_STATUS.md`.
+
 ## 핵심 원칙
 
 - 제품 문서 버전은 **v1**이다.

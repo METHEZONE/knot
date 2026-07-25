@@ -22,7 +22,7 @@ solana balance
 ## 빌드 / 배포 / 프로그램 ID
 ```bash
 anchor build                 # target/deploy/knot_escrow.so + target/idl/knot_escrow.json
-anchor keys list             # knot_escrow: Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu
+anchor keys list             # knot_escrow: Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj
 anchor keys sync             # lib.rs의 declare_id! ↔ 키페어 동기화 (불일치 시)
 anchor deploy                # devnet 배포 (Anchor.toml provider=devnet)
 ```
