@@ -108,7 +108,12 @@ export function agentTraits(
   const mapped = category ? CATEGORY_TRAITS[category.toLowerCase()] : undefined;
 
   // Uncategorised agents still get a stable hue, just not a meaningful one.
-  const hue = mapped ? mapped.hue : seed % 360;
+  const baseHue = mapped ? mapped.hue : seed % 360;
+  // A brand manager and a creator manager in the same category would otherwise
+  // come out identically coloured — which is exactly the case on the demo
+  // stage, where both sides sit next to each other. Rotating the brand side
+  // keeps the category readable while making the two sides instantly distinct.
+  const hue = (side === "brand" ? baseHue + 158 : baseHue) % 360;
   const accessory = mapped ? mapped.accessory : "antenna";
 
   return {

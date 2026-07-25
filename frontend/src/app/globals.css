@@ -42,6 +42,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Gaegu sits visually small for its point size, so the whole scale is nudged
+   up at the root rather than by hand-tuning every class. */
+html {
+  font-size: 17px;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
