@@ -1,7 +1,8 @@
-"""에스크로 devnet 통합 테스트 (KNOT_RUN_DEVNET=1 일 때만 실행).
+"""에스크로 온체인 정산 통합 테스트 — 로컬 샌드박스 또는 devnet.
 
-전제: `anchor deploy`(devnet) 완료 + `~/.config/solana/id.json` 에 펀딩된 지갑.
-실행:  KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -s
+두 환경 (docs/SOLANA_ENVIRONMENTS.md 참고):
+  로컬 샌드박스(추천, 각자 로컬):  scripts/localnet_settlement.sh
+  공유 devnet:                    KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -s
 
 anchorpy 0.21 은 anchor 1.x 의 새 IDL 포맷을 파싱하지 못하므로, 이 테스트는
 anchorpy Program 대신 solders 로 인스트럭션을 직접 빌드해 배포된 프로그램을 호출한다.
@@ -19,8 +20,18 @@ import pytest
 
 pytestmark = pytest.mark.devnet
 
-_RUN = os.environ.get("KNOT_RUN_DEVNET") == "1"
-_RPC = os.environ.get("KNOT_DEVNET_RPC", "https://api.devnet.solana.com")
+# Two environments (see docs/SOLANA_ENVIRONMENTS.md):
+#   local sandbox — KNOT_RUN_LOCALNET=1 (solana-test-validator, per developer)
+#   shared devnet — KNOT_RUN_DEVNET=1
+_LOCALNET = os.environ.get("KNOT_RUN_LOCALNET") == "1"
+_RUN = _LOCALNET or os.environ.get("KNOT_RUN_DEVNET") == "1"
+_RPC = os.environ.get("KNOT_DEVNET_RPC") or (
+    "http://127.0.0.1:8899" if _LOCALNET else "https://api.devnet.solana.com"
+)
+# Settle time between dependent txs. Local validators need a small gap so a
+# just-confirmed tx (e.g. mint_to) is visible to the next tx's preflight; the
+# public devnet needs a larger gap to avoid 429 rate-limits.
+_THROTTLE = 1.0 if ("127.0.0.1" in _RPC or "localhost" in _RPC) else 2.0
 
 
 def _u16(v: int) -> bytes:
@@ -48,7 +59,8 @@ async def _rpc(fn, tries: int = 9):
     for i in range(tries):
         try:
             result = await fn()
-            await asyncio.sleep(2)
+            if _THROTTLE:
+                await asyncio.sleep(_THROTTLE)
             return result
         except Exception as error:  # noqa: BLE001
             name, text = type(error).__name__, str(error)
@@ -65,7 +77,7 @@ async def _rpc(fn, tries: int = 9):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(not _RUN, reason="KNOT_RUN_DEVNET!=1 (devnet 배포/펀딩 필요)")
+@pytest.mark.skipif(not _RUN, reason="set KNOT_RUN_LOCALNET=1 (sandbox) or KNOT_RUN_DEVNET=1")
 async def test_full_milestone_flow() -> None:
     from solana.rpc.async_api import AsyncClient
     from solana.rpc.commitment import Confirmed
