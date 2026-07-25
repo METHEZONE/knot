@@ -1,0 +1,10 @@
+[
+  {
+    "brandId": "brand-001",
+    "displayName": "Demo Skincare Brand",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-24T00:00:00Z",
+    "updatedAt": "2026-07-24T00:00:00Z"
+  }
+]

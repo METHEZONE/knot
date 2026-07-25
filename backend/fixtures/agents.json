@@ -1,0 +1,53 @@
+[
+  {
+    "agentId": "brand-agent-001",
+    "agentType": "BRAND",
+    "ownerId": "brand-001",
+    "ownerType": "BRAND",
+    "displayName": "Demo Brand Agent",
+    "service": "knot-api",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-24T00:00:00Z",
+    "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "agentId": "creator-agent-001",
+    "agentType": "CREATOR",
+    "ownerId": "creator-001",
+    "ownerType": "CREATOR",
+    "displayName": "Demo Beauty Creator Agent",
+    "service": "knot-creator-agent",
+    "a2aEndpoint": "/a2a/v1",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-24T00:00:00Z",
+    "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "agentId": "creator-agent-002",
+    "agentType": "CREATOR",
+    "ownerId": "creator-002",
+    "ownerType": "CREATOR",
+    "displayName": "Demo Fitness Creator Agent",
+    "service": "knot-creator-agent",
+    "a2aEndpoint": "/a2a/v1",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-24T00:00:00Z",
+    "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "agentId": "creator-agent-003",
+    "agentType": "CREATOR",
+    "ownerId": "creator-003",
+    "ownerType": "CREATOR",
+    "displayName": "Demo Lifestyle Creator Agent",
+    "service": "knot-creator-agent",
+    "a2aEndpoint": "/a2a/v1",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-24T00:00:00Z",
+    "updatedAt": "2026-07-24T00:00:00Z"
+  }
+]
