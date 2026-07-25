@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Caveat, Gaegu, Geist_Mono } from "next/font/google";
 import { SquiggleFilters } from "@/components/SquiggleFilters";
 import { TopBar } from "@/components/TopBar";
-import { ToastProvider } from "@/components/ToastProvider";
 import "./globals.css";
 
 /** Body/UI hand. Gaegu carries Latin and Hangul, so Korean copy stays in-world. */
@@ -29,9 +28,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "KNOT — Agentic Promotions",
+  title: "knot — 크리에이터와 브랜드를 잇는 매듭",
   description:
-    "KNOT ties creators and brands together: agents match, negotiate, escrow, and verify promotions end to end.",
+    "크리에이터의 에이전트와 브랜드의 에이전트가 사람이 정한 한도 안에서 직접 협상하고, 계약하고, 온체인으로 정산합니다.",
 };
 
 export default function RootLayout({
@@ -41,17 +40,15 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="ko"
       className={`${hand.variable} ${display.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <SquiggleFilters />
-        <ToastProvider>
-          <TopBar />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-            {children}
-          </main>
-        </ToastProvider>
+        <TopBar />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+          {children}
+        </main>
       </body>
     </html>
   );

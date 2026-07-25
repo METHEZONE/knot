@@ -60,7 +60,7 @@
 | pay.sh/x402 흐름1을 Brand Agent에 연결 | ⬜ | §4-D |
 | Gemini/Vertex AI 설명 생성 | ⬜(베이스라인 허용) | 판정 가점·텔레메트리 |
 | Evidence 실제/명시 fixture | ⚠️ | 현재 URL 토큰 시뮬(PRD v1 fixture 허용) |
-| 프론트(Society Map/Timeline) | ⬜ | 데모 필수 — §4-F |
+| 프론트(Agent Workflow/Timeline) | ⬜ | 데모 필수 — §4-F |
 | Cloud Run 배포 | ⬜ | 데모 필수 — §4-E |
 | 용어 정리 | ⚠️ | Product/API/Firestore는 Promotion으로 통일. 기존 Anchor legacy `campaign` 명칭은 Promotion escrow로 매핑 |
 
@@ -97,7 +97,7 @@ KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -s   # 실제 마�
 `knot-api`, `creator-agent`, `knot-web3` 컨테이너 빌드·배포(Dockerfile 존재), Firestore Native 연결, seed/reset 스크립트, health/readiness. "Live Cloud Run URL"은 데모 하드게이트.
 
 ### F. 프론트엔드
-Agent Society Map + Promotion Timeline(Next.js, `/promotions/{id}/timeline` 활용). Cloud Run 배포. 데모 필수.
+Agent Workflow + Promotion Timeline(Next.js, `/promotions/{id}/timeline` 활용). Cloud Run 배포. 데모 필수. MVP에서는 지도형 Society 화면을 제외하고, A2A 메시지, pay.sh/x402 API 지출, 정책 평가, evidence verification, on-chain escrow/settlement 이벤트를 실행 로그로 분리해 표시한다.
 
 ### G. 용어/네이밍 정리
 Product API, Firestore, frontend, runbook 문서는 `Promotion` / `promotionId`를

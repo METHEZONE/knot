@@ -68,7 +68,7 @@ pay --sandbox fetch https://debugger.pay.sh/mpp/quote/AAPL
 2. **예원과 인터페이스 계약 확정** — `docs/architecture.md §4`: 협상 결과 → `initialize_campaign` 필드 매핑,
    에이전트 키(agent_authority)·지갑 발급·보관, 증빙 방식.
 3. **pay.sh 흐름1**을 Brand Agent 매칭 흐름에 연결(sandbox) + 실지갑(`pay setup`) 데모 결제.
-4. **Cloud Run 배포 · 프론트(Society Map/Timeline)** · (옵션) 마일스톤 pay.sh 지표검증, 분쟁(`raise_dispute`) 처리.
+4. **Cloud Run 배포 · 프론트(Agent Workflow/Timeline)** · (옵션) 마일스톤 pay.sh 지표검증, 분쟁(`raise_dispute`) 처리.
 
 ## 주의
 - **devnet 전용**. mainnet 키·시크릿 커밋 금지(`.gitignore`로 keypair/.env 제외).

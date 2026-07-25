@@ -10,6 +10,7 @@ const basePath = process.env.KNOT_BASE_PATH ?? "";
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
+  output: "standalone",
 };
 
 export default nextConfig;

@@ -10,7 +10,7 @@
 - Solana devnet escrow lock and milestone release
 - pay.sh sandbox integration for one agent-paid verification/API call
 - Content evidence URL submission and verification
-- Agent Society Map and Promotion Timeline
+- Agent Workflow execution log and Promotion Timeline
 - Firestore persistence, audit events, Cloud Run deployment and demo seed
 
 ## 2. Out of scope
