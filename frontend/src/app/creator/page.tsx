@@ -75,7 +75,7 @@ export default async function CreatorDashboardPage() {
             {agreement ? (
               <Link
                 href={`/creator/deals/${agreement.agreementId}`}
-                className="group rounded-2xl border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
+                className="group sketch ink border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
@@ -116,7 +116,7 @@ export default async function CreatorDashboardPage() {
                 )}
               </Link>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
+              <div className="sketch ink border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
                 No deals yet — your agent will file negotiated agreements here.
               </div>
             )}
@@ -132,7 +132,7 @@ export default async function CreatorDashboardPage() {
               )}
             </div>
             {tasks.length > 0 ? (
-              <ul className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+              <ul className="overflow-hidden sketch ink border border-border-subtle bg-surface">
                 {tasks.map((task) => (
                   <li
                     key={task.id}
@@ -162,7 +162,7 @@ export default async function CreatorDashboardPage() {
                 ))}
               </ul>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
+              <div className="sketch ink border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
                 Tasks derive from agreement deliverables and milestone triggers.
               </div>
             )}
@@ -171,7 +171,7 @@ export default async function CreatorDashboardPage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-medium text-muted">Open promotions</h2>
             {promotions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
+              <div className="sketch ink border border-dashed border-border-subtle p-8 text-center text-sm text-muted">
                 No open promotions right now.
               </div>
             ) : (
@@ -179,7 +179,7 @@ export default async function CreatorDashboardPage() {
                 <Link
                   key={promotion.promotionId}
                   href={`/promotions/${promotion.promotionId}`}
-                  className="group rounded-2xl border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
+                  className="group sketch ink border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -212,7 +212,7 @@ export default async function CreatorDashboardPage() {
 
         {/* Right: earnings + diagnosis */}
         <div className="flex flex-col gap-6">
-          <section className="rounded-2xl border border-border-subtle bg-surface p-5">
+          <section className="sketch ink border border-border-subtle bg-surface p-5">
             <h2 className="text-sm font-medium">Earnings</h2>
             <div className="mt-4 grid grid-cols-2 gap-4">
               <div>

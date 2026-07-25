@@ -151,7 +151,7 @@ export function NotificationBell() {
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-mono text-[10px] font-semibold text-background">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center sketch-pill bg-accent px-1 font-mono text-[10px] font-semibold text-background">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -166,7 +166,7 @@ export function NotificationBell() {
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-2xl">
+          <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden sketch ink border border-border-subtle bg-surface shadow-2xl">
             <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
               <span className="text-xs font-medium text-foreground">
                 Notifications

@@ -15,10 +15,10 @@ export function DiagnosisCard({
   rateBand,
 }: CreatorDiagnosis) {
   return (
-    <section className="rounded-2xl border border-border-subtle bg-surface p-5">
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium">Your diagnosis</h2>
-        <span className="rounded-full border border-border-subtle bg-surface-raised px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted">
+        <span className="sketch-pill ink border border-border-subtle bg-surface-raised px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted">
           Preview
         </span>
       </div>
@@ -30,7 +30,7 @@ export function DiagnosisCard({
             {audience.map((segment) => (
               <span
                 key={segment}
-                className="rounded-full border border-border-subtle bg-surface-raised px-2.5 py-0.5 text-xs"
+                className="sketch-pill ink border border-border-subtle bg-surface-raised px-2.5 py-0.5 text-xs"
               >
                 {segment}
               </span>

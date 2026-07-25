@@ -312,7 +312,7 @@ export function AgentSocietyMap({ state }: { state: MapState }) {
       {tooltip && (
         <div
           role="tooltip"
-          className={`pointer-events-none absolute z-10 w-64 -translate-x-1/2 -translate-y-full rounded-xl border p-3 text-xs shadow-xl ${
+          className={`pointer-events-none absolute z-10 w-64 -translate-x-1/2 -translate-y-full sketch-alt ink border p-3 text-xs shadow-xl ${
             tooltip.tone === "filtered"
               ? "border-negative/40 bg-surface-raised"
               : "border-border-subtle bg-surface-raised"

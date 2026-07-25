@@ -105,7 +105,7 @@ export function NegotiationTheater({
             <button
               type="button"
               onClick={() => setMasked((m) => !m)}
-              className="rounded-full border border-border-subtle bg-surface px-3 py-1 text-xs text-muted transition-colors hover:text-foreground"
+              className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-xs text-muted transition-colors hover:text-foreground"
             >
               {masked ? "Reveal amounts" : "Mask amounts"}
             </button>
@@ -160,7 +160,7 @@ export function NegotiationTheater({
                 masked={masked}
               />
             ) : (
-              <section className="rounded-2xl border border-border-subtle bg-surface p-5 text-sm text-muted">
+              <section className="sketch ink border border-border-subtle bg-surface p-5 text-sm text-muted">
                 Negotiation ended{" "}
                 <span className="font-mono text-xs uppercase text-negative">
                   {negotiation.status}
@@ -204,7 +204,7 @@ function Bubble({
         size="sm"
       />
       <div
-        className={`max-w-[82%] rounded-2xl border border-border-subtle p-4 ${
+        className={`max-w-[82%] sketch ink border border-border-subtle p-4 ${
           brandSide
             ? "rounded-bl-md bg-surface"
             : "rounded-br-md bg-surface-raised"
@@ -282,7 +282,7 @@ function TypingIndicator({ side, agentId }: { side: AgentSide; agentId: string }
     >
       <AgentAvatar agentId={agentId} side={side} size="sm" />
       <div
-        className={`flex items-center gap-1 rounded-2xl border border-border-subtle px-4 py-3 ${
+        className={`flex items-center gap-1 sketch ink border border-border-subtle px-4 py-3 ${
           brandSide
             ? "rounded-bl-md bg-surface"
             : "rounded-br-md bg-surface-raised"

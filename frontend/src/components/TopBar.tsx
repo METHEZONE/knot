@@ -1,15 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/components/NotificationBell";
+import { storedDemoRole, type DemoRole } from "@/lib/demoSession";
 
 /**
  * Global top bar: wordmark, role switcher placeholder (brand/creator),
- * and the notification feed.
+ * the active demo-role chip, and the notification feed.
  */
 export function TopBar() {
   const pathname = usePathname();
+
+  // Read after mount so server and client markup match — sessionStorage
+  // doesn't exist on the server, so this must never affect the initial
+  // render (PRD v2 §3 demo accounts).
+  const [demoRole, setDemoRole] = useState<DemoRole | null>(null);
+  useEffect(() => {
+    // sessionStorage doesn't exist during SSR, so this has to run after
+    // mount — the setState here is the sync point, not a derived value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDemoRole(storedDemoRole());
+  }, [pathname]);
 
   const roles = [
     { label: "Brand", href: "/brand" },
@@ -32,7 +45,7 @@ export function TopBar() {
           {/* Role switcher placeholder */}
           <nav
             aria-label="Role switcher"
-            className="flex rounded-full border border-border-subtle bg-surface p-0.5"
+            className="flex sketch-pill ink border border-border-subtle bg-surface p-0.5"
           >
             {roles.map((role) => {
               const active = pathname.startsWith(role.href);
@@ -51,6 +64,16 @@ export function TopBar() {
               );
             })}
           </nav>
+
+          {demoRole && (
+            <Link
+              href="/demo"
+              className="hidden sketch-pill ink border border-border-subtle bg-surface px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:text-foreground sm:inline"
+              title="Switch demo identity"
+            >
+              demo · {demoRole}
+            </Link>
+          )}
 
           <NotificationBell />
         </div>

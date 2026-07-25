@@ -11,13 +11,23 @@
 
 import { knotClient, ProblemError, type KnotClient } from "./client";
 import type {
+  BrandIngestRequest,
+  BrandOnboardRequest,
+  CreatorOnboardRequest,
   EvidenceSubmitRequest,
   Promotion,
   PromotionCreateRequest,
 } from "./types";
 import {
   demoAgreement,
+  demoBrand,
+  demoBrandIngest,
+  demoBrandWallet,
   demoCandidates,
+  demoCreatorDiagnosisV1,
+  demoCreatorIngest,
+  demoCreators,
+  demoCreatorWallet,
   demoEscrow,
   demoEvidence,
   demoMatchRun,
@@ -27,6 +37,12 @@ import {
   demoPromotion,
   demoPromotionTimeline,
 } from "@/lib/fixtures";
+import { agentTraits } from "@/lib/agentIdentity";
+import {
+  brandAgentPolicy,
+  creatorAgentPolicy,
+  mandateJson,
+} from "@/lib/onboardingPolicy";
 
 export type KnotDataProvider = KnotClient & {
   /** True when the last served response came from fixtures. */
@@ -143,6 +159,54 @@ const demoClient: KnotClient = {
   },
   verifyEvidence(evidenceId: string) {
     return serveDemo({ evidence: { ...demoEvidence, evidenceId } });
+  },
+
+  // -- Onboarding -----------------------------------------------------------
+  // The ingest is a cached capture, so the demo answers with the committed
+  // fixture and the UI labels it "captured {capturedAt}" (17 §3). The onboard
+  // calls echo the user's own choices back as the signed mandate, so the
+  // ceremony shows the real policy rather than a canned one.
+
+  submitCreatorIngest(creatorId: string) {
+    return serveDemo({ ingest: { ...demoCreatorIngest, creatorId } });
+  },
+
+  getCreatorDiagnosis(creatorId: string) {
+    return serveDemo({ diagnosis: { ...demoCreatorDiagnosisV1, creatorId } });
+  },
+
+  onboardCreator(body: CreatorOnboardRequest) {
+    const agentId = demoCreators[0].creatorAgentId;
+    return serveDemo({
+      creator: {
+        creatorId: demoCreators[0].creatorId,
+        agent: {
+          agentId,
+          name: agentTraits(agentId, "creator", demoCreators[0].category).name,
+          policyJson: mandateJson(creatorAgentPolicy(agentId, body)),
+        },
+        walletAddress: body.walletAddress ?? demoCreatorWallet,
+      },
+    });
+  },
+
+  ingestBrand(body: BrandIngestRequest) {
+    return serveDemo({ ingest: { ...demoBrandIngest, website: body.website } });
+  },
+
+  onboardBrand(body: BrandOnboardRequest) {
+    const agentId = demoBrand.brandAgentId;
+    return serveDemo({
+      brand: {
+        brandId: demoBrand.brandId,
+        agent: {
+          agentId,
+          name: agentTraits(agentId, "brand", body.category).name,
+          policyJson: mandateJson(brandAgentPolicy(agentId, body)),
+        },
+        walletAddress: body.walletAddress ?? demoBrandWallet,
+      },
+    });
   },
 };
 

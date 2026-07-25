@@ -30,7 +30,7 @@ export function PromotionSocietyMap({
   });
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+    <div className="overflow-hidden sketch ink border border-border-subtle bg-surface">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-5 py-3">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-foreground">
           <span

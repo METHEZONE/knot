@@ -36,7 +36,7 @@ export default async function BrandDashboardPage() {
         </div>
         <Link
           href="/brand/promotions/new"
-          className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
+          className="shrink-0 sketch-pill bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
         >
           New Promotion
         </Link>
@@ -44,14 +44,14 @@ export default async function BrandDashboardPage() {
 
       {/* KPI strip */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+        <div className="sketch ink border border-border-subtle bg-surface p-4">
           <div className="text-xs text-muted">Committed to escrow</div>
           <div className="mt-1 font-mono text-lg text-foreground">
             {usdc(kpis.committedUsdc)}
           </div>
           <div className="mt-1 text-[11px] text-muted">locked, zero fees</div>
         </div>
-        <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+        <div className="sketch ink border border-border-subtle bg-surface p-4">
           <div className="text-xs text-muted">Released to creators</div>
           <div className="mt-1 font-mono text-lg text-foreground">
             {usdc(kpis.releasedUsdc)}
@@ -66,14 +66,14 @@ export default async function BrandDashboardPage() {
             {releasedPct}% of committed
           </div>
         </div>
-        <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+        <div className="sketch ink border border-border-subtle bg-surface p-4">
           <div className="text-xs text-muted">Agreements</div>
           <div className="mt-1 font-mono text-lg text-foreground">
             {kpis.agreements}
           </div>
           <div className="mt-1 text-[11px] text-muted">terms hashed & signed</div>
         </div>
-        <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+        <div className="sketch ink border border-border-subtle bg-surface p-4">
           <div className="text-xs text-muted">Avg negotiation rounds</div>
           <div className="mt-1 font-mono text-lg text-foreground">
             {kpis.avgRounds === null ? "—" : kpis.avgRounds.toFixed(1)}
@@ -88,7 +88,7 @@ export default async function BrandDashboardPage() {
           <Link
             key={promotion.promotionId}
             href={`/promotions/${promotion.promotionId}`}
-            className="group rounded-2xl border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
+            className="group sketch ink border border-border-subtle bg-surface p-5 transition-colors hover:bg-surface-raised"
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -130,7 +130,7 @@ export default async function BrandDashboardPage() {
           </Link>
         ))}
         {promotions.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border-subtle p-10 text-center text-sm text-muted">
+          <div className="sketch ink border border-dashed border-border-subtle p-10 text-center text-sm text-muted">
             No promotions yet. Create one and let your agent take it from there.
           </div>
         )}

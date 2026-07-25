@@ -17,7 +17,7 @@ export function ShareToXButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={share}
-      className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface px-4 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-raised"
+      className="inline-flex items-center gap-2 sketch-pill ink border border-border-subtle bg-surface px-4 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-raised"
     >
       <svg
         width="12"

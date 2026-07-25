@@ -64,7 +64,7 @@ export default async function CreatorDealPage({
       <TermSheetCard terms={agreement.terms} termsHash={agreement.termsHash} />
 
       {escrow && (
-        <section className="rounded-2xl border border-border-subtle bg-surface p-5">
+        <section className="sketch ink border border-border-subtle bg-surface p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-medium">Escrow</h2>
             <StatusBadge status={escrow.status} />
@@ -73,7 +73,7 @@ export default async function CreatorDealPage({
             {escrow.milestones.map((m) => (
               <li
                 key={m.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-border-subtle bg-surface-raised px-3.5 py-2.5 text-sm"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 sketch-alt ink border border-border-subtle bg-surface-raised px-3.5 py-2.5 text-sm"
               >
                 <span className="font-mono text-xs uppercase tracking-wide text-accent-strong">
                   {m.id} · {m.trigger}

@@ -76,7 +76,7 @@ export function EvidenceForm({
   const observations = phase === "verified" ? evidence?.observations : null;
 
   return (
-    <section className="rounded-2xl border border-border-subtle bg-surface p-5">
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium">Submit evidence</h2>
         {evidence && <StatusBadge status={evidence.status} />}
@@ -96,19 +96,19 @@ export function EvidenceForm({
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.instagram.com/reel/…"
             disabled={busy}
-            className="w-full flex-1 rounded-xl border border-border-subtle bg-surface-raised px-3.5 py-2 font-mono text-sm text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none disabled:opacity-60"
+            className="w-full flex-1 sketch-alt ink border border-border-subtle bg-surface-raised px-3.5 py-2 font-mono text-sm text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={busy || !url.trim()}
-            className="shrink-0 rounded-xl border border-accent/30 bg-accent/15 px-4 py-2 text-sm font-medium text-accent-strong transition-colors hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 sketch-alt ink border border-accent/30 bg-accent/15 px-4 py-2 text-sm font-medium text-accent-strong transition-colors hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {phase === "submitting" ? "Submitting…" : "Submit evidence"}
           </button>
         </form>
       ) : (
         <div className="mt-4 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-raised px-3.5 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 sketch-alt ink border border-border-subtle bg-surface-raised px-3.5 py-2.5">
             <span className="truncate font-mono text-xs text-foreground">
               {evidence?.url}
             </span>
@@ -197,7 +197,7 @@ function ChecklistItem({
   detail: string;
 }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface-raised px-3.5 py-2.5">
+    <li className="flex items-center gap-3 sketch-alt ink border border-border-subtle bg-surface-raised px-3.5 py-2.5">
       <span
         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${
           ok

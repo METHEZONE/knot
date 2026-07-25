@@ -11,7 +11,16 @@
 
 import type {
   AgreementResponse,
+  BrandIngestRequest,
+  BrandIngestResponse,
+  BrandOnboardRequest,
+  BrandOnboardResponse,
   CandidateListResponse,
+  CreatorDiagnosisResponse,
+  CreatorIngestRequest,
+  CreatorIngestResponse,
+  CreatorOnboardRequest,
+  CreatorOnboardResponse,
   Envelope,
   EscrowResponse,
   EvidenceResponse,
@@ -225,6 +234,52 @@ export const knotClient = {
   verifyEvidence(evidenceId: string, signal?: AbortSignal) {
     return request<EvidenceResponse>(`/evidence/${evidenceId}:verify`, {
       method: "POST",
+      signal,
+    });
+  },
+
+  // -- Onboarding (PRD v2 §12 contract deltas) ------------------------------
+  // Not implemented server-side yet; the demo provider answers these from
+  // committed fixtures with the exact shapes above (16 §4 rule).
+
+  submitCreatorIngest(
+    creatorId: string,
+    body: CreatorIngestRequest,
+    signal?: AbortSignal,
+  ) {
+    return request<CreatorIngestResponse>(`/creators/${creatorId}/ingests`, {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  getCreatorDiagnosis(creatorId: string, signal?: AbortSignal) {
+    return request<CreatorDiagnosisResponse>(`/creators/${creatorId}/diagnosis`, {
+      signal,
+    });
+  },
+
+  onboardCreator(body: CreatorOnboardRequest, signal?: AbortSignal) {
+    return request<CreatorOnboardResponse>("/creators:onboard", {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  ingestBrand(body: BrandIngestRequest, signal?: AbortSignal) {
+    return request<BrandIngestResponse>("/brands:ingest", {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  onboardBrand(body: BrandOnboardRequest, signal?: AbortSignal) {
+    return request<BrandOnboardResponse>("/brands:onboard", {
+      method: "POST",
+      body,
       signal,
     });
   },

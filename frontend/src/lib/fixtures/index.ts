@@ -403,6 +403,10 @@ export const demoPromotionTimeline: TimelineEvent[] = [
   },
 ];
 
+// Onboarding fixtures (cached SNS/website ingest + diagnosis-v1) live in a
+// sibling module; re-exported so `@/lib/fixtures` stays the single entry point.
+export * from "./onboarding";
+
 export const demoNegotiationEvents: TimelineEvent[] = [
   {
     eventId: "nevt-001",

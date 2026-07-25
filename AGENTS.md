@@ -14,7 +14,7 @@ For multi-service, multi-day, or architecture-changing work, create or update an
 ## Non-negotiable constraints
 
 - This is KNOT **v1**.
-- Do not implement onboarding. Use seed data and demo accounts.
+- Onboarding **is now in scope**: `docs/23_EXPERIENCE_PRD_v2.md` (approved) amends the v1 exclusion list — hatching onboarding, social/website ingest, and Firebase/wallet sign-in are Tier A/B. Seed data and demo accounts stay first-class, and every demo gate must still run on seeds alone.
 - Use `Promotion` / `promotionId`; do not introduce legacy initiative terms in new code.
 - All off-chain runtime and deployment must use Google Cloud services.
 - Frontend: Next.js + TypeScript, deployed to Cloud Run when frontend work starts. The `frontend/` directory may be intentionally empty before that milestone.

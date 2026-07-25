@@ -231,7 +231,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-28 animate-pulse rounded-2xl border border-border-subtle bg-surface"
+            className="h-28 animate-pulse sketch ink border border-border-subtle bg-surface"
           />
         ))}
       </div>
@@ -240,7 +240,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
 
   if (missing || !promotion) {
     return (
-      <div className="rounded-2xl border border-dashed border-border-subtle p-12 text-center">
+      <div className="sketch ink border border-dashed border-border-subtle p-12 text-center">
         <p className="text-sm text-muted">Promotion not found.</p>
         <Link
           href="/brand"
@@ -390,7 +390,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
       </div>
 
       {/* Budget bar */}
-      <section className="rounded-2xl border border-border-subtle bg-surface p-5">
+      <section className="sketch ink border border-border-subtle bg-surface p-5">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-medium">Budget</h2>
           <span className="font-mono text-xs text-muted">
@@ -444,7 +444,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
         {/* Timeline */}
         <section className="lg:col-span-3">
           <h2 className="mb-3 text-sm font-medium">Timeline</h2>
-          <div className="rounded-2xl border border-border-subtle bg-surface">
+          <div className="sketch ink border border-border-subtle bg-surface">
             {events.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted">
                 Events will appear here as agents work this Promotion.
@@ -491,7 +491,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
           <section>
             <h2 className="mb-3 text-sm font-medium">Agreement</h2>
             {agreement ? (
-              <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+              <div className="sketch ink border border-border-subtle bg-surface p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted">
                     {agreement.agreementId}
@@ -546,7 +546,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border-subtle p-6 text-center text-xs text-muted">
+              <div className="sketch ink border border-dashed border-border-subtle p-6 text-center text-xs text-muted">
                 No agreement yet. Run matching, then start negotiation.
               </div>
             )}
@@ -555,7 +555,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
           <section>
             <h2 className="mb-3 text-sm font-medium">Escrow</h2>
             {escrow ? (
-              <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+              <div className="sketch ink border border-border-subtle bg-surface p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted">
                     {escrow.escrowId}
@@ -626,7 +626,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
                             type="button"
                             onClick={() => onReleaseMilestone(milestone.id)}
                             disabled={busy}
-                            className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="sketch-pill bg-accent px-2.5 py-1 text-[11px] font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {pending === `release:${milestone.id}`
                               ? "Releasing…"
@@ -639,7 +639,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border-subtle p-6 text-center text-xs text-muted">
+              <div className="sketch ink border border-dashed border-border-subtle p-6 text-center text-xs text-muted">
                 No escrow yet. Lock it once an agreement is in place.
               </div>
             )}
@@ -658,7 +658,7 @@ export function PromotionDetail({ promotionId }: { promotionId: string }) {
             </span>
           )}
         </div>
-        <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
+        <div className="overflow-x-auto sketch ink border border-border-subtle bg-surface">
           {rankedCandidates.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted">
               No match run yet. Run matching to rank creators.

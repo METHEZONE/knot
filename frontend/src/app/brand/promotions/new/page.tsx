@@ -1,12 +1,16 @@
 "use client";
 
 /**
- * Promotion wizard: basics -> budget -> deliverables + window ->
- * rights + constraints -> autonomy dials.
+ * Promotion wizard: basics -> deliverables + window -> budget ->
+ * rights + constraints -> autonomy dials + review.
  *
  * Validates against the API contract client-side (integer USDC amounts,
  * maxNegotiationRounds <= 5) and posts via the provider's createPromotion.
  * Server-side RFC 7807 violations are mapped back onto fields.
+ *
+ * Presented as a chip stepper: each step gates forward progress on its own
+ * validation (Continue stays disabled with an inline reason until the step
+ * is valid), and completed chips are clickable to jump back.
  */
 
 import { useState } from "react";
@@ -19,10 +23,10 @@ import { useToast } from "@/components/ToastProvider";
 
 const STEPS = [
   "Basics",
+  "Deliverables & schedule",
   "Budget",
-  "Deliverables & window",
-  "Rights & constraints",
-  "Autonomy",
+  "Rules",
+  "Autonomy & review",
 ] as const;
 
 const FORMAT_OPTIONS = [
@@ -80,9 +84,9 @@ function splitTags(value: string): string[] {
 
 /** Which wizard step owns a (violation) field path. */
 function stepForField(field: string): number {
-  if (field.startsWith("budget")) return 1;
   if (field.startsWith("deliverables") || field.startsWith("postingWindow"))
-    return 2;
+    return 1;
+  if (field.startsWith("budget")) return 2;
   if (field.startsWith("constraints") || field.startsWith("usageRights"))
     return 3;
   if (field.startsWith("autonomy")) return 4;
@@ -107,16 +111,16 @@ export default function NewPromotionPage() {
   const [category, setCategory] = useState("");
   const [audience, setAudience] = useState("");
 
-  // Step 1 — budget
-  const [totalUsdc, setTotalUsdc] = useState("");
-  const [maxPerCreatorUsdc, setMaxPerCreatorUsdc] = useState("");
-
-  // Step 2 — deliverables + window
+  // Step 1 — deliverables + window
   const [deliverables, setDeliverables] = useState<DeliverableDraft[]>([
     { format: "instagramReel", count: "1" },
   ]);
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+
+  // Step 2 — budget
+  const [totalUsdc, setTotalUsdc] = useState("");
+  const [maxPerCreatorUsdc, setMaxPerCreatorUsdc] = useState("");
 
   // Step 3 — rights + constraints
   const [usageRights, setUsageRights] = useState<UsageRights>("organicOnly");
@@ -141,19 +145,6 @@ export default function NewPromotionPage() {
         errs["targetAudience"] = "Add at least one audience tag.";
     }
     if (s === 1) {
-      const total = parseIntStrict(totalUsdc);
-      const cap = parseIntStrict(maxPerCreatorUsdc);
-      if (total === null || total < 1)
-        errs["budget.totalUsdc"] =
-          "Whole-number USDC amount, at least 1. No decimals — the contract takes integers only.";
-      if (cap === null || cap < 1)
-        errs["budget.maxPerCreatorUsdc"] =
-          "Whole-number USDC amount, at least 1. No decimals — the contract takes integers only.";
-      if (total !== null && cap !== null && cap > total)
-        errs["budget.maxPerCreatorUsdc"] =
-          "Per-creator cap cannot exceed the total budget.";
-    }
-    if (s === 2) {
       if (deliverables.length === 0)
         errs["deliverables"] = "Add at least one deliverable.";
       deliverables.forEach((d, i) => {
@@ -167,6 +158,19 @@ export default function NewPromotionPage() {
       if (!windowEnd) errs["postingWindow.end"] = "End date is required.";
       if (windowStart && windowEnd && windowStart >= windowEnd)
         errs["postingWindow.end"] = "End must be after start.";
+    }
+    if (s === 2) {
+      const total = parseIntStrict(totalUsdc);
+      const cap = parseIntStrict(maxPerCreatorUsdc);
+      if (total === null || total < 1)
+        errs["budget.totalUsdc"] =
+          "Whole-number USDC amount, at least 1. No decimals — the contract takes integers only.";
+      if (cap === null || cap < 1)
+        errs["budget.maxPerCreatorUsdc"] =
+          "Whole-number USDC amount, at least 1. No decimals — the contract takes integers only.";
+      if (total !== null && cap !== null && cap > total)
+        errs["budget.maxPerCreatorUsdc"] =
+          "Per-creator cap cannot exceed the total budget.";
     }
     if (s === 3) {
       const pct = parseIntStrict(maxPerformancePct);
@@ -191,6 +195,13 @@ export default function NewPromotionPage() {
   function goBack() {
     setErrors({});
     setStep((s) => Math.max(0, s - 1));
+  }
+
+  /** Jump back to a step that's already been completed. */
+  function goToStep(target: number) {
+    if (target >= step) return;
+    setErrors({});
+    setStep(target);
   }
 
   function buildBody(): PromotionCreateRequest {
@@ -263,6 +274,13 @@ export default function NewPromotionPage() {
       <p className="mt-1 text-[11px] text-negative">{errors[field]}</p>
     ) : null;
 
+  // Live validity of the current step, used to gate the Continue button and
+  // surface the reason inline — separate from `errors`, which only fills in
+  // on an attempted advance or a server-side violation.
+  const currentStepErrors = validateStep(step);
+  const canContinue = Object.keys(currentStepErrors).length === 0;
+  const continueReason = Object.values(currentStepErrors)[0];
+
   const totalParsed = parseIntStrict(totalUsdc);
   const capParsed = parseIntStrict(maxPerCreatorUsdc);
 
@@ -284,31 +302,65 @@ export default function NewPromotionPage() {
         </p>
       </div>
 
-      {/* Step indicator */}
-      <ol className="flex items-center gap-1.5">
-        {STEPS.map((label, i) => (
-          <li key={label} className="flex flex-1 flex-col gap-1.5">
-            <span
-              className={`h-1 rounded-full ${
-                i < step
-                  ? "bg-accent"
-                  : i === step
-                    ? "bg-accent-strong"
-                    : "bg-surface-raised"
-              }`}
-            />
-            <span
-              className={`text-[10px] ${
-                i === step ? "text-foreground" : "text-muted"
-              }`}
-            >
-              {i + 1}. {label}
-            </span>
-          </li>
-        ))}
+      {/* Step chips: numbered, current highlighted, completed clickable */}
+      <ol className="flex items-center">
+        {STEPS.map((label, i) => {
+          const completed = i < step;
+          const current = i === step;
+          return (
+            <li key={label} className="flex flex-1 items-center last:flex-none">
+              <button
+                type="button"
+                onClick={() => goToStep(i)}
+                disabled={!completed}
+                aria-current={current ? "step" : undefined}
+                title={label}
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium transition-colors ${
+                  current
+                    ? "bg-accent text-background"
+                    : completed
+                      ? "cursor-pointer bg-accent/15 text-accent-strong hover:bg-accent/25"
+                      : "cursor-default bg-surface-raised text-muted"
+                }`}
+              >
+                {completed ? (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                ) : (
+                  i + 1
+                )}
+              </button>
+              <span
+                className={`ml-2 hidden text-[11px] sm:inline ${
+                  current ? "text-foreground" : "text-muted"
+                }`}
+              >
+                {label}
+              </span>
+              {i < STEPS.length - 1 && (
+                <span
+                  className={`mx-2 h-px flex-1 ${
+                    completed ? "bg-accent/40" : "bg-border-subtle"
+                  }`}
+                />
+              )}
+            </li>
+          );
+        })}
       </ol>
 
-      <div className="rounded-2xl border border-border-subtle bg-surface p-6">
+      <div className="sketch ink border border-border-subtle bg-surface p-6">
         {step === 0 && (
           <div className="flex flex-col gap-4">
             <div>
@@ -369,56 +421,6 @@ export default function NewPromotionPage() {
         )}
 
         {step === 1 && (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="totalUsdc" className={labelCls}>
-                  Total budget (USDC, whole number)
-                </label>
-                <input
-                  id="totalUsdc"
-                  className={`${inputCls} font-mono`}
-                  inputMode="numeric"
-                  value={totalUsdc}
-                  onChange={(e) => setTotalUsdc(e.target.value)}
-                  placeholder="2000"
-                />
-                {err("budget.totalUsdc")}
-              </div>
-              <div>
-                <label htmlFor="maxPerCreatorUsdc" className={labelCls}>
-                  Max per creator (USDC, whole number)
-                </label>
-                <input
-                  id="maxPerCreatorUsdc"
-                  className={`${inputCls} font-mono`}
-                  inputMode="numeric"
-                  value={maxPerCreatorUsdc}
-                  onChange={(e) => setMaxPerCreatorUsdc(e.target.value)}
-                  placeholder="800"
-                />
-                {err("budget.maxPerCreatorUsdc")}
-              </div>
-            </div>
-            <p className="text-xs leading-relaxed text-muted">
-              Amounts are integer USDC — the escrow contract has no fees and no
-              decimals.
-              {totalParsed !== null && capParsed !== null && capParsed <= totalParsed && (
-                <>
-                  {" "}
-                  Your agent can engage up to{" "}
-                  <span className="font-mono text-foreground">
-                    {Math.floor(totalParsed / Math.max(capParsed, 1))}
-                  </span>{" "}
-                  creator{Math.floor(totalParsed / Math.max(capParsed, 1)) === 1 ? "" : "s"}{" "}
-                  at the per-creator cap.
-                </>
-              )}
-            </p>
-          </div>
-        )}
-
-        {step === 2 && (
           <div className="flex flex-col gap-5">
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -431,7 +433,7 @@ export default function NewPromotionPage() {
                       { format: "instagramStory", count: "1" },
                     ])
                   }
-                  className="rounded-full border border-border-subtle bg-surface-raised px-2.5 py-1 text-[11px] text-muted transition-colors hover:text-foreground"
+                  className="sketch-pill ink border border-border-subtle bg-surface-raised px-2.5 py-1 text-[11px] text-muted transition-colors hover:text-foreground"
                 >
                   + Add deliverable
                 </button>
@@ -537,6 +539,56 @@ export default function NewPromotionPage() {
           </div>
         )}
 
+        {step === 2 && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="totalUsdc" className={labelCls}>
+                  Total budget (USDC, whole number)
+                </label>
+                <input
+                  id="totalUsdc"
+                  className={`${inputCls} font-mono`}
+                  inputMode="numeric"
+                  value={totalUsdc}
+                  onChange={(e) => setTotalUsdc(e.target.value)}
+                  placeholder="2000"
+                />
+                {err("budget.totalUsdc")}
+              </div>
+              <div>
+                <label htmlFor="maxPerCreatorUsdc" className={labelCls}>
+                  Max per creator (USDC, whole number)
+                </label>
+                <input
+                  id="maxPerCreatorUsdc"
+                  className={`${inputCls} font-mono`}
+                  inputMode="numeric"
+                  value={maxPerCreatorUsdc}
+                  onChange={(e) => setMaxPerCreatorUsdc(e.target.value)}
+                  placeholder="800"
+                />
+                {err("budget.maxPerCreatorUsdc")}
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-muted">
+              Amounts are integer USDC — the escrow contract has no fees and no
+              decimals.
+              {totalParsed !== null && capParsed !== null && capParsed <= totalParsed && (
+                <>
+                  {" "}
+                  Your agent can engage up to{" "}
+                  <span className="font-mono text-foreground">
+                    {Math.floor(totalParsed / Math.max(capParsed, 1))}
+                  </span>{" "}
+                  creator{Math.floor(totalParsed / Math.max(capParsed, 1)) === 1 ? "" : "s"}{" "}
+                  at the per-creator cap.
+                </>
+              )}
+            </p>
+          </div>
+        )}
+
         {step === 3 && (
           <div className="flex flex-col gap-5">
             <div>
@@ -547,7 +599,7 @@ export default function NewPromotionPage() {
                     type="button"
                     key={opt.value}
                     onClick={() => setUsageRights(opt.value)}
-                    className={`rounded-xl border p-3 text-left transition-colors ${
+                    className={`sketch-alt ink border p-3 text-left transition-colors ${
                       usageRights === opt.value
                         ? "border-accent/60 bg-accent/10"
                         : "border-border-subtle bg-surface-raised hover:border-border-subtle/80"
@@ -642,7 +694,7 @@ export default function NewPromotionPage() {
 
         {step === 4 && (
           <div className="flex flex-col gap-4">
-            <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
+            <div className="sketch-alt ink border border-border-subtle bg-surface-raised p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
                   Max negotiation rounds
@@ -690,7 +742,7 @@ export default function NewPromotionPage() {
               offText="You review passed evidence and release each milestone payment yourself."
             />
 
-            <div className="rounded-xl border border-dashed border-border-subtle p-4 text-xs leading-relaxed text-muted">
+            <div className="sketch-alt ink border border-dashed border-border-subtle p-4 text-xs leading-relaxed text-muted">
               <span className="font-medium text-foreground">Review:</span>{" "}
               {title.trim() || "Untitled"} ·{" "}
               <span className="font-mono">
@@ -711,33 +763,39 @@ export default function NewPromotionPage() {
         )}
       </div>
 
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={goBack}
-          disabled={step === 0 || submitting}
-          className="rounded-full border border-border-subtle bg-surface px-4 py-2 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
-        >
-          Back
-        </button>
-        {step < STEPS.length - 1 ? (
-          <button
-            type="button"
-            onClick={goNext}
-            className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
-          >
-            Next
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {submitting ? "Creating…" : "Create Promotion"}
-          </button>
+      <div className="flex flex-col gap-2">
+        {step < STEPS.length - 1 && !canContinue && continueReason && (
+          <p className="text-right text-[11px] text-muted">{continueReason}</p>
         )}
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={step === 0 || submitting}
+            className="sketch-pill ink border border-border-subtle bg-surface px-4 py-2 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
+          >
+            Back
+          </button>
+          {step < STEPS.length - 1 ? (
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={!canContinue}
+              className="sketch-pill bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="sketch-pill bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {submitting ? "Creating…" : "Create Promotion"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -757,7 +815,7 @@ function AutonomyDial({
   offText: string;
 }) {
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
+    <div className="sketch-alt ink border border-border-subtle bg-surface-raised p-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{label}</span>
         <button

@@ -1,18 +1,29 @@
 @import "tailwindcss";
 
-/* KNOT is dark-first: one theme, no light variant for the shell. */
+/**
+ * KNOT is a scribbled paper world.
+ *
+ * One theme, no dark variant: cream paper, ink line-work, everything wobbling
+ * very slightly as if it were drawn a moment ago. The look matches the /knot
+ * marketing landing so the product and its story read as one thing.
+ *
+ * Ink is the accent — `bg-accent` fills are black-marker, `text-accent` is ink,
+ * and `bg-accent/15` reads as pencil shading. Cards are defined by their
+ * hand-drawn outline, not by a fill, so `--surface` stays paper-coloured.
+ */
 :root {
-  --background: #0a0b0f;
-  --surface: #12141b;
-  --surface-raised: #191c26;
-  --border: #262a38;
-  --foreground: #e8eaf0;
-  --muted: #8b91a5;
-  --accent: #7c8cff;
-  --accent-strong: #a5b0ff;
-  --positive: #4ade80;
-  --caution: #fbbf24;
-  --negative: #f87171;
+  --background: #fffdf8;
+  --surface: #fffdf8;
+  /* sticky-note cream, for panels that need to lift off the page */
+  --surface-raised: #fff8e0;
+  --border: #1c1c1a;
+  --foreground: #131312;
+  --muted: #71716a;
+  --accent: #14140f;
+  --accent-strong: #000000;
+  --positive: #16733c;
+  --caution: #96620a;
+  --negative: #ad2a20;
 }
 
 @theme inline {
@@ -27,12 +38,85 @@
   --color-positive: var(--positive);
   --color-caution: var(--caution);
   --color-negative: var(--negative);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-hand);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
+  font-family: var(--font-hand), "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+
+/* Headlines and figures are handwritten; data stays in mono so numbers, hashes
+   and USDC amounts remain unambiguous. */
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display), var(--font-hand), cursive;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Squigglevision on headlines only. Body copy, mono figures and scrolling
+   panels are deliberately left still — a jittering USDC amount or a shaking
+   table is the fastest way to make a drawn UI feel broken instead of charming. */
+h1,
+h2,
+.display {
+  filter: url(#knot-squiggle-2);
+}
+
+/* Paper grain over the whole page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@layer utilities {
+  /* Hand-drawn outlines. The asymmetric elliptical radii are what make a plain
+     div read as a pen stroke; alternate `.sketch`/`.sketch-alt` on neighbours so
+     no two boxes look traced from the same template. */
+  .sketch {
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  }
+  .sketch-alt {
+    border-radius: 15px 225px 15px 255px / 225px 15px 255px 15px;
+  }
+  .sketch-pill {
+    border-radius: 255px 25px 225px 25px / 25px 225px 25px 255px;
+  }
+  /* Ink weight — a 1px border looks printed, 2px+ looks drawn. */
+  .ink {
+    border-width: 2px;
+  }
+  .ink-thick {
+    border-width: 2.5px;
+  }
+
+  /* Squigglevision: the drawing never sits still. Applied to text and line-work,
+     never to inputs (it makes carets jitter) or to scrolling panels. */
+  .squig {
+    filter: url(#knot-squiggle-1);
+  }
+  .squig-2 {
+    filter: url(#knot-squiggle-2);
+  }
+  .squig-slow {
+    filter: url(#knot-squiggle-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squig,
+  .squig-2,
+  .squig-slow {
+    filter: none;
+  }
 }

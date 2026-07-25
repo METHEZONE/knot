@@ -105,7 +105,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto rounded-xl border bg-surface-raised p-3 shadow-lg shadow-black/40 ${TONE_CLS[toast.tone]}`}
+            className={`pointer-events-auto sketch-alt ink border bg-surface-raised p-3 shadow-lg shadow-black/40 ${TONE_CLS[toast.tone]}`}
           >
             <div className="flex items-start justify-between gap-3">
               <span

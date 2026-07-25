@@ -417,3 +417,167 @@ export interface ReceiptResponse {
 export interface EvidenceResponse {
   evidence: Evidence;
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding — PRD v2 §4/§5, contract deltas in PRD v2 §12
+//
+// Additive only; nothing above changes. The frontend builds against fixtures
+// with these exact shapes so the backend implementation can land behind them.
+// ---------------------------------------------------------------------------
+
+export type SocialPlatform = "instagram" | "youtube" | "x" | "tiktok";
+
+export interface SocialHandle {
+  platform: SocialPlatform;
+  handle: string;
+}
+
+export interface PlatformStats {
+  platform: SocialPlatform;
+  handle: string;
+  followers: number;
+  postsAnalyzed: number;
+}
+
+export interface IngestedPost {
+  platform: SocialPlatform;
+  url: string;
+  format: string;
+  views: number;
+  interactions: number;
+  postedAt: string;
+}
+
+/**
+ * Cached SNS ingest. Collection happens out of band (aside-browser collector
+ * on the operator machine); Cloud Run never scrapes. `source: "cachedReplay"`
+ * MUST render as "captured {capturedAt}" per the 17 §3 honesty rule.
+ */
+export interface CreatorIngest {
+  creatorId: string;
+  source: "cachedReplay" | "live";
+  capturedAt: string;
+  platforms: PlatformStats[];
+  recentPosts: IngestedPost[];
+}
+
+export interface FormatShare {
+  format: string;
+  sharePct: number;
+}
+
+/**
+ * diagnosis-v1. Every number is derived deterministically from the ingest —
+ * `narrative` is the ONLY model-written field, and it may never contradict the
+ * numbers beside it.
+ */
+export interface CreatorDiagnosisV1 {
+  version: "diagnosis-v1";
+  creatorId: string;
+  source: "cachedReplay" | "live";
+  capturedAt: string;
+  followersTotal: number;
+  /** interactions / followers, e.g. 0.048 = 4.8% */
+  engagementRate: number;
+  dominantCategories: string[];
+  topFormats: FormatShare[];
+  topPosts: IngestedPost[];
+  postingCadencePerWeek: number;
+  toneKeywords: string[];
+  suggestedRateBand: RateCard;
+  narrative: string;
+}
+
+/** Persists as creatorProfiles/{creatorId} + agentPolicies/{creatorAgentId}. */
+export interface CreatorOnboardRequest {
+  handles: SocialHandle[];
+  rateCard: RateCard;
+  blockedIndustries: string[];
+  monthlyCapacity: number;
+  leadTimeDays: number;
+  usageRights: UsageRights;
+  /** Frontend only ever handles the pubkey; keys never touch the browser. */
+  walletAddress: string | null;
+}
+
+export interface HatchedAgent {
+  agentId: string;
+  /** Display name the agent greets with during the hatching ceremony. */
+  name: string;
+  /** Canonical policy JSON the agent "signs" — the autonomy mandate. */
+  policyJson: string;
+}
+
+export interface CreatorOnboardResult {
+  creatorId: string;
+  agent: HatchedAgent;
+  walletAddress: string | null;
+}
+
+/** Brand-side ingest from the website URL (+ optional socials). */
+export interface BrandIngestV1 {
+  version: "brandIngest-v1";
+  source: "cachedReplay" | "live";
+  capturedAt: string;
+  website: string;
+  name: string;
+  category: string;
+  productLines: string[];
+  toneKeywords: string[];
+  foundCollabs: { handle: string; platform: SocialPlatform; url: string }[];
+  suggestedAudience: string[];
+  narrative: string;
+}
+
+/** Promotion autonomy plus the standing auto-approve cap set at onboarding. */
+export interface BrandAutonomy extends PromotionAutonomy {
+  /** Max USDC the agent may commit on one deal without asking a human. */
+  autoApproveCapUsdc: number;
+}
+
+export interface BrandOnboardRequest {
+  website: string;
+  handles: SocialHandle[];
+  name: string;
+  category: string;
+  budget: Budget;
+  autonomy: BrandAutonomy;
+  usageRights: UsageRights;
+  blockedCategories: string[];
+  walletAddress: string | null;
+}
+
+export interface BrandOnboardResult {
+  brandId: string;
+  agent: HatchedAgent;
+  walletAddress: string | null;
+}
+
+export interface CreatorIngestRequest {
+  handles: SocialHandle[];
+}
+
+export interface BrandIngestRequest {
+  website: string;
+  handles: SocialHandle[];
+}
+
+export interface CreatorIngestResponse {
+  ingest: CreatorIngest;
+}
+
+export interface CreatorDiagnosisResponse {
+  diagnosis: CreatorDiagnosisV1;
+}
+
+export interface CreatorOnboardResponse {
+  creator: CreatorOnboardResult;
+}
+
+export interface BrandIngestResponse {
+  ingest: BrandIngestV1;
+}
+
+export interface BrandOnboardResponse {
+  brand: BrandOnboardResult;
+}

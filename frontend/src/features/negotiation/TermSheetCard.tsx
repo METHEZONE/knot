@@ -22,7 +22,7 @@ export function TermSheetCard({
   );
 
   return (
-    <section className="rounded-2xl border border-positive/30 bg-surface p-5">
+    <section className="sketch ink border border-positive/30 bg-surface p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold tracking-tight">Final term sheet</h2>
         <span className="rounded-full border border-positive/30 bg-positive/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-positive">
