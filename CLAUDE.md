@@ -44,6 +44,14 @@ pay --sandbox curl https://debugger.pay.sh/mpp/quote/AAPL
 pay setup                # 실지갑 (OS 키체인)
 ```
 
+## Solana 환경 — 로컬 샌드박스 ↔ devnet
+각자 로컬은 `solana-test-validator`(테스트넷), 공유·데모는 devnet. 상세: `docs/SOLANA_ENVIRONMENTS.md`.
+```bash
+scripts/localnet_settlement.sh   # 로컬 샌드박스: 밸리데이터+배포+정산 테스트 (팀원 각자)
+scripts/deploy_devnet.sh         # 머지 후 devnet 배포 (프로그램 키페어 보유자)
+```
+워크플로: **각자 로컬 샌드박스에서 개발·테스트 → PR 머지 → devnet 배포**.
+
 ## 검증된 프로토콜 사실 (2026-07 조사 — 재조사 방지)
 - **x402**는 Solana 지원됨(`@x402/svm`, 공식). 결제 토큰 = **USDC-SPL**.
 - 파실리테이터: **PayAI**(Solana 최대), **Coinbase CDP**, **pay.sh**(Solana 재단+Google Cloud — x402 위 게이트웨이 + Pay MCP).
