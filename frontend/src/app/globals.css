@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* KNOT is dark-first: one theme, no light variant for the shell. */
+:root {
+  --background: #0a0b0f;
+  --surface: #12141b;
+  --surface-raised: #191c26;
+  --border: #262a38;
+  --foreground: #e8eaf0;
+  --muted: #8b91a5;
+  --accent: #7c8cff;
+  --accent-strong: #a5b0ff;
+  --positive: #4ade80;
+  --caution: #fbbf24;
+  --negative: #f87171;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-subtle: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-positive: var(--positive);
+  --color-caution: var(--caution);
+  --color-negative: var(--negative);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
+}
