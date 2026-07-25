@@ -27,12 +27,16 @@
 6. 자율성 = **한도 내 완전 자율**(cap 초과만 사람 서명), 마일스톤 검증 = **에이전트 attested**(pay.sh 지표검증은 옵션).
 7. "대화내역 md로 깃헙에 같이 올려줘(다른 노트북)" + "작업 다 하면 push까지" → 이 문서 + push.
 
-## 현재 상태
+## 현재 상태 (2026-07-25 갱신)
+- **병합**: `be`(앱 백엔드)와 병합 → `integrate/be-blockchain` (PR #1). 통합 전체 현황은 `docs/INTEGRATION_PLAN.md`.
 - **빌드**: `anchor build` ✅ → `target/deploy/knot_escrow.so`, `target/idl/knot_escrow.json`.
-- **테스트**: `pytest -m "not devnet"` ✅ **5 passed** (PDA 4 + pay.sh sandbox 스모크 1 — `pay --sandbox fetch` 실제 성공).
-- **미완**: `anchor deploy`(devnet) 아직 안 함 → devnet 통합 테스트(`test_escrow_devnet.py`)는 skip 상태.
-- **주의(관측)**: 시스템 Python 3.9로 단위테스트는 solders+pytest만 설치해 통과. `anchorpy`/`pytest-asyncio`는 미설치
-  → devnet 통합 시 설치 필요(3.11+ 권장).
+- **배포**: `anchor deploy`(devnet) ✅ → program `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`
+  (원본 `Hv74…` 키페어 부재 → `anchor keys sync`로 빌드 키페어 id 채택, 레포 전반에 반영).
+- **온체인 정산 검증**: `KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py` ✅ **1 passed**
+  — 캠페인 예치 → 마일스톤 제출 → **에이전트가 cap 이내 사람 없이 릴리스** → creator +0.7 USDC + 평판 갱신.
+- **전체**: `ruff`/`mypy`(38) pass · `pytest` **59 passed / 4 skipped** · gateway 5/5.
+- **주의**: anchorpy 0.21은 anchor 1.x IDL을 못 읽어 `knot.escrow.client.load_program`이 실패한다.
+  devnet 테스트는 **solders로 인스트럭션을 직접 빌드**해 우회했다(정식 테스트에 반영).
 
 ## 다른 노트북에서 이어가기
 ```bash
@@ -59,13 +63,12 @@ pay --sandbox fetch https://debugger.pay.sh/mpp/quote/AAPL
 ```
 
 ## 다음 작업 (우선순위)
-1. **`anchor deploy`(devnet)** + `backend/tests/test_escrow_devnet.py` 채우기:
-   `initialize_campaign` → `submit_milestone` → `approve_and_release`(에이전트 키, cap 이내 → 사람 없이 릴리스)
-   → 크리에이터 USDC 잔액 증가 assert. (`pytest-asyncio` 설치 필요)
-2. **예원과 인터페이스 계약 확정** — `docs/architecture.md §4` 열린 질문: 협상 결과 → `initialize_campaign` 필드 매핑,
+1. **escrow API의 SIMULATED 영수증 → 배포된 프로그램 실제 서명 배선**: Python 직접(`knot.escrow`) vs TS 게이트웨이 결정.
+   anchorpy IDL 미지원이라 solders 직접 빌드 방식(테스트 참조). on-chain `initialize_config`는 **fee 0**.
+2. **예원과 인터페이스 계약 확정** — `docs/architecture.md §4`: 협상 결과 → `initialize_campaign` 필드 매핑,
    에이전트 키(agent_authority)·지갑 발급·보관, 증빙 방식.
-3. **pay.sh 실지갑**(`pay setup`) + Google Cloud/Nansen 등 실제 유료 API 데모 결제(흐름1).
-4. (옵션) 마일스톤 pay.sh 지표검증, 분쟁(`raise_dispute`) 처리.
+3. **pay.sh 흐름1**을 Brand Agent 매칭 흐름에 연결(sandbox) + 실지갑(`pay setup`) 데모 결제.
+4. **Cloud Run 배포 · 프론트(Society Map/Timeline)** · (옵션) 마일스톤 pay.sh 지표검증, 분쟁(`raise_dispute`) 처리.
 
 ## 주의
 - **devnet 전용**. mainnet 키·시크릿 커밋 금지(`.gitignore`로 keypair/.env 제외).

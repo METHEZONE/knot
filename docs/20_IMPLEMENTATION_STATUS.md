@@ -1,22 +1,22 @@
 # KNOT v1 Implementation Status
 
-Update this file at the end of every Codex task.
+Update this file at the end of every task.
 
 ## Current milestone
 
-`M4 — Evidence verification API baseline with Firestore persistence`
+`M4 complete + escrow lock/release API + devnet deploy — on-chain milestone settlement verified`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | Evidence API baseline | 2026-07-24 | Promotion, match run, negotiation, agreement and evidence APIs wired to repository boundary |
+| frontend | deferred | 2026-07-25 | Folder kept empty by request; Society Map + Timeline still to build |
+| knot-api | Escrow lock/release API added | 2026-07-25 | Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release wired to the repository boundary; escrow receipts are SIMULATED pending on-chain signing |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
-| web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
-| Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
+| web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
+| Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human |
 | Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; infra files not committed yet |
-| end-to-end demo | not started | - | |
+| end-to-end demo | settlement leg proven on devnet | 2026-07-25 | on-chain escrow settlement verified; full app→chain wiring, pay.sh flow, frontend and Cloud Run remain |
 
 ## Contract versions
 
@@ -29,25 +29,20 @@ Matching weights: matching-v1
 Brand policy: brand-policy-v1
 Creator policy: creator-policy-v1
 Evidence policy: verification-v1
-Escrow program: unset
+Escrow program: Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj (Solana devnet)
+Devnet USDC-SPL mint: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
 ```
 
 ## Latest validation
 
 ```text
-.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 39 tests and 3 skipped emulator tests, with one FastAPI/Starlette deprecation warning from TestClient.
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py: passed, 3 tests, with one FastAPI/Starlette deprecation warning from TestClient.
-.venv/bin/python -m mypy backend/apps backend/libs: passed.
-.venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
-.venv/bin/python scripts/firestore_smoke.py --target memory: passed.
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev: passed.
-env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore .venv/bin/python scripts/firestore_smoke.py --target firestore: passed against real GCP Firestore.
-cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
-cd web3/gateway && npm run lint: passed.
-cd web3/gateway && npm test: passed, 5 tests.
-cd web3/gateway && npm run build: passed.
-cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
+python -m ruff check backend: passed.
+python -m mypy backend/apps backend/libs: passed, 38 source files.
+python -m pytest backend/tests: 59 passed, 4 skipped (firestore-emulator + devnet gated; pay.sh sandbox smoke runs when the `pay` CLI is present).
+cd web3/gateway && npm run lint / npm test / npm run build: passed, 5 tests.
+anchor build: passed; target/idl/knot_escrow.json generated.
+anchor deploy (devnet): deployed program Aj63…; program account rent-exempt ~2.035 SOL (recoverable via `solana program close`).
+KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py: 1 passed — real on-chain milestone settlement (agent released 0.7 USDC to the creator within cap; Reputation.total_settled updated).
 ```
 
 ## Decisions made during implementation
@@ -56,51 +51,24 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Kept external prompt files out of the repository per current working instruction.
 - Renamed `config/env.example` to root `.env.example`.
 - Treated `frontend`, `backend`, and `web3` as the three primary code areas; `infra` and `scripts` will be added only when needed.
-- Removed unused `@solana/web3.js` from the M0 gateway skeleton; add it back when real Solana RPC/signing code starts.
 - Added commit rules to `AGENTS.md`, including domain-prefixed commit messages and mandatory user approval before committing.
-- Added typed Promotion, CreatorProfile, AgentPolicy, AgreementTerms, compensation, deliverable, milestone, and policy decision models.
-- Added pure Brand and Creator policy functions with deterministic violation codes.
-- Added deterministic creator matching with hard filters, weighted score `matching-v1`, rank assignment, and stable tie-break.
-- Expanded creator fixtures and added `matching_golden.json` for backend golden tests.
-- Added A2A v1 request, message, part, task, status, artifact, and negotiation payload models.
-- Added in-memory A2A task store with `messageId` idempotency, task/context consistency, terminal task rejection, task listing, lookup, subscribe, and cancel support.
-- Extended Creator Agent service from placeholder response to deterministic creator-policy negotiation decisions.
-- Added Brand Agent pure orchestration helpers for top creator selection, initial terms construction, and A2A offer request construction.
-- Added deterministic `termsHash` helper for accepted A2A artifacts; deeper agreement/payment hashing remains part of the next payment milestone.
-- Added Firestore collection path helpers matching `docs/06_DOMAIN_DATA_MODEL.md`.
-- Added backend repository serialization helpers that preserve camelCase Firestore/API field names.
-- Added an abstract `DocumentStore`, in-memory repository implementation for tests, and a duck-typed Firestore client adapter boundary.
-- Added deterministic demo seed fixtures for brand, agents, creator profiles, agent policies and the sample Promotion.
-- Added `google-cloud-firestore` as a backend runtime dependency and `scripts/seed_demo.py` with memory and Firestore targets.
-- Added repository tests for path contracts, model serialization, idempotency keys, append-only audit events, copy isolation and idempotent demo seed loading.
-- Added Product API routes for Promotion create/list/get/activate, match run execution, match run lookup, candidate listing, candidate selection and Promotion timeline.
-- Added API tests verifying seeded Promotion reads, Promotion creation/activation events, deterministic match persistence and ineligible candidate selection blocking.
-- Added Product API start-negotiation, negotiation get/messages/events and agreement get routes backed by repository documents.
-- Added deterministic agreement persistence with canonical terms JSON and terms hash copied from the validated creator decision.
-- Added `docs/22_FIRESTORE_RUNBOOK.md` to document Firestore modes, collections, seed data, emulator/GCP setup, indexes, invariants and verification.
-- Added an ERD to the Firestore runbook and a `scripts/firestore_smoke.py` readback command for memory or Firestore targets.
-- Aligned the logical Firestore ERD with v1 relationship semantics: optional Brand/Creator-to-Agent representation, MatchCandidate-to-CreatorProfile references, MatchCandidate-to-Negotiation tracking, A2AArtifact-to-Agreement materialization, Agreement Milestone documents, PaymentOperation as the payment execution unit, IdempotencyRecord guarding PaymentOperation, and separated PromotionEvent from AuditEvent.
-- Updated backend Firestore path helpers and API persistence so MatchCandidate documents use `creatorId`, Agreements persist `artifactId`, milestones are written under Agreements, Evidence references milestones, and idempotency records use `idempotencyRecords/{key}`.
-- Installed local Google Cloud CLI and Firestore emulator component, verified Firestore SDK seed/readback and Product API flow against the emulator, and added gated emulator integration tests.
-- Added deterministic `verification-v1` evidence policy checks for URL reachability, brand mention, required disclosure and prohibited claims.
-- Added Product API routes for evidence submission, evidence lookup and evidence verification backed by `evidence/{evidenceId}` documents and Promotion timeline events.
-- Added API and policy tests covering evidence success, persisted verification failure, creator-agent submitter validation and blocked observation rules.
-- Added web3 gateway lock validation service requiring `Idempotency-Key`, agreement/escrow IDs, terms hash, amount, mint, program ID, network, and wallet references.
-- Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
-- Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
-- Created root `.env` file from `.env.example` template and updated `backend/libs/settings/config.py` with automatic `.env` loading support for local GCP and Firebase development.
-- Enabled `firestore.googleapis.com` in GCP project `knot-dev-gcp`, created Firestore Native `(default)` in `us-central1`, configured local ADC quota project, and verified real Firestore seed/readback.
-- Added `GOOGLE_CLOUD_PROJECT` to `.env.example` and made Firestore seed/smoke scripts default to `GOOGLE_CLOUD_PROJECT` or `GCP_PROJECT_ID`.
+- Added typed domain models, deterministic Brand/Creator/Evidence policy functions, `matching-v1` scoring, A2A v1 models, an in-memory A2A task store with idempotency, and deterministic `termsHash`.
+- Added the Firestore-compatible `DocumentStore`, in-memory + adapter implementations, path helpers, serialization, demo seed, and gated emulator integration tests.
+- Added Product API routes for Promotion, match run, negotiation, agreement, evidence, and the Promotion timeline; kept Gemini out of every authorization boundary (deterministic placeholders).
+- Enabled Firestore Native in `knot-dev-gcp` and verified real seed/readback.
+- **Merged `be` and `hyo/blockchain-setup` into `integrate/be-blockchain`** (PR #1). Unified `backend/pyproject.toml`; disabled the anchorpy pytest plugin (`-p no:pytest_anchorpy`) that imports the removed `pytest_xprocess`; fixed lint/type issues surfaced by the merge.
+- **Added escrow lock/release API** (`/agreements/{id}/escrow:lock`, `/escrows/{id}`, `/escrows/{id}/milestones/{mid}:release`, `/transaction-receipts/{id}`) with `libs/payments/settlement.py` (fee 0 → lock == payable fixed amount), termsHash re-check, autoEscrow/autoRelease gates, evidence-passed precondition, PaymentOperation + IdempotencyRecord + audit, and idempotent replay. Receipts are SIMULATED as a seam for real signing. 14 new tests.
+- **Installed the Solana/Anchor toolchain and deployed the program to devnet.** The original `Hv74…` program keypair was gitignored/unavailable, so `anchor keys sync` adopted the built keypair id `Aj63…`; propagated it across `declare_id`, `Anchor.toml`, `pdas.py`, backend `Settings`, gateway config, and `.env.example`.
+- **anchorpy 0.21 cannot parse anchor 1.x's new IDL format**, so `test_escrow_devnet.py` builds instructions with solders directly instead of `knot.escrow.client.load_program`. It reuses the singleton config's treasury/mint so it is repeatable.
 
+## Known blockers / open items
 
-## Known blockers
-
+- Escrow API receipts are SIMULATED — real Solana signing, RPC submission, Secret Manager access, and transaction persistence still to wire to the deployed program.
 - Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet.
-- Firestore emulator requires Java 25 or higher after future gcloud releases; local Java is currently 21 and still works with the installed emulator but emitted a deprecation warning.
-- Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
-- Devnet program ID and mint not configured.
-- pay.sh sandbox resource not selected.
+- pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow.
+- Frontend (Agent Society Map, Promotion Timeline) not started.
+- `knot.escrow.client` (anchorpy) is broken against anchor 1.x IDL until anchorpy supports the new format or the client is ported to solders.
 
 ## Next task
 
-Add Cloud Run-oriented backend runtime configuration and service account/IAM bootstrap docs, then wire global `auditEvents` persistence.
+Wire the escrow API's SIMULATED receipts to the deployed devnet program (real signing path — decide Python-direct vs TS gateway), then connect pay.sh flow-1, then Cloud Run deploy and the frontend.
