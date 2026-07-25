@@ -1,5 +1,5 @@
-import { SimpleLanding } from "@/simple/SimpleMvp";
+import { LandingScreen } from "@/product/ProductScreens";
 
 export default function Page() {
-  return <SimpleLanding />;
+  return <LandingScreen />;
 }

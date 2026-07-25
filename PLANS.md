@@ -138,12 +138,13 @@ Validation passed: `npm run typecheck`, `npm run lint`, `npm test`, and
 
 ---
 
-## Simple Frontend MVP Reset Plan
+## Product MVP Frontend Plan
 
 ### Goal
 
-Replace the broad MVP pack route surface with the smallest product narrative
-that can demo one brand/creator deal from setup to result.
+Replace the broad MVP pack route surface with a product-like flow that starts
+from login/signup, sets up each role, lets agents negotiate through A2A, and
+shows role-specific result, settlement/milestone, my page and settings screens.
 
 ### Scope
 
@@ -155,8 +156,15 @@ handoff notes.
 
 ```text
 /
-/creator/onboarding -> /creator/offers -> /creator/negotiate -> /creator/result -> /creator/milestones
-/brand/onboarding -> /brand/matching -> /brand/negotiate -> /brand/result -> /brand/settlement
+/login
+/signup -> /signup/brand | /signup/creator
+/brand/onboarding -> /brand/products/new -> /brand/negotiate -> /brand/result -> /brand/settlement
+/brand/me
+/brand/settings
+/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/brands/{brandId}
+/creator/me
+/creator/settings
+/dev/admin
 ```
 
 ### Decisions and surprises
@@ -173,3 +181,17 @@ handoff notes.
   sanitized progress, and final terms only. Private policy such as creator
   minimums, blocked topics, brand hard maximums and internal scoring details
   must not be shown to the counterparty.
+- 2026-07-25: Productized the IA as login -> onboarding -> negotiation ->
+  result for both roles, added `/dev/admin`, and introduced a `KnotDataSource`
+  interface backed by mock data so Firestore/API can replace the source without
+  changing route components.
+- 2026-07-25: Refined the MVP into separate product pages instead of a connected
+  01/02/03 stepper. Brand now has onboarding, product creation, matching/A2A
+  negotiation, result and settlement pages. Creator now has SNS onboarding,
+  private negotiation criteria, a multi-brand result list, brand detail
+  milestones/quests, settlement status, my page and settings.
+- 2026-07-25: Login/signup now look like real account surfaces. Signup chooses
+  Brand or Creator first, then continues into role onboarding/profile creation.
+- 2026-07-25: A2A negotiation remains agent-led. The UI shows animated
+  "진행중이에요!" status and sanitized task progress only; private criteria,
+  hard caps, internal scores and full A2A message bodies stay hidden.

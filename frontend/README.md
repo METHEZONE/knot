@@ -1,6 +1,6 @@
 # KNOT Frontend
 
-Next.js App Router + TypeScript frontend for the stripped-down KNOT MVP demo.
+Next.js App Router + TypeScript frontend for the KNOT product MVP.
 
 The app is built for Google Cloud Run. Other preview hosts are not deployment
 targets for this repository.
@@ -14,21 +14,44 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Core demo routes:
+Core product routes:
 
 ```text
 /
-/creator/onboarding
-/creator/offers
-/creator/negotiate
-/creator/result
-/creator/milestones
+/login
+/signup
+/signup/brand
+/signup/creator
 /brand/onboarding
-/brand/matching
+/brand/products/new
 /brand/negotiate
 /brand/result
 /brand/settlement
+/brand/me
+/brand/settings
+/creator/onboarding
+/creator/criteria
+/creator/result
+/creator/brands/glow-bar
+/creator/me
+/creator/settings
+/dev/admin
 ```
+
+Compatibility redirects:
+
+```text
+/brand/matching -> /brand/negotiate
+/creator/negotiate -> /creator/result
+/creator/offers -> /creator/result
+/creator/milestones -> /creator/brands/glow-bar
+```
+
+The workspace navigation is intentionally menu-like rather than a numbered
+stepper. Brand and Creator flows each expose separate product pages for
+onboarding, negotiation, results, settlement/milestones, my page, and settings.
+Mock data flows through `src/product/dataSource.ts`; replacing it with a
+Firestore/API-backed implementation should not require route component changes.
 
 ## Verification
 
