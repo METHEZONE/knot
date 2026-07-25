@@ -42,6 +42,7 @@ GET    /promotions
 POST   /promotions/{promotionId}:activate
 POST   /promotions/{promotionId}/matches:run
 GET    /promotions/{promotionId}/timeline
+GET    /audit-events?promotionId={promotionId}&limit=100
 ```
 
 `POST /promotions` creates a Promotion but does not start matching.
@@ -65,6 +66,14 @@ Promotion responses are wrapped as:
   }
 }
 ```
+
+`GET /promotions/{promotionId}/timeline` returns product timeline events from
+`promotions/{promotionId}/events/{eventId}` in ascending creation order. This is
+the primary frontend source for the Promotion Timeline.
+
+`GET /audit-events` returns append-only operational/security events in descending
+creation order. `promotionId` is optional and `limit` is capped at 500. The
+frontend may use this for debugging panels, but not as the canonical timeline.
 
 ## 4. Matching endpoints
 
@@ -177,7 +186,20 @@ The response is wrapped in standard metadata as `data.evidence`. Failed
 verification is persisted with `status=FAILED` and returns
 `EVIDENCE_VERIFICATION_FAILED`.
 
-## 8. Health endpoints
+## 8. Demo smoke endpoint flow
+
+The committed API smoke script exercises the current frontend integration path:
+
+```text
+.venv/bin/python scripts/api_smoke.py
+.venv/bin/python scripts/api_smoke.py --base-url http://localhost:8080
+```
+
+It verifies `/healthz`, `/version`, seeded Promotion read, match run, candidate
+list, negotiation-to-Agreement, evidence submission, verification, Promotion
+Timeline and audit event readback.
+
+## 9. Health endpoints
 
 Each Cloud Run service exposes:
 
@@ -189,7 +211,7 @@ GET /version
 
 `/version` returns service name, Git SHA, build time and schema version, but no secret or environment dump.
 
-## 9. Error codes
+## 10. Error codes
 
 ```text
 AUTH_INVALID_TOKEN

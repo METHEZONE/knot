@@ -49,7 +49,22 @@ make seed
 make demo-smoke
 ```
 
-or equivalent task runner scripts. Until that runner is introduced, use service-local backend and web3 commands documented in `README.md`.
+or equivalent task runner scripts. Current equivalent scripts are:
+
+```text
+.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py scripts/reset_demo.py scripts/api_smoke.py
+.venv/bin/python -m mypy backend/apps backend/libs
+.venv/bin/python -m pytest backend/tests
+.venv/bin/python scripts/firestore_smoke.py --target memory
+.venv/bin/python scripts/api_smoke.py
+```
+
+Firestore-backed checks use:
+
+```text
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/firestore_smoke.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/api_smoke.py --base-url <api-url>
+```
 
 ## 3. Golden negotiation cases
 

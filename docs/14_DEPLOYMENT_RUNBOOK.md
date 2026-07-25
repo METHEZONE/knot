@@ -23,6 +23,31 @@ mainnet/prod: out of v1 scope
 11. Deploy `knot-web` publicly.
 12. Run seed and smoke scripts.
 
+Current helper scripts:
+
+```text
+PROJECT_ID=<gcp-project-id> REGION=us-central1 ./scripts/bootstrap_gcp.sh
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/reset_demo.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/seed_demo.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/firestore_smoke.py --target firestore
+```
+
+`bootstrap_gcp.sh` enables required APIs, creates the Artifact Registry
+repository, creates service accounts, grants minimal Firestore/Vertex roles for
+the backend agents, and creates Firestore Native `(default)` when absent. It does
+not create or store any secrets.
+
+Backend Cloud Run build/deploy skeleton:
+
+```text
+PROJECT_ID=<gcp-project-id> SERVICE=knot-api ./scripts/deploy_backend_cloudrun.sh
+PROJECT_ID=<gcp-project-id> SERVICE=knot-creator-agent DOCKERFILE=backend/apps/creator_agent/Dockerfile ./scripts/deploy_backend_cloudrun.sh
+```
+
+The API service is public in the current integration skeleton so frontend
+developers can connect before Firebase verification is implemented. Creator
+Agent remains private by default.
+
 ## 3. Configuration
 
 All services receive immutable deployment configuration through environment variables and Secret Manager mounts/references. See `.env.example`.
@@ -41,6 +66,11 @@ Seed output includes:
 - wallet public keys
 - expected initial status
 
+Current reset implementation deletes known v1 demo documents and subcollections
+for seeded IDs and generated demo prefixes such as `promotion-`, `match-`,
+`negotiation-`, `task-`, `agreement-`, `evidence-`, and `event-`. Use
+`--dry-run` before destructive cloud resets.
+
 ## 5. Smoke test
 
 The smoke script checks:
@@ -52,6 +82,15 @@ The smoke script checks:
 - A2A AgentCard and message request
 - web3 gateway simulation
 - frontend URL
+
+Current committed smoke coverage:
+
+```text
+.venv/bin/python scripts/api_smoke.py
+.venv/bin/python scripts/api_smoke.py --base-url <api-url>
+```
+
+The live URL mode requires the target Firestore database to be seeded first.
 
 ## 6. Demo-day preparation
 

@@ -32,6 +32,7 @@ python3 -m venv .venv
 .venv/bin/python -m ruff check backend
 .venv/bin/python -m pytest backend/tests
 .venv/bin/python -m mypy backend/apps backend/libs
+.venv/bin/python scripts/api_smoke.py
 ```
 
 ```text
@@ -43,6 +44,24 @@ GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
   .venv/bin/python scripts/firestore_smoke.py --target firestore
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
   .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
+```
+
+실제 GCP Firestore demo reset/seed/smoke:
+
+```text
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/reset_demo.py --target firestore --dry-run
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/reset_demo.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/seed_demo.py --target firestore
+GOOGLE_CLOUD_PROJECT=<gcp-project-id> .venv/bin/python scripts/firestore_smoke.py --target firestore
+```
+
+Backend Cloud Run 초안 배포:
+
+```text
+PROJECT_ID=<gcp-project-id> REGION=us-central1 ./scripts/bootstrap_gcp.sh
+PROJECT_ID=<gcp-project-id> SERVICE=knot-api ./scripts/deploy_backend_cloudrun.sh
+PROJECT_ID=<gcp-project-id> SERVICE=knot-creator-agent DOCKERFILE=backend/apps/creator_agent/Dockerfile ./scripts/deploy_backend_cloudrun.sh
+.venv/bin/python scripts/api_smoke.py --base-url <knot-api-url>
 ```
 
 ```text

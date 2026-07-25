@@ -36,6 +36,9 @@ class DocumentStore(Protocol):
     def list_documents(self, collection_path: str) -> list[DocumentData]:
         pass
 
+    def delete_document(self, path: str) -> None:
+        pass
+
 
 class InMemoryDocumentStore:
     def __init__(self) -> None:
@@ -65,6 +68,9 @@ class InMemoryDocumentStore:
             if path.startswith(prefix) and "/" not in path.removeprefix(prefix):
                 results.append(_copy_document(self._documents[path]))
         return results
+
+    def delete_document(self, path: str) -> None:
+        self._documents.pop(path, None)
 
     @property
     def document_count(self) -> int:
@@ -136,8 +142,14 @@ class KnotRepository:
     def list_raw_documents(self, collection_path: str) -> list[DocumentData]:
         return self._store.list_documents(collection_path)
 
+    def delete_raw_document(self, path: str) -> None:
+        self._store.delete_document(path)
+
     def create_audit_event(self, event_id: str, document: Mapping[str, object]) -> None:
         self._store.set_document(FirestorePaths.audit_event(event_id), document, exists_ok=False)
+
+    def list_audit_events(self) -> list[DocumentData]:
+        return self._store.list_documents(COLLECTIONS.audit_events)
 
     def claim_idempotency_record(
         self,

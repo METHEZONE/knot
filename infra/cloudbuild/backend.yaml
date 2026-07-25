@@ -1,0 +1,29 @@
+substitutions:
+  _REGION: us-central1
+  _ARTIFACT_REPOSITORY: knot-containers
+  _SERVICE: knot-api
+  _DOCKERFILE: backend/apps/api/Dockerfile
+
+steps:
+  - name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        python -m pip install -e 'backend[dev]'
+        python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py scripts/reset_demo.py scripts/api_smoke.py
+        python -m mypy backend/apps backend/libs
+        python -m pytest backend/tests
+        python scripts/firestore_smoke.py --target memory
+        python scripts/api_smoke.py
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - ${_DOCKERFILE}
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPOSITORY}/${_SERVICE}:${SHORT_SHA}

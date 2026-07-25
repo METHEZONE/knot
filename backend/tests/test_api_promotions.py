@@ -64,6 +64,13 @@ def test_create_and_activate_promotion_records_timeline_events() -> None:
         "PROMOTION_ACTIVATED",
     ]
 
+    audit_response = client.get("/api/v1/audit-events?promotionId=promotion-api-001")
+    assert audit_response.status_code == 200
+    assert [event["type"] for event in reversed(audit_response.json()["data"]["events"])] == [
+        "PROMOTION_CREATED",
+        "PROMOTION_ACTIVATED",
+    ]
+
 
 def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     client = client_with_seed()
@@ -86,6 +93,13 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
     assert "MATCH_RUN_COMPLETED" in event_types
+
+    audit_response = client.get("/api/v1/audit-events?promotionId=promotion-001&limit=1")
+    assert audit_response.status_code == 200
+    audit_events = audit_response.json()["data"]["events"]
+    assert len(audit_events) == 1
+    assert audit_events[0]["type"] == "MATCH_RUN_COMPLETED"
+    assert audit_events[0]["source"] == "knot-api"
 
 
 def test_select_candidate_rejects_ineligible_candidate() -> None:
@@ -136,6 +150,11 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}")
     assert agreement_response.status_code == 200
     assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]
+
+    timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
+    event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
+    assert "NEGOTIATION_STARTED" in event_types
+    assert "AGREEMENT_CREATED" in event_types
 
 
 def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:

@@ -57,6 +57,21 @@ Promotion timeline events are separate product data stored under
 Promotion Timeline. `auditEvents/{eventId}` is a global append-only operational
 and security trail and should not be used as the primary UI timeline source.
 
+The current Product API mirrors major Promotion-flow events into both stores:
+
+- Promotion created/activated
+- match run completed and selected candidate
+- negotiation started/canceled
+- Agreement created
+- evidence submitted/verified
+
+Read APIs:
+
+```text
+GET /api/v1/promotions/{promotionId}/timeline
+GET /api/v1/audit-events?promotionId={promotionId}&limit=100
+```
+
 ## 4. Metrics
 
 - matching duration and candidate count

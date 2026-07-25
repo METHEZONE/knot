@@ -21,6 +21,9 @@ class FirestoreDocumentReference(Protocol):
     def set(self, document_data: Mapping[str, object]) -> object:
         pass
 
+    def delete(self) -> object:
+        pass
+
 
 class FirestoreCollectionReference(Protocol):
     def stream(self) -> Iterable[FirestoreDocumentSnapshot]:
@@ -68,3 +71,6 @@ class FirestoreDocumentStore:
             for snapshot in self._client.collection(collection_path).stream()
             if snapshot.exists
         ]
+
+    def delete_document(self, path: str) -> None:
+        self._client.document(path).delete()

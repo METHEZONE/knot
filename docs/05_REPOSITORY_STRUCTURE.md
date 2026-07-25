@@ -33,7 +33,10 @@ knot/
 │       ├── tests/
 │       ├── Anchor.toml
 │       └── Cargo.toml
-└── docs/
+├── docs/
+├── infra/
+│   └── cloudbuild/
+└── scripts/
 ```
 
 ## Directory rules

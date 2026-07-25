@@ -31,6 +31,9 @@ class FakeDocumentReference:
     def set(self, document_data: Mapping[str, object]) -> None:
         self._client.documents[self._path] = dict(document_data)
 
+    def delete(self) -> None:
+        self._client.documents.pop(self._path, None)
+
 
 class FakeCollectionReference:
     def __init__(self, client: "FakeFirestoreClient", collection_path: str) -> None:
@@ -68,6 +71,8 @@ def test_firestore_adapter_sets_gets_lists_and_respects_create_only() -> None:
         {"promotionId": "promotion-001"},
         {"promotionId": "promotion-002"},
     ]
+    store.delete_document("promotions/promotion-002")
+    assert store.get_document("promotions/promotion-002") is None
 
     with pytest.raises(DocumentAlreadyExistsError):
         store.set_document(

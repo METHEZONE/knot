@@ -4,19 +4,19 @@ Update this file at the end of every Codex task.
 
 ## Current milestone
 
-`M4 — Evidence verification API baseline with Firestore persistence`
+`M4 — Integration-ready backend/API baseline with Firestore persistence`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | Evidence API baseline | 2026-07-24 | Promotion, match run, negotiation, agreement and evidence APIs wired to repository boundary |
+| knot-api | Integration API baseline | 2026-07-24 | Promotion, match run, negotiation, agreement, evidence, timeline and audit event APIs wired to repository boundary |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
 | Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
-| Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; infra files not committed yet |
-| end-to-end demo | not started | - | |
+| Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; backend Cloud Run bootstrap/deploy skeleton added |
+| end-to-end demo | API smoke baseline | 2026-07-24 | Local Product API smoke covers Promotion -> match -> negotiation -> Agreement -> evidence -> timeline/audit |
 
 ## Contract versions
 
@@ -35,14 +35,18 @@ Escrow program: unset
 ## Latest validation
 
 ```text
-.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py: passed.
+.venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py scripts/reset_demo.py scripts/api_smoke.py: passed.
 .venv/bin/python -m pytest backend/tests: passed, 39 tests and 3 skipped emulator tests, with one FastAPI/Starlette deprecation warning from TestClient.
 env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py: passed, 3 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 .venv/bin/python scripts/firestore_smoke.py --target memory: passed.
+.venv/bin/python scripts/api_smoke.py: passed, with one FastAPI/Starlette deprecation warning from TestClient.
+.venv/bin/python scripts/reset_demo.py --target memory --dry-run: passed, 12 demo documents listed.
+bash -n scripts/bootstrap_gcp.sh scripts/deploy_backend_cloudrun.sh: passed.
 env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev: passed.
-env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore .venv/bin/python scripts/firestore_smoke.py --target firestore: passed against real GCP Firestore.
+env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore .venv/bin/python scripts/firestore_smoke.py --target firestore: failed after local ADC started returning `invalid_grant`.
+env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp .venv/bin/python scripts/reset_demo.py --target firestore --dry-run: failed after local ADC started returning `invalid_grant`.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
 cd web3/gateway && npm run lint: passed.
 cd web3/gateway && npm test: passed, 5 tests.
@@ -91,11 +95,17 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Created root `.env` file from `.env.example` template and updated `backend/libs/settings/config.py` with automatic `.env` loading support for local GCP and Firebase development.
 - Enabled `firestore.googleapis.com` in GCP project `knot-dev-gcp`, created Firestore Native `(default)` in `us-central1`, configured local ADC quota project, and verified real Firestore seed/readback.
 - Added `GOOGLE_CLOUD_PROJECT` to `.env.example` and made Firestore seed/smoke scripts default to `GOOGLE_CLOUD_PROJECT` or `GCP_PROJECT_ID`.
+- Mirrored major Product API state changes into append-only `auditEvents/{eventId}` and added `GET /api/v1/audit-events`.
+- Added `scripts/api_smoke.py` for the frontend/backend integration path and `scripts/reset_demo.py` for controlled v1 demo document cleanup.
+- Added GCP bootstrap and backend Cloud Run deploy helper scripts plus a backend Cloud Build config skeleton.
+- Tightened backend Dockerfiles so Cloud Run images install runtime dependencies only and include the required `apps`, `libs`, and API fixtures.
 
 
 ## Known blockers
 
-- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet.
+- Local GCP ADC needs refresh with `gcloud auth application-default login`; latest real Firestore smoke failed with `invalid_grant`.
+- Terraform is still not implemented; current infra support is gcloud/Cloud Build script skeletons.
+- Cloud Run services have not been deployed from this workspace after adding the deploy scripts.
 - Firestore emulator requires Java 25 or higher after future gcloud releases; local Java is currently 21 and still works with the installed emulator but emitted a deprecation warning.
 - Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
 - Devnet program ID and mint not configured.
@@ -103,4 +113,4 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 
 ## Next task
 
-Add Cloud Run-oriented backend runtime configuration and service account/IAM bootstrap docs, then wire global `auditEvents` persistence.
+Refresh ADC, deploy `knot-api` and `knot-creator-agent` to Cloud Run, seed Firestore, then run `scripts/api_smoke.py --base-url <knot-api-url>`.

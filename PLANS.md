@@ -52,6 +52,9 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Agreement hashing and escrow lock validation skeleton
 - [x] Evidence submission and deterministic verification API baseline
 - [x] Firestore emulator smoke and gated integration tests
+- [x] Real GCP Firestore bootstrap and seed/readback smoke
+- [x] Frontend integration API smoke and audit-event readback
+- [x] Backend Cloud Run build/deploy skeleton
 - [ ] Milestone release
 - [ ] Frontend Agent Society Map and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo

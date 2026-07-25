@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 from typing import cast
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from apps.api.schemas import (
     EvidenceObservations,
@@ -43,7 +43,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
 
         promotion = payload.to_promotion(promotion_id=promotion_id, now=_now_datetime())
         repository.save_promotion(promotion)
-        _append_promotion_event(
+        _append_event(
             repository,
             promotion_id=promotion.promotion_id,
             event_type="PROMOTION_CREATED",
@@ -77,7 +77,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             update={"status": "ACTIVE", "updated_at": _now_datetime()}
         )
         repository.save_promotion(activated)
-        _append_promotion_event(
+        _append_event(
             repository,
             promotion_id=promotion_id,
             event_type="PROMOTION_ACTIVATED",
@@ -119,7 +119,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
                 FirestorePaths.match_candidate(match_run_id, creator.creator_id),
                 document,
             )
-        _append_promotion_event(
+        _append_event(
             repository,
             promotion_id=promotion_id,
             event_type="MATCH_RUN_COMPLETED",
@@ -171,6 +171,16 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         match_run["updatedAt"] = _now()
         repository.save_raw_document(candidate_path, {**candidate, "selected": True})
         repository.save_raw_document(match_run_path, match_run)
+        _append_event(
+            repository,
+            promotion_id=_require_document_str(match_run, "promotionId"),
+            event_type="MATCH_CANDIDATE_SELECTED",
+            data={
+                "matchRunId": match_run_id,
+                "creatorId": candidate["creatorId"],
+                "creatorAgentId": creator_agent_id,
+            },
+        )
         return _ok({"matchRun": match_run})
 
     @router.post(
@@ -338,16 +348,36 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
                 agreement,
             )
             _write_agreement_milestones(repository, agreement)
-        _append_promotion_event(
+        event_data: dict[str, object] = {
+            "matchRunId": match_run_id,
+            "negotiationId": negotiation_id,
+            "taskId": task_id,
+            "status": negotiation_status,
+            "creatorAgentId": creator_agent_id,
+        }
+        if agreement is not None:
+            event_data["agreementId"] = agreement["agreementId"]
+            event_data["termsHash"] = agreement["termsHash"]
+        _append_event(
             repository,
             promotion_id=promotion_id,
             event_type="NEGOTIATION_STARTED",
-            data={
-                "matchRunId": match_run_id,
-                "negotiationId": negotiation_id,
-                "status": negotiation_status,
-            },
+            data=event_data,
         )
+        if agreement is not None:
+            _append_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="AGREEMENT_CREATED",
+                data={
+                    "agreementId": agreement["agreementId"],
+                    "negotiationId": negotiation_id,
+                    "taskId": task_id,
+                    "artifactId": artifact_id,
+                    "termsHash": agreement["termsHash"],
+                    "status": agreement["status"],
+                },
+            )
         return _ok({"negotiation": negotiation, "agreement": agreement})
 
     @router.get("/negotiations/{negotiation_id}")
@@ -402,6 +432,15 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         negotiation["status"] = "CANCELED"
         negotiation["updatedAt"] = _now()
         repository.save_raw_document(path, negotiation)
+        _append_event(
+            repository,
+            promotion_id=_require_document_str(negotiation, "promotionId"),
+            event_type="NEGOTIATION_CANCELED",
+            data={
+                "negotiationId": negotiation_id,
+                "status": "CANCELED",
+            },
+        )
         return _ok({"negotiation": negotiation})
 
     @router.get("/agreements/{agreement_id}")
@@ -445,7 +484,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             "updatedAt": now,
         }
         repository.save_raw_document(FirestorePaths.evidence(evidence_id), evidence)
-        _append_promotion_event(
+        _append_event(
             repository,
             promotion_id=str(agreement["promotionId"]),
             event_type="EVIDENCE_SUBMITTED",
@@ -493,7 +532,7 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
             "updatedAt": _now(),
         }
         repository.save_raw_document(evidence_path, verified)
-        _append_promotion_event(
+        _append_event(
             repository,
             promotion_id=str(verified["promotionId"]),
             event_type="EVIDENCE_VERIFIED",
@@ -529,6 +568,17 @@ def build_api_router(repository: KnotRepository) -> APIRouter:
         )
         events.sort(key=lambda item: str(item.get("createdAt", "")))
         return _ok({"events": events})
+
+    @router.get("/audit-events")
+    def list_audit_events(
+        promotion_id: str | None = Query(default=None, alias="promotionId"),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, object]:
+        events = repository.list_audit_events()
+        if promotion_id is not None:
+            events = [event for event in events if event.get("promotionId") == promotion_id]
+        events.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+        return _ok({"events": events[:limit]})
 
     return router
 
@@ -731,7 +781,7 @@ def _evidence_observations(
     ).model_dump(by_alias=True, mode="json")
 
 
-def _append_promotion_event(
+def _append_event(
     repository: KnotRepository,
     *,
     promotion_id: str,
@@ -739,14 +789,23 @@ def _append_promotion_event(
     data: dict[str, object],
 ) -> None:
     event_id = f"event-{uuid4()}"
+    created_at = _now()
     event = {
         "eventId": event_id,
         "promotionId": promotion_id,
         "type": event_type,
         "data": data,
-        "createdAt": _now(),
+        "createdAt": created_at,
     }
     repository.save_raw_document(FirestorePaths.promotion_event(promotion_id, event_id), event)
+    repository.create_audit_event(
+        event_id,
+        {
+            **event,
+            "source": "knot-api",
+            "promotionEventPath": FirestorePaths.promotion_event(promotion_id, event_id),
+        },
+    )
 
 
 def _candidate_explanation(candidate: dict[str, object]) -> str:
