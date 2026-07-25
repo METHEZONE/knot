@@ -57,18 +57,15 @@
 | Evidence 실제/명시 fixture | ⚠️ | 현재 URL 토큰 시뮬(PRD v1 fixture 허용) |
 | 프론트(Society Map/Timeline) | ⬜ | 데모 필수 — §4-F |
 | Cloud Run 배포 | ⬜ | 데모 필수 — §4-E |
-| 용어(campaign↔Promotion) | ⚠️ | §4-G |
+| 용어 정리 | ⚠️ | Product/API/Firestore는 Promotion으로 통일. 기존 Anchor legacy `campaign` 명칭은 Promotion escrow로 매핑 |
 
 ## 4. 남은 작업 & 실행 런북
 
 이 머신엔 Rust/Anchor/Solana CLI·gcloud·pay가 없어 아래는 해당 툴체인+자격증명 환경에서 실행해야 한다.
 
-### A. 중복 stub Anchor 프로그램 제거 (수동)
-be의 no-op stub `web3/program/`은 제거하고 실제 프로그램 `programs/knot-escrow`만 남긴다.
-(통합 세션의 안전 분류기가 재귀 삭제를 차단 → 로컬에서 직접 실행)
-```bash
-git rm -r web3/program && git commit -m "web3: drop stub escrow workspace; keep programs/knot-escrow"
-```
+### A. 중복 stub Anchor 프로그램 제거
+완료. be의 no-op stub `web3/program/`은 제거했고 실제 프로그램
+`programs/knot-escrow`만 남긴다.
 
 ### B. Anchor 빌드 + devnet 배포 (실제 서명 게이트 해제)
 `target/idl`·`target/deploy`는 gitignore라 새 클론엔 없다 → 반드시 재빌드.
@@ -98,7 +95,12 @@ KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py   # (현재 skip �
 Agent Society Map + Promotion Timeline(Next.js, `/promotions/{id}/timeline` 활용). Cloud Run 배포. 데모 필수.
 
 ### G. 용어/네이밍 정리
-문서는 "Promotion", 온체인/일부 문서는 "campaign". 온체인 instruction명(`initialize_campaign` 등)은 기능상 PRD보다 풍부하나 명칭이 다름 → 매핑 문서화 또는 리네이밍.
+Product API, Firestore, frontend, runbook 문서는 `Promotion` / `promotionId`를
+사용한다. 현재 Anchor program과 `backend/knot/escrow`의 `campaign`
+instruction/account 명칭은 legacy on-chain API로 한정하며, Product API payload나
+UI에는 노출하지 않는다. Web3 담당자가 프로그램 API rename을 진행할 때
+`initialize_campaign` -> `initialize_promotion_escrow` 같은 명칭으로 바꾸고
+IDL/client/tests/docs를 같은 커밋에서 갱신한다.
 
 ## 5. 빌드 산출물 주의
 `target/`, `node_modules/`, `.venv/`는 gitignore. 새 클론에서는 `anchor build` / `npm install` /

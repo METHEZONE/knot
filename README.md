@@ -41,7 +41,7 @@ GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
   .venv/bin/python scripts/seed_demo.py --target firestore
 GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
   .venv/bin/python scripts/firestore_smoke.py --target firestore
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
   .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
 ```
 

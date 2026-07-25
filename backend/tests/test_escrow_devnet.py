@@ -15,7 +15,7 @@ _RUN = os.environ.get("KNOT_RUN_DEVNET") == "1"
 @pytest.mark.skipif(not _RUN, reason="KNOT_RUN_DEVNET!=1 (devnet 배포/펀딩 필요)")
 def test_full_milestone_flow():
     # TODO(다음 작업):
-    #   1) initialize_campaign(총액 USDC 예치)
+    #   1) initialize_campaign(Promotion escrow funding; legacy Anchor name)
     #   2) submit_milestone(index=0)
     #   3) approve_and_release(index=0)  # 에이전트 키, cap 이내 → 사람 개입 없이 릴리스
     #   4) 크리에이터 USDC 잔액이 마일스톤 금액만큼 증가했는지 assert

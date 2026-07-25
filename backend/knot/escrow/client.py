@@ -83,9 +83,11 @@ async def initialize_campaign(
     terms_hash: bytes,
     refund_timelock_secs: int,
 ) -> Pubkey:
-    """캠페인 생성 + (딜 총액 + 브랜드측 수수료) 예치. 생성된 campaign PDA 반환.
+    """Create a Promotion escrow via the current Anchor `campaign` instruction.
 
-    terms_hash: 합의된 텀시트 JSON의 sha256 (32바이트).
+    Anchor names still use the legacy `campaign` account/instruction naming.
+    Product API and Firestore callers should expose this as Promotion escrow.
+    `terms_hash` is the sha256 digest of the agreed terms JSON.
     """
     from anchorpy import Context
 

@@ -28,7 +28,7 @@
 7. "대화내역 md로 깃헙에 같이 올려줘(다른 노트북)" + "작업 다 하면 push까지" → 이 문서 + push.
 
 ## 현재 상태
-- **빌드**: `anchor build` ✅ → `target/deploy/knot_escrow.so`, `target/idl/knot_escrow.json`.
+- **빌드**: 원저자 로컬에서 `anchor build` ✅ → `target/deploy/knot_escrow.so`, `target/idl/knot_escrow.json`.
 - **테스트**: `pytest -m "not devnet"` ✅ **5 passed** (PDA 4 + pay.sh sandbox 스모크 1 — `pay --sandbox fetch` 실제 성공).
 - **미완**: `anchor deploy`(devnet) 아직 안 함 → devnet 통합 테스트(`test_escrow_devnet.py`)는 skip 상태.
 - **주의(관측)**: 시스템 Python 3.9로 단위테스트는 solders+pytest만 설치해 통과. `anchorpy`/`pytest-asyncio`는 미설치
@@ -60,9 +60,9 @@ pay --sandbox fetch https://debugger.pay.sh/mpp/quote/AAPL
 
 ## 다음 작업 (우선순위)
 1. **`anchor deploy`(devnet)** + `backend/tests/test_escrow_devnet.py` 채우기:
-   `initialize_campaign` → `submit_milestone` → `approve_and_release`(에이전트 키, cap 이내 → 사람 없이 릴리스)
+   Promotion escrow initialize → `submit_milestone` → `approve_and_release`(에이전트 키, cap 이내 → 사람 없이 릴리스)
    → 크리에이터 USDC 잔액 증가 assert. (`pytest-asyncio` 설치 필요)
-2. **예원과 인터페이스 계약 확정** — `docs/architecture.md §4` 열린 질문: 협상 결과 → `initialize_campaign` 필드 매핑,
+2. **인터페이스 계약 확정** — `docs/architecture.md §4` 열린 질문: Agreement terms → on-chain Promotion escrow 필드 매핑,
    에이전트 키(agent_authority)·지갑 발급·보관, 증빙 방식.
 3. **pay.sh 실지갑**(`pay setup`) + Google Cloud/Nansen 등 실제 유료 API 데모 결제(흐름1).
 4. (옵션) 마일스톤 pay.sh 지표검증, 분쟁(`raise_dispute`) 처리.

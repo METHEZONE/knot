@@ -4,19 +4,19 @@ Update this file at the end of every Codex task.
 
 ## Current milestone
 
-`M4 — Evidence verification API baseline with Firestore persistence`
+`M4 — Integrated backend/Web3 baseline with Firestore persistence`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | deferred | 2026-07-24 | Folder kept empty by request |
-| knot-api | Evidence API baseline | 2026-07-24 | Promotion, match run, negotiation, agreement and evidence APIs wired to repository boundary |
-| creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
-| web3 gateway | M3 lock validation skeleton | 2026-07-24 | Validates escrow lock requests and returns idempotent simulated receipts |
-| Anchor program | skeleton initialized | 2026-07-24 | Minimal Anchor workspace |
-| Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; infra files not committed yet |
-| end-to-end demo | not started | - | |
+| frontend | deferred | 2026-07-25 | Folder kept empty by request |
+| knot-api | Escrow/evidence API baseline | 2026-07-25 | Promotion, match run, negotiation, agreement, evidence and simulated escrow release APIs wired to repository boundary |
+| creator A2A service | M2 negotiation baseline | 2026-07-25 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
+| web3 gateway | M3 lock validation skeleton | 2026-07-25 | Validates escrow lock requests and returns idempotent simulated receipts |
+| Anchor program | real workspace retained | 2026-07-25 | Actual program lives in `programs/knot-escrow`; duplicate no-op `web3/program` stub removed |
+| Terraform/GCP | project switch pending | 2026-07-25 | Current target project is `knot-dev-503505`; Firestore/API/IAM/Cloud Run must be rechecked in this project |
+| end-to-end demo | simulated backend path only | 2026-07-25 | Backend happy path reaches simulated escrow lock/release; live Cloud Run and devnet signatures remain |
 
 ## Contract versions
 
@@ -29,25 +29,21 @@ Matching weights: matching-v1
 Brand policy: brand-policy-v1
 Creator policy: creator-policy-v1
 Evidence policy: verification-v1
-Escrow program: unset
+Escrow program: Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu
 ```
 
 ## Latest validation
 
 ```text
 .venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py: passed.
-.venv/bin/python -m pytest backend/tests: passed, 39 tests and 3 skipped emulator tests, with one FastAPI/Starlette deprecation warning from TestClient.
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py: passed, 3 tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python -m mypy backend/apps backend/libs: passed.
+env KNOT_ESCROW_PROGRAM_ID=Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu KNOT_USDC_MINT=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU .venv/bin/python -m pytest backend/tests: passed, 58 tests and 5 skipped gated tests, with one FastAPI/Starlette deprecation warning from TestClient.
 .venv/bin/python scripts/seed_demo.py --target memory: passed, loaded 12 demo documents.
 .venv/bin/python scripts/firestore_smoke.py --target memory: passed.
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev: passed.
-env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore .venv/bin/python scripts/firestore_smoke.py --target firestore: passed against real GCP Firestore.
 cd web3/gateway && npm install: passed, with local Node v20.13.0 engine warning from a transitive ESLint package.
 cd web3/gateway && npm run lint: passed.
 cd web3/gateway && npm test: passed, 5 tests.
 cd web3/gateway && npm run build: passed.
-cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 ```
 
 ## Decisions made during implementation
@@ -89,18 +85,24 @@ cd web3/gateway && npm audit --audit-level=moderate: passed, 0 vulnerabilities.
 - Added allowlist checks for mint and program ID, positive amount validation, and idempotent replay for duplicate lock requests.
 - Kept lock execution as `SIMULATED`; real Solana signing, RPC submission, Secret Manager access, and transaction persistence remain future work.
 - Created root `.env` file from `.env.example` template and updated `backend/libs/settings/config.py` with automatic `.env` loading support for local GCP and Firebase development.
-- Enabled `firestore.googleapis.com` in GCP project `knot-dev-gcp`, created Firestore Native `(default)` in `us-central1`, configured local ADC quota project, and verified real Firestore seed/readback.
+- Previous Firestore live verification was done in an earlier dev project and is now obsolete. The active dev project is `knot-dev-503505`; Firestore Native setup and seed/readback must be rerun there.
 - Added `GOOGLE_CLOUD_PROJECT` to `.env.example` and made Firestore seed/smoke scripts default to `GOOGLE_CLOUD_PROJECT` or `GCP_PROJECT_ID`.
+- Merged backend and blockchain work into `main` through `integrate/be-blockchain`.
+- Added simulated Product API escrow lock/release endpoints with deterministic policy gates, PaymentOperation, IdempotencyRecord and receipt documents.
+- Removed duplicate no-op Anchor workspace `web3/program`; the only retained Anchor workspace is `programs/knot-escrow`.
+- Updated GCP target project references from the previous dev IDs to `knot-dev-503505`.
+- Normalized docs so Product/API/Firestore/frontend terminology is Promotion; current Anchor `campaign` names are documented as legacy on-chain API names only.
 
 
 ## Known blockers
 
-- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet.
+- GCP project switch to `knot-dev-503505` is not verified yet; rerun gcloud auth, ADC quota project, API enablement, Firestore Native database check/create, IAM/service accounts and seed/smoke.
+- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet in `knot-dev-503505`.
 - Firestore emulator requires Java 25 or higher after future gcloud releases; local Java is currently 21 and still works with the installed emulator but emitted a deprecation warning.
 - Firestore composite indexes are documented as future needs, but no index file is required by current implemented queries.
-- Devnet program ID and mint not configured.
+- Local machine does not currently expose `anchor`, `solana`, or `cargo` on PATH, so Anchor build/deploy/devnet tests were not run here.
 - pay.sh sandbox resource not selected.
 
 ## Next task
 
-Add Cloud Run-oriented backend runtime configuration and service account/IAM bootstrap docs, then wire global `auditEvents` persistence.
+Switch GCP project and ADC to `knot-dev-503505`, bootstrap Firestore/IAM/Cloud Run resources, then wire Product API escrow endpoints to the private web3 gateway or Python Anchor client for real devnet signatures.
