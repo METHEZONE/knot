@@ -18,6 +18,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     // Defaults match the real devnet knot-escrow program and USDC-SPL mint
     // (programs/knot-escrow, backend/.env.example, libs/settings/config.py).
     allowedMint: env.KNOT_USDC_MINT ?? "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-    allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu"
+    allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
   };
 }

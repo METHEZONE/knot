@@ -10,7 +10,7 @@ function lockPayload(overrides: Record<string, unknown> = {}) {
     termsHash: "sha256:1234567890abcdef",
     expectedAmountBaseUnits: "650000000",
     mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-    programId: "Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu",
+    programId: "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj",
     network: "solanaDevnet",
     brandAuthority: "brand-wallet",
     creatorDestination: "creator-wallet",
