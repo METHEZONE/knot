@@ -19,7 +19,7 @@
 ## 2. Resource naming
 
 ```text
-Project: knot-agentic-dev
+Project: knot-dev-503505
 Region: us-central1
 Artifact repository: knot-containers
 Cloud Run:
@@ -37,7 +37,9 @@ Service accounts:
   knot-build-sa
 ```
 
-Actual project ID must be configured, not hardcoded.
+`knot-dev-503505` is the current hackathon dev project. Keep it configurable in
+code and deployment scripts so the project can still be changed without source
+edits.
 
 ## 3. IAM matrix
 

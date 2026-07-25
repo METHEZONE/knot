@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 def firestore_repository() -> KnotRepository:
     from google.cloud import firestore
 
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "knot-agentic-dev")
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "knot-dev-503505")
     return KnotRepository(FirestoreDocumentStore(firestore.Client(project=project_id)))
 
 

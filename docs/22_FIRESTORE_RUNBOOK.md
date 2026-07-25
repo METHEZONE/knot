@@ -192,9 +192,9 @@ Firestore emulator integration is not wired yet. When added, use this shape:
 gcloud emulators firestore start --host-port=127.0.0.1:8085
 export FIRESTORE_EMULATOR_HOST=127.0.0.1:8085
 export KNOT_REPOSITORY_BACKEND=firestore
-export GOOGLE_CLOUD_PROJECT=knot-agentic-dev
-.venv/bin/python scripts/seed_demo.py --target firestore --project knot-agentic-dev
-.venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev
+export GOOGLE_CLOUD_PROJECT=knot-dev-503505
+.venv/bin/python scripts/seed_demo.py --target firestore --project knot-dev-503505
+.venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-dev-503505
 ```
 
 If the Google Cloud CLI is not installed, install it before using the emulator.
@@ -212,7 +212,7 @@ in-memory store:
 Current integration tests are gated by `FIRESTORE_EMULATOR_HOST`:
 
 ```text
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
   .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
 ```
 
@@ -262,11 +262,11 @@ env GOOGLE_CLOUD_PROJECT=<gcp-project-id> GCP_PROJECT_ID=<gcp-project-id> KNOT_R
 Current verified project:
 
 ```text
-projectId: knot-dev-gcp
-database: projects/knot-dev-gcp/databases/(default)
+projectId: knot-dev-503505
+database: projects/knot-dev-503505/databases/(default)
 type: FIRESTORE_NATIVE
 location: us-central1
-verifiedAt: 2026-07-24
+verifiedAt: pending recheck after ADC and project switch
 ```
 
 Runtime service accounts:
@@ -357,13 +357,13 @@ Run these checks after DB/API changes:
 .venv/bin/python -m ruff check backend scripts/seed_demo.py scripts/firestore_smoke.py
 .venv/bin/python -m mypy backend/apps backend/libs
 .venv/bin/python -m pytest backend/tests
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
   .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
 .venv/bin/python scripts/seed_demo.py --target memory
 .venv/bin/python scripts/firestore_smoke.py --target memory
-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-agentic-dev \
-  .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-agentic-dev
-env GOOGLE_CLOUD_PROJECT=knot-dev-gcp GCP_PROJECT_ID=knot-dev-gcp KNOT_REPOSITORY_BACKEND=firestore \
+env FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
+  .venv/bin/python scripts/firestore_smoke.py --target firestore --project knot-dev-503505
+env GOOGLE_CLOUD_PROJECT=knot-dev-503505 GCP_PROJECT_ID=knot-dev-503505 KNOT_REPOSITORY_BACKEND=firestore \
   .venv/bin/python scripts/firestore_smoke.py --target firestore
 git diff --check
 ```

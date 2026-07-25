@@ -15,7 +15,7 @@ PROGRAM_ID = Pubkey.from_string(os.environ.get("KNOT_ESCROW_PROGRAM_ID", _DEFAUL
 
 
 def campaign_pda(brand: Pubkey, campaign_id: int) -> tuple[Pubkey, int]:
-    """seeds = [b"campaign", brand, campaign_id(u64 LE)]"""
+    """Legacy Anchor PDA for one Promotion escrow."""
     return Pubkey.find_program_address(
         [b"campaign", bytes(brand), int(campaign_id).to_bytes(8, "little")],
         PROGRAM_ID,

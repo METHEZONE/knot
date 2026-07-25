@@ -28,11 +28,8 @@ knot/
 │   │   ├── tests/
 │   │   ├── Dockerfile
 │   │   └── package.json
-│   └── program/
-│       ├── programs/knot_escrow/
-│       ├── tests/
-│       ├── Anchor.toml
-│       └── Cargo.toml
+├── programs/
+│   └── knot-escrow/
 └── docs/
 ```
 
@@ -42,7 +39,7 @@ knot/
 - Policy functions are pure and isolated in `backend/libs/policies`.
 - A2A protocol types/adapters are separate from KNOT domain messages.
 - When frontend work starts, `frontend/features` is organized by Promotion, matching, negotiation, agreement, evidence and settlement.
-- Solana program logic stays in `web3/program`; RPC/signing orchestration stays in `web3/gateway`.
+- Solana program logic stays in `programs/knot-escrow`; RPC/signing orchestration stays in `web3/gateway`.
 - Terraform owns deployed GCP resources when `infra/` is added. Manual console changes must be backported or documented.
 - The primary code areas are `frontend`, `backend`, and `web3`; support folders such as `infra/` and `scripts/` are added only when their implementation starts.
 

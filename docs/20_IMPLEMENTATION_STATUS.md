@@ -14,8 +14,8 @@ Update this file at the end of every task.
 | knot-api | Escrow lock/release API added | 2026-07-25 | Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release wired to the repository boundary; escrow receipts are SIMULATED pending on-chain signing |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
-| Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human |
-| Terraform/GCP | Firestore Native configured | 2026-07-24 | `knot-dev-gcp` has Firestore API enabled and `(default)` Native database in `us-central1`; infra files not committed yet |
+| Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
+| Terraform/GCP | project switch pending | 2026-07-25 | Target project is `knot-dev-503505`; Firestore/API/IAM/Cloud Run must be re-checked/created in this project (earlier `knot-dev-gcp` verification is obsolete) |
 | end-to-end demo | settlement leg proven on devnet | 2026-07-25 | on-chain escrow settlement verified; full app→chain wiring, pay.sh flow, frontend and Cloud Run remain |
 
 ## Contract versions
@@ -55,20 +55,24 @@ KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py: 1 passed — real 
 - Added typed domain models, deterministic Brand/Creator/Evidence policy functions, `matching-v1` scoring, A2A v1 models, an in-memory A2A task store with idempotency, and deterministic `termsHash`.
 - Added the Firestore-compatible `DocumentStore`, in-memory + adapter implementations, path helpers, serialization, demo seed, and gated emulator integration tests.
 - Added Product API routes for Promotion, match run, negotiation, agreement, evidence, and the Promotion timeline; kept Gemini out of every authorization boundary (deterministic placeholders).
-- Enabled Firestore Native in `knot-dev-gcp` and verified real seed/readback.
-- **Merged `be` and `hyo/blockchain-setup` into `integrate/be-blockchain`** (PR #1). Unified `backend/pyproject.toml`; disabled the anchorpy pytest plugin (`-p no:pytest_anchorpy`) that imports the removed `pytest_xprocess`; fixed lint/type issues surfaced by the merge.
+- **Merged `be` and `hyo/blockchain-setup` into `main`** through `integrate/be-blockchain` (PR #1). Unified `backend/pyproject.toml`; disabled the anchorpy pytest plugin (`-p no:pytest_anchorpy`) that imports the removed `pytest_xprocess`; fixed lint/type issues surfaced by the merge.
 - **Added escrow lock/release API** (`/agreements/{id}/escrow:lock`, `/escrows/{id}`, `/escrows/{id}/milestones/{mid}:release`, `/transaction-receipts/{id}`) with `libs/payments/settlement.py` (fee 0 → lock == payable fixed amount), termsHash re-check, autoEscrow/autoRelease gates, evidence-passed precondition, PaymentOperation + IdempotencyRecord + audit, and idempotent replay. Receipts are SIMULATED as a seam for real signing. 14 new tests.
+- Refactored the escrow routes (shared idempotency/receipt/operation helpers; reuse of `canonical_json`/`sha256_prefixed`; release reads the stored milestone split) with no behavior change.
 - **Installed the Solana/Anchor toolchain and deployed the program to devnet.** The original `Hv74…` program keypair was gitignored/unavailable, so `anchor keys sync` adopted the built keypair id `Aj63…`; propagated it across `declare_id`, `Anchor.toml`, `pdas.py`, backend `Settings`, gateway config, and `.env.example`.
 - **anchorpy 0.21 cannot parse anchor 1.x's new IDL format**, so `test_escrow_devnet.py` builds instructions with solders directly instead of `knot.escrow.client.load_program`. It reuses the singleton config's treasury/mint so it is repeatable.
+- Removed the duplicate no-op Anchor workspace `web3/program`; the only retained Anchor workspace is `programs/knot-escrow`.
+- Switched the GCP target project to `knot-dev-503505`; earlier Firestore live verification in the previous dev project is obsolete and must be re-run there.
+- Normalized docs so Product/API/Firestore/frontend terminology is Promotion; current Anchor `campaign` names are documented as legacy on-chain API names only.
 
 ## Known blockers / open items
 
 - Escrow API receipts are SIMULATED — real Solana signing, RPC submission, Secret Manager access, and transaction persistence still to wire to the deployed program.
-- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet.
-- pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow.
+- GCP project switch to `knot-dev-503505` is not verified yet; rerun gcloud auth, ADC quota project, API enablement, Firestore Native check/create, IAM/service accounts and seed/smoke.
+- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet in `knot-dev-503505`.
+- pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow; sandbox resource not selected.
 - Frontend (Agent Society Map, Promotion Timeline) not started.
 - `knot.escrow.client` (anchorpy) is broken against anchor 1.x IDL until anchorpy supports the new format or the client is ported to solders.
 
 ## Next task
 
-Wire the escrow API's SIMULATED receipts to the deployed devnet program (real signing path — decide Python-direct vs TS gateway), then connect pay.sh flow-1, then Cloud Run deploy and the frontend.
+Bootstrap Firestore/IAM/Cloud Run in `knot-dev-503505`, then wire the escrow API's SIMULATED receipts to the deployed devnet program (real signing — decide Python-direct vs TS gateway), then connect pay.sh flow-1 and the frontend.
