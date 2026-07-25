@@ -22,8 +22,8 @@
     `[tool.pytest.ini_options] addopts = "-p no:pytest_anchorpy"`로 비활성화(우리는 localnet 픽스처 미사용).
   - `knot/**` 코드가 be의 ruff 설정으로 검사되며 위반 7건(UP035/UP006/UP045/E501/I001) 수정.
   - mypy redundant-cast 1건(`libs/repositories/store.py`) 수정.
-  - **검증**: `ruff` pass · `mypy` Success(38 files) · `pytest` **58 passed / 5 skipped**
-    (devnet·pay.sh·firestore-emulator는 정상 gated) · gateway `lint`/`test`(5)/`build` pass.
+  - **검증**: `ruff` pass · `mypy` Success(38 files) · `pytest` **59 passed / 4 skipped**
+    (firestore-emulator·devnet는 gated; pay.sh 스모크는 `pay` 설치 시 실행) · gateway `lint`/`test`(5)/`build` pass.
 - **escrow lock/release API 신설** (be, PRD §4.1 계약의 미구현 부분):
   - `POST /api/v1/agreements/{id}/escrow:lock`, `GET /escrows/{id}`,
     `POST /escrows/{id}/milestones/{mid}:release`, `GET /transaction-receipts/{id}`.
@@ -36,8 +36,12 @@
     `libs/payments/settlement.py`·`_simulated_receipt`가 실제 서명으로 갈아끼울 seam.
   - 테스트 14개 신설(`test_settlement.py` 4 + `test_api_escrow.py` 10).
 - **설정 정렬**: be `Settings`와 gateway `config.ts` 기본값을 실제 devnet 프로그램/민트로 통일
-  (`programId=Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu`,
+  (`programId=Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`,
   `mint=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, `network=solanaDevnet`).
+- **devnet 배포 + 온체인 정산 검증** ✅: Anchor 프로그램을 devnet에 배포(program
+  `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`), `backend/tests/test_escrow_devnet.py` 통과 —
+  실제 USDC 마일스톤 정산(브랜드 에이전트가 사람 없이 cap 이내 릴리스, creator +0.7 USDC, 평판 갱신).
+  anchorpy 0.21이 anchor 1.x IDL을 못 읽어 테스트는 solders로 인스트럭션을 직접 빌드.
 
 ## 3. PRD 준수 매트릭스 (갱신)
 
@@ -51,7 +55,8 @@
 | escrow lock/release API + 계약 | ✅ (SIMULATED) | 온체인 서명 배선 전까지 시뮬 |
 | 수수료 미신설(불변식5) | ✅ | be lock=고정액, fee 0. **온체인도 fee_bps=0로 config 필요** |
 | 멱등/감사/정책 게이트 | ✅ | |
-| 실제 devnet lock/release 서명 | ⬜ | 데모 하드게이트 — §4-B/C |
+| 실제 devnet 배포 + 온체인 정산 | ✅ 검증됨 | program `Aj63…`, `test_escrow_devnet.py` 통과 (agent가 cap 이내 자율 릴리스) |
+| escrow API → 실제 온체인 서명 배선 | ⬜ | be 시뮬 receipt를 실제 서명으로 — §4-C |
 | pay.sh/x402 흐름1을 Brand Agent에 연결 | ⬜ | §4-D |
 | Gemini/Vertex AI 설명 생성 | ⬜(베이스라인 허용) | 판정 가점·텔레메트리 |
 | Evidence 실제/명시 fixture | ⚠️ | 현재 URL 토큰 시뮬(PRD v1 fixture 허용) |
@@ -70,14 +75,14 @@ be의 no-op stub `web3/program/`은 제거하고 실제 프로그램 `programs/k
 git rm -r web3/program && git commit -m "web3: drop stub escrow workspace; keep programs/knot-escrow"
 ```
 
-### B. Anchor 빌드 + devnet 배포 (실제 서명 게이트 해제)
-`target/idl`·`target/deploy`는 gitignore라 새 클론엔 없다 → 반드시 재빌드.
+### B. Anchor 빌드 + devnet 배포 ✅ 완료
+program `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`로 devnet 배포됨(upgrade authority = 배포 지갑).
+`target/`은 gitignore라 새 클론에선 재빌드 필요. 재현:
 ```bash
-solana config set --url devnet && solana airdrop 2
-anchor build              # target/idl/knot_escrow.json 생성 → anchorpy 클라이언트 언블록
-anchor deploy             # devnet 배포 (program id 고정: Hv74…s5hu)
-# devnet USDC-SPL 토큰계정 + 펀딩 후:
-KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py   # (현재 skip 스텁 → 본문 작성 필요)
+solana config set --url devnet   # 지갑에 devnet SOL 필요(배포 rent ≈ 2.03 SOL, close 시 회수)
+anchor keys sync && anchor build # program keypair에 declare_id 동기화 + IDL 생성
+anchor deploy                    # devnet 배포
+KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -s   # 실제 마일스톤 정산 통과
 ```
 
 ### C. 실제 온체인 서명 배선 (SIMULATED → 실제)

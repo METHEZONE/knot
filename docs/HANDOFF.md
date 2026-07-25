@@ -13,7 +13,7 @@
   제출 **2026-08-03**, 데모 **2026-08-07(금)**. **pay.sh / x402 / USDC / Solana 가산점** (pay.sh = 주최사 제품).
 - 브랜치 `hyo/blockchain-setup` 생성 → 블록체인 백엔드 슬라이스 스캐폴딩.
 - 툴체인 설치: solana-cli 4.1.1 · anchor 1.1.2(avm) · pay 0.21 · rust 1.95.
-- Anchor 에스크로 프로그램 작성 → **`anchor build` 성공**, IDL 생성. program id `Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu`.
+- Anchor 에스크로 프로그램 작성 → **`anchor build` 성공**, IDL 생성. program id `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`.
 - Python 백엔드(pay.sh 래퍼 / anchorpy 클라이언트 / 평판) + pytest → **단위·샌드박스 테스트 5 pass**.
 
 ## 대화·결정 로그 (시간순)

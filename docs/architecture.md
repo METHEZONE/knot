@@ -41,7 +41,7 @@
 
 ## 3. 온체인 레퍼런스 (`programs/knot-escrow`)
 
-- **Program ID**: `Hv74c9a4rKMHpsy7hgCj7a11tDRaAZG49Ss7bLscs5hu` (devnet, `anchor keys list`)
+- **Program ID**: `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj` (devnet, `anchor keys list`)
 - **결제 토큰**: USDC-SPL (devnet mint `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`)
 
 ### 계정 (State)
