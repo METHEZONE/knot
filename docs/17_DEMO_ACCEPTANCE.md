@@ -9,7 +9,7 @@ Show one concise creator-marketing pain and the Brand Human's bounded Promotion 
 ### 0:25–1:20 — Agent discovery and A2A negotiation
 
 - Brand Agent ranks creators.
-- Agent Society Map activates candidate and selected creator nodes.
+- Agent Workflow shows candidate ranking and selected creator negotiation events.
 - Offer, counter and accept messages appear with rationale.
 - One deliberately invalid term is blocked by policy.
 - Final Agreement Artifact and hash appear.

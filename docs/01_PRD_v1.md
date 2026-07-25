@@ -118,7 +118,7 @@ A passing milestone can trigger a partial USDC release. The sum of milestone per
 
 The frontend must show:
 
-- Agent Society Map: Brand Agent, candidate Creator Agents, active A2A relationship and payment services
+- Agent Workflow: Brand Agent, selected Creator Agent, A2A messages, policy checks, pay.sh/x402 API expense, evidence verification and on-chain escrow events
 - Promotion Timeline: matching, messages, decisions, agreement, escrow, evidence, release
 - policy blocks and escalation reasons
 - Solana transaction signatures and explorer links

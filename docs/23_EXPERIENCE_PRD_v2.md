@@ -1,10 +1,14 @@
 # KNOT Experience PRD v2 — Onboarding, Agent Hatching, Expedition & Dual Dashboards
 
 **Product:** KNOT — Brand × Creator Agentic Promotion Platform
-**Document version:** v2 (experience layer on top of `01_PRD_v1.md`)
+**Document version:** v2.1 (experience layer on top of `01_PRD_v1.md`)
 **Owner:** 민성 (frontend/UX/PRD)
 **Status:** Approved direction — build baseline for `frontend/`
 **Updated:** 2026-07-25
+
+> 2026-07-25 MVP reset: the current frontend implementation intentionally
+> ignores this broader page map and keeps only the simple role flows in
+> `PLANS.md` until the first end-to-end demo is stable.
 
 ## 0. Relationship to v1
 
@@ -36,7 +40,7 @@ negotiation scenes are good enough to screenshot.
 ## 2. Delivery tiers (deadline 8/3)
 
 - **Tier A — in the 8/3 demo:** hatching onboarding (both sides), Promotion
-  creation wizard, Expedition view (Agent Society Map v2), negotiation
+  creation wizard, Agent Workflow execution log, negotiation
   theater + public replay link, dual dashboards with milestones/evidence,
   in-app notifications, seeded-data fallback for every step.
 - **Tier B — build if green by 8/1:** affiliate redirector + click KPI,
@@ -104,25 +108,23 @@ Completion lands on the Creator Dashboard with the agent idling at its desk.
 3. **Hatching ceremony** — identical beat to the creator side; the brand's
    manager hatches, greets, and signs the mandate.
 
-## 6. Expedition — the Agent Society Map becomes a world (FR-12)
+## 6. Agent Workflow execution log (FR-12)
 
-Replaces the static FR-8 map with a watchable simulation, powered ONLY by
-persisted events (poll `GET /promotions/{id}/timeline` + negotiation
-messages; no invented state):
+MVP update: the map/world view is out of scope. The Promotion Control Center
+uses a compact execution log powered ONLY by persisted events (poll
+`GET /promotions/{id}/timeline` + negotiation messages; no invented state):
 
-- **Dispatch.** Activating a Promotion sends the brand agent walking out of
-  its office onto the map (Pikmin-style send-off). Candidate creator agents
-  appear as houses/desks with their diagnosis-derived skins.
-- **Matching.** The agent visits candidates; deterministic scores render as
-  the agent "inspecting" each house; hard-filtered candidates show the
-  filter reason on hover (`hardFilterReasons[]`).
+- **Dispatch.** Activating a Promotion creates an ordered workflow event list.
+  Candidate creator agents appear in the Candidates view with their
+  diagnosis-derived skins and deterministic ranking.
+- **Matching.** Deterministic scores render as structured candidate cards;
+  hard-filtered candidates show the filter reason (`hardFilterReasons[]`).
 - **The paid check.** The one pay.sh sandbox verification call (docs/11 §8)
   is a visible beat: the agent stops at a toll booth labeled "verification
   API — paid by agent (x402)" and the receipt pops. This is the hackathon's
   core judging moment; give it screen time.
-- **Negotiation.** The brand agent knocks on the selected creator agent's
-  door; both sit at a table; speech bubbles stream the real
-  `knot.negotiation.v1` messages (§7).
+- **Negotiation.** The selected Brand Agent and Creator Agent stream the real
+  `knot.negotiation.v1` messages (§7) in the negotiation theater.
 - **Policy block moment.** The deliberately invalid term (demo gate) renders
   as a red stamp slamming "BLOCKED — {rule}: {field}" between the agents.
 - **Escrow/settlement.** Locking = a vault door closing with the devnet
@@ -236,16 +238,13 @@ Frontend builds against committed fixtures for all of these on day one
 
 - `frontend/` Next.js + TypeScript (App Router), Cloud Run, per AGENTS.md.
 - `frontend/features/` = onboarding, promotion, matching, negotiation,
-  agreement, evidence, settlement, dashboard, replay, map (extends docs/05
-  list with onboarding/dashboard/replay/map).
-- Expedition/hatching scenes: Canvas/DOM hybrid (framer-motion + a single
-  `<canvas>` map layer); characters are parametric SVG (same approach as the
-  ARCA Spirit system — palette/accessory from diagnosis). No game engine.
+  agreement, evidence, settlement, dashboard, replay, workflow (extends docs/05
+  list with onboarding/dashboard/replay/workflow).
+- Hatching scenes use DOM/SVG components. The Agent Workflow is card/list based
+  for MVP; no canvas map layer or game engine.
 - Data: poll timeline + negotiation messages at 1–2s during active scenes
   (SSE later if `/stream` lands); SIMULATED/null-signature states first-class.
-- Reduced-motion: scene falls back to the v1 static Society Map + list
-  timeline (which must exist anyway as the audit view — FR-8 is the base
-  layer, expedition is the skin).
+- Reduced-motion: the workflow log and timeline remain plain static lists.
 
 ## 14. Risks & guardrails
 

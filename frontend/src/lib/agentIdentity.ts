@@ -6,8 +6,8 @@
  * every session, with no server round trip. Category drives palette and
  * accessory (documented table below); the agentId hash fills in the rest.
  *
- * Used by both the UI (AgentAvatar, AgentCharacter, hatching ceremony) and the
- * demo provider, so the agent that hatches is the agent that shows up later.
+ * Used by the simple MVP UI so the same agent id always produces the same
+ * character.
  */
 
 export type AgentSide = "brand" | "creator";

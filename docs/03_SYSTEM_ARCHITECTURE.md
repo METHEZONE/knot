@@ -53,7 +53,7 @@ flowchart LR
 ### `knot-web`
 
 - Promotion form and dashboard
-- Agent Society Map
+- Agent Workflow execution log
 - Promotion Timeline and A2A event view
 - Evidence submission
 - Firebase Authentication client

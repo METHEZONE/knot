@@ -6,7 +6,7 @@
 
 ## 1. Tracks
 
-- FE/UX: frontend, Agent Society Map, Promotion Timeline, demo polish
+- FE/UX: frontend, Agent Workflow, Promotion Timeline, demo polish
 - Backend/Agents: domain, Firestore, policy, matching, ADK, A2A, verification, GCP integration
 - Web3/Payments: gateway, Anchor escrow, devnet, pay.sh/x402, receipts
 
@@ -17,7 +17,7 @@
 | 7/24 | freeze docs, schemas, service boundaries | escrow/gateway contract review | screen/data contract review | v1 scope signed off |
 | 7/25 | repo bootstrap, Firestore model, seed fixtures | local validator, Anchor skeleton, gateway skeleton | Next.js shell, auth/demo account | all services run locally |
 | 7/26 | policy engine and matching v1 | initialize/fund/release unit tests | Promotion form and dashboard shell | seed Promotion visible |
-| 7/27 | Brand ADK tools and structured outputs | devnet program deploy and receipt adapter | Match results and Society Map | deterministic match run |
+| 7/27 | Brand ADK tools and structured outputs | devnet program deploy and receipt adapter | Match results and Agent Workflow | deterministic match run |
 | 7/28 | Creator A2A service and multi-turn state | private Cloud Run gateway, Secret Manager | live A2A timeline | counter and Artifact E2E |
 | 7/29 | agreement hashing, orchestration | escrow lock integration | Agreement/payment state UI | first devnet lock |
 | 7/30 | evidence analysis and policy gate | milestone release integration | evidence and release UI | full E2E happy path |

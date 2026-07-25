@@ -75,7 +75,7 @@ or equivalent task runner scripts. Until that runner is introduced, use service-
 ## 5. UI acceptance
 
 - loading, empty, error and terminal states are visible
-- Agent Society Map updates selected/active agents
+- Agent Workflow shows A2A, policy, API/x402, evidence and on-chain events as separate execution classes
 - Promotion Timeline orders events deterministically
 - blocked actions show rule and field
 - transaction signature opens correct devnet explorer

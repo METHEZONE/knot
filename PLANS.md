@@ -56,5 +56,120 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Anchor program deployed to devnet (`Aj63…`) and on-chain milestone settlement verified
 - [ ] Wire escrow API SIMULATED receipts to real on-chain signing
 - [ ] pay.sh flow-1 (agent-paid verification) wired into Brand Agent flow
-- [ ] Frontend Agent Society Map and Promotion Timeline
+- [ ] Frontend Agent Workflow and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo
+
+---
+
+## Frontend GCP Migration Plan
+
+### Goal
+
+Rebuild `frontend/` as a Cloud Run-targeted Next.js App Router application
+using the current hand-drawn KNOT visual style and the
+`docs/KNOT_MVP_v1_1_Document_Pack` MVP route/data contracts. The app must run
+against deterministic mock state first while keeping the API boundary
+replaceable by `NEXT_PUBLIC_KNOT_DATA_MODE=api`.
+
+### Scope
+
+May change `frontend/`, frontend-related docs, `PLANS.md`, and
+`docs/20_IMPLEMENTATION_STATUS.md`. GCP deployment target is Cloud Run; other
+preview hosts are ignored for this migration. Backend, Firestore, A2A, and web3
+contracts are consumed as documented but not reworked in this frontend
+migration.
+
+### Current state
+
+`frontend/` already contains a Next 16 + TypeScript + Tailwind app with the
+paper/ink KNOT style, demo fixtures, and several route prototypes. It does not
+yet expose the MVP pack route map, shared onboarding shell, deterministic
+lifecycle controls for every P0 flow, or Cloud Run deployment documentation.
+
+### Milestones
+
+- [x] M1 — contracts, mock repository, status mappers, shell primitives
+- [x] M2 — onboarding, dashboard, Promotion, candidate, workflow, negotiation,
+      agreement, payment and evidence routes
+- [x] M3 — settings/supporting pages, Cloud Run docs, tests and production build
+
+### Contracts
+
+- Use `Promotion`/`promotionId` in all user-visible code and frontend routes.
+- Preserve MVP pack frontend contract field names.
+- Page components call a `KnotApi` boundary selected by
+  `NEXT_PUBLIC_KNOT_DATA_MODE=mock|api`.
+- Mock mode must be deterministic and label fixture transaction signatures as
+  demo data unless an API response provides a real signature.
+
+### Validation
+
+Run from `frontend/`:
+
+```text
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+### Decisions and surprises
+
+- 2026-07-25: Work starts on branch `frontend/gcp-migration`.
+- 2026-07-25: Next 16 local docs confirm dynamic route `params` are promises;
+  dynamic pages must use `async`/`await` or React `use`.
+- 2026-07-25: MVP pack references older docs under the pack. Repository
+  canonical docs `01/02/03/07/23` remain higher-level constraints; the MVP pack
+  supplies frontend page/data implementation details.
+- 2026-07-25: Implemented MVP route shell, deterministic mock snapshot,
+  lifecycle state controls, Cloud Run standalone config and frontend unit tests.
+- 2026-07-25: Restored the long-form waitlist landing as the root `/` page and
+  kept Brand/Creator demo onboarding as secondary entry points.
+- 2026-07-25: Removed the Society Map from the MVP frontend scope. The
+  Promotion center now links to an Agent Workflow execution log that separates
+  A2A, pay.sh/x402 API spend, policy checks, evidence verification, and
+  on-chain escrow events.
+
+### Completion record
+
+Branch `frontend/gcp-migration` contains the frontend migration baseline.
+Validation passed: `npm run typecheck`, `npm run lint`, `npm test`, and
+`npm run build` with network access for Google Fonts.
+
+---
+
+## Simple Frontend MVP Reset Plan
+
+### Goal
+
+Replace the broad MVP pack route surface with the smallest product narrative
+that can demo one brand/creator deal from setup to result.
+
+### Scope
+
+Frontend only. Backend, Firestore, A2A, and web3 code are not changed in this
+reset. Documentation updates are limited to implementation status and frontend
+handoff notes.
+
+### Routes
+
+```text
+/
+/creator/onboarding -> /creator/offers -> /creator/negotiate -> /creator/result -> /creator/milestones
+/brand/onboarding -> /brand/matching -> /brand/negotiate -> /brand/result -> /brand/settlement
+```
+
+### Decisions and surprises
+
+- 2026-07-25: User rejected the broad page-map approach as too complex.
+- 2026-07-25: Current frontend MVP ignores the document-pack route map and
+  keeps only the two role flows above.
+- 2026-07-25: Creator onboarding is two decisions: SNS URL analysis, then
+  minimum/blocked-topic preferences.
+- 2026-07-25: Brand onboarding is two decisions: product document/PDF analysis,
+  then proposal basics and maximum price.
+- 2026-07-25: Offers, matching and negotiation must read as agent-driven A2A
+  work, not manual human work. The UI shows "진행중이에요!" character states,
+  sanitized progress, and final terms only. Private policy such as creator
+  minimums, blocked topics, brand hard maximums and internal scoring details
+  must not be shown to the counterparty.
