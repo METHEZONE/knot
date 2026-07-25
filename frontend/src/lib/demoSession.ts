@@ -41,6 +41,14 @@ export function demoRoleFromSearch(search: string): DemoRole | null {
   return isDemoRole(value) ? value : null;
 }
 
+/**
+ * Fired whenever the role changes so anything already mounted can re-read it.
+ * Without this, a component that reads the role in a mount effect can win the
+ * race against the page that sets it and show the previous role until the next
+ * navigation — which is exactly what the top bar chip did.
+ */
+export const DEMO_ROLE_EVENT = "knot:demo-role";
+
 /** Remember the role for this tab. No-op during SSR. */
 export function persistDemoRole(role: DemoRole): void {
   if (typeof window === "undefined") return;
@@ -49,6 +57,7 @@ export function persistDemoRole(role: DemoRole): void {
   } catch {
     // Private-mode storage failures are not worth surfacing.
   }
+  window.dispatchEvent(new Event(DEMO_ROLE_EVENT));
 }
 
 /** The remembered role for this tab, or null when nobody has entered a demo. */

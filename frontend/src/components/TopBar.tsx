@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/components/NotificationBell";
-import { storedDemoRole, type DemoRole } from "@/lib/demoSession";
+import { DEMO_ROLE_EVENT, storedDemoRole, type DemoRole } from "@/lib/demoSession";
 
 /**
  * Global top bar: wordmark, role switcher placeholder (brand/creator),
@@ -20,8 +20,13 @@ export function TopBar() {
   useEffect(() => {
     // sessionStorage doesn't exist during SSR, so this has to run after
     // mount — the setState here is the sync point, not a derived value.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDemoRole(storedDemoRole());
+    const sync = () => setDemoRole(storedDemoRole());
+    sync();
+    // An onboarding page sets the role in its own mount effect, which can lose
+    // the race against this one; listening keeps the chip honest instead of
+    // showing the previous role until the next navigation.
+    window.addEventListener(DEMO_ROLE_EVENT, sync);
+    return () => window.removeEventListener(DEMO_ROLE_EVENT, sync);
   }, [pathname]);
 
   const roles = [

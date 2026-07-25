@@ -24,11 +24,16 @@ const headline = `${demoNegotiation.status} in ${rounds} ${roundNoun}`;
 
 export const alt = `${headline} — KNOT negotiation replay`;
 
-const BACKGROUND = "#0a0b0f";
-const FOREGROUND = "#e8eaf0";
-const MUTED = "#8b91a5";
-const ACCENT = "#7c8cff";
-const POSITIVE = "#4ade80";
+/**
+ * Paper palette, mirroring globals.css. The card is the first thing anyone sees
+ * of KNOT, so it has to be the same cream-and-ink world as the app — a dark
+ * card would unfurl as a different product.
+ */
+const BACKGROUND = "#fffdf8";
+const FOREGROUND = "#131312";
+const MUTED = "#71716a";
+const ACCENT = "#14140f";
+const POSITIVE = "#16733c";
 
 /**
  * Compact parametric face — the `next/og`-safe analogue of `AgentAvatar`
@@ -61,20 +66,20 @@ function AgentFace({ traits, size }: { traits: AgentTraits; size: number }) {
           strokeWidth="2.6"
         />
         {traits.eyes === "wide" ? (
-          <>
+          <g>
             <circle cx="43" cy="30" r="4" fill={FOREGROUND} />
             <circle cx="57" cy="30" r="4" fill={FOREGROUND} />
-          </>
+          </g>
         ) : traits.eyes === "calm" ? (
-          <>
+          <g>
             <path d="M39 31 q4 -4 8 0" stroke={FOREGROUND} strokeWidth="2.4" fill="none" strokeLinecap="round" />
             <path d="M53 31 q4 -4 8 0" stroke={FOREGROUND} strokeWidth="2.4" fill="none" strokeLinecap="round" />
-          </>
+          </g>
         ) : (
-          <>
+          <g>
             <circle cx="43.5" cy="30" r="2.8" fill={FOREGROUND} />
             <circle cx="56.5" cy="30" r="2.8" fill={FOREGROUND} />
-          </>
+          </g>
         )}
         <path
           d="M45 38 q5 4 10 0"
@@ -85,26 +90,26 @@ function AgentFace({ traits, size }: { traits: AgentTraits; size: number }) {
           opacity={0.85}
         />
         {traits.accessory === "sparkle" ? (
-          <path d="M50 6 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5 Z" fill={traits.ink} />
+          <path d="M50 6 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5 Z" fill={traits.tint} />
         ) : traits.accessory === "headband" ? (
           <path d="M33 22 q17 -6 34 0" stroke={traits.ink} strokeWidth="2.4" fill="none" strokeLinecap="round" />
         ) : traits.accessory === "cap" ? (
-          <path d="M34 20 q16 -12 32 0" fill={traits.ink} opacity={0.9} />
+          <path d="M34 20 q16 -12 32 0" fill={traits.tint} opacity={0.9} />
         ) : traits.accessory === "visor" ? (
-          <rect x="34" y="25" width="32" height="10" rx="5" fill={traits.ink} opacity={0.55} />
+          <rect x="34" y="25" width="32" height="10" rx="5" fill={traits.tint} opacity={0.55} />
         ) : traits.accessory === "chefHat" ? (
-          <>
-            <circle cx="43" cy="14" r="6" fill={traits.ink} opacity={0.9} />
-            <circle cx="52" cy="11" r="7" fill={traits.ink} opacity={0.9} />
-            <circle cx="60" cy="15" r="5.5" fill={traits.ink} opacity={0.9} />
-          </>
+          <g>
+            <circle cx="43" cy="14" r="6" fill={traits.tint} opacity={0.9} />
+            <circle cx="52" cy="11" r="7" fill={traits.tint} opacity={0.9} />
+            <circle cx="60" cy="15" r="5.5" fill={traits.tint} opacity={0.9} />
+          </g>
         ) : traits.accessory === "leaf" ? (
-          <path d="M64 18 q10 -10 12 -2 q2 8 -12 8 Z" fill={traits.ink} opacity={0.9} />
+          <path d="M64 18 q10 -10 12 -2 q2 8 -12 8 Z" fill={traits.tint} opacity={0.9} />
         ) : (
-          <>
+          <g>
             <path d="M50 18 l0 -9" stroke={traits.ink} strokeWidth="2.4" strokeLinecap="round" />
-            <circle cx="50" cy="7" r="3" fill={traits.ink} />
-          </>
+            <circle cx="50" cy="7" r="3" fill={traits.tint} />
+          </g>
         )}
       </svg>
     </div>
@@ -116,10 +121,10 @@ function KnotMotif() {
   return (
     <svg width="150" height="90" viewBox="0 0 150 90">
       <g transform="rotate(14 50 45)">
-        <rect x="16" y="22" width="66" height="44" rx="22" fill="none" stroke={ACCENT} strokeWidth="7" />
+        <rect x="16" y="22" width="66" height="44" rx="22" fill="none" stroke={FOREGROUND} strokeWidth="7" />
       </g>
       <g transform="rotate(-14 100 45)">
-        <rect x="68" y="22" width="66" height="44" rx="22" fill="none" stroke={ACCENT} strokeWidth="7" />
+        <rect x="68" y="22" width="66" height="44" rx="22" fill="none" stroke={FOREGROUND} strokeWidth="7" />
       </g>
     </svg>
   );
