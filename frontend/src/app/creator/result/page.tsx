@@ -1,5 +1,7 @@
-import { Result } from "@/simple/SimpleMvp";
+import { CreatorResultScreen } from "@/product/ProductScreens";
+import { knotDataSource } from "@/product/dataSource";
 
-export default function Page() {
-  return <Result role="creator" />;
+export default async function Page() {
+  const deals = await knotDataSource.getCreatorDeals();
+  return <CreatorResultScreen deals={deals} />;
 }

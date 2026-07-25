@@ -1,5 +1,5 @@
-import { CreatorOffers } from "@/simple/SimpleMvp";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CreatorOffers />;
+  redirect("/creator/result");
 }

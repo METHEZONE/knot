@@ -1,9 +1,11 @@
 # knot 프론트엔드/UX 세션 인계 (2026-07-25, 민성 라인)
 
 새 세션(knot 터미널의 Claude 포함)이 이 문서 하나로 이어받을 수 있게 쓴다.
-아키텍처·계약은 `docs/23_EXPERIENCE_PRD_v2.md`(경험 스펙)와 `docs/07_API_CONTRACTS.md`(API)가 원본. 2026-07-25 MVP scope update: 현재 프론트는 단순 MVP로 리셋했고, 크리에이터/브랜드 각각 5단계만 남긴다. 제안, 매칭, 협상은 A2A agent work로 보여주고 사용자는 진행 상태와 최종 결과만 본다.
+아키텍처·계약은 `docs/23_EXPERIENCE_PRD_v2.md`(경험 스펙)와 `docs/07_API_CONTRACTS.md`(API)가 원본. 2026-07-25 MVP scope update: 현재 프론트는 제품형 MVP로 리셋했다. `/login`과 `/signup`은 실제 계정 표면처럼 분리했고, 회원가입은 Brand/Creator 선택 후 각 역할 온보딩으로 이어진다. Brand는 `/brand/onboarding -> /brand/products/new -> /brand/negotiate -> /brand/result -> /brand/settlement`, Creator는 `/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/brands/{brandId}`를 기본 흐름으로 둔다. 각 역할에는 `/me`, `/settings`가 있고 `/dev/admin`은 개발자/관리자 상태 확인용이다. 제안, 매칭, 협상은 A2A agent work로 보여주고 사용자는 진행 상태와 최종 결과만 본다.
 
 ## 무엇을 했나 (2026-07-25 완료분)
+
+0. **제품형 MVP 리셋** — 너무 넓은 route pack을 버리고 실제 제품처럼 보이는 최소 플로우로 재구성. 숫자 stepper를 제거하고 워크스페이스 메뉴로 분리했다. Brand: 브랜드 온보딩, 제품/제안서 추가, 크리에이터 매칭+A2A 협상, 협상 결과, escrow 정산. Creator: SNS 분석 온보딩, private 협상 기준, 브랜드별 협상 결과 리스트, 합의 브랜드 상세의 마일스톤/작업 진행/정산. `src/product/dataSource.ts`가 mock data source boundary이고 Firestore/API 구현체로 교체할 수 있다.
 
 1. **PRD v2.1** — `docs/23_EXPERIENCE_PRD_v2.md`. 부화 온보딩(양쪽), Agent Workflow 실행 로그, 협상 시어터+공개 리플레이, 듀얼 대시보드/알림/마일스톤, Tier B(어필리에이트 `go.thezonebio.com/r/{code}`, 온체인 Reputation 리더보드). 8/3 하드 게이트(`17_DEMO_ACCEPTANCE.md`)는 불변. 결정사항: SNS 진단은 **사전 캐시+리플레이**(aside-browser 로컬 수집기, 클라우드는 절대 스크랩 안 함), 플랫폼 IG→YT→X→TikTok, 로그인 = 구글(Firebase)+솔라나 지갑(+데모 계정 유지).
 2. **frontend/ 스캐폴드** — Next 16 + TS + Tailwind 4(다크 온리), App Router.

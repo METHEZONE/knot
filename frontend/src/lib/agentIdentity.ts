@@ -6,7 +6,7 @@
  * every session, with no server round trip. Category drives palette and
  * accessory (documented table below); the agentId hash fills in the rest.
  *
- * Used by the simple MVP UI so the same agent id always produces the same
+ * Used by the product MVP UI so the same agent id always produces the same
  * character.
  */
 

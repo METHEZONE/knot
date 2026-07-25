@@ -1,5 +1,5 @@
-import { BrandMatching } from "@/simple/SimpleMvp";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <BrandMatching />;
+  redirect("/brand/negotiate");
 }

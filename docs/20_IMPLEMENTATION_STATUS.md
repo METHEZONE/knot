@@ -4,13 +4,13 @@ Update this file at the end of every task.
 
 ## Current milestone
 
-`M4 complete + simple frontend MVP reset in progress`
+`M4 complete + product MVP frontend flow in progress`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | Simple MVP reset | 2026-07-25 | Branch `frontend/gcp-migration`; route surface reduced to `/`, five Creator steps, and five Brand steps. Creator flow: onboarding, offers, negotiate, result, milestones. Brand flow: onboarding, matching, negotiate, result, settlement. Existing paper/ink visual style retained. |
+| frontend | Product MVP flow | 2026-07-25 | Branch `frontend/gcp-migration`; route surface is now `/`, `/login`, `/signup`, separated Brand pages (`/brand/onboarding`, `/brand/products/new`, `/brand/negotiate`, `/brand/result`, `/brand/settlement`, `/brand/me`, `/brand/settings`), separated Creator pages (`/creator/onboarding`, `/creator/criteria`, `/creator/result`, `/creator/brands/{brandId}`, `/creator/me`, `/creator/settings`) and `/dev/admin`. Negotiation UX presents A2A agent progress with animation and sanitized result output. Mock data is behind a `KnotDataSource` boundary for later Firestore/API integration. |
 | knot-api | Escrow lock/release API added | 2026-07-25 | Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release wired to the repository boundary; escrow receipts are SIMULATED pending on-chain signing |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
@@ -44,10 +44,10 @@ anchor build: passed; target/idl/knot_escrow.json generated.
 anchor deploy (devnet): deployed program Aj63…; program account rent-exempt ~2.035 SOL (recoverable via `solana program close`).
 KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py: 1 passed — real on-chain milestone settlement (agent released 0.7 USDC to the creator within cap; Reputation.total_settled updated).
 cd frontend && npm run lint: passed.
-cd frontend && npm test: passed; 3 simple flow tests.
-cd frontend && npm run build: passed; 16 app routes generated, only root + simple Brand/Creator flows.
-cd frontend && npm run typecheck: passed after route manifest refresh.
-cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /, /brand/matching, /creator/offers, /brand/negotiate.
+cd frontend && npm test: passed; 5 product flow/data-source tests.
+cd frontend && npm run build: passed; 27 app routes generated including login/signup, brand product/result/settlement, creator criteria/result/brand detail, role my/settings and dev admin.
+cd frontend && npm run typecheck: passed.
+cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/brands/glow-bar, /dev/admin.
 ```
 
 ## Decisions made during implementation
@@ -83,12 +83,23 @@ cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /, /
 - Switched frontend build output to Next standalone and added a Cloud Run Dockerfile/.dockerignore. Other preview hosts are ignored for this migration.
 - Restored the long-form waitlist landing as `/`, with local-only waitlist capture, Brand/Creator demo onboarding CTAs, and `?demo=brand|creator` deep-link handling.
 - Removed `frontend/src/features/map` and the `/brand/promotions/{promotionId}/society` route. The Promotion Control Center now links to `/brand/promotions/{promotionId}/workflow`, which separates Agent API Spend through pay.sh/x402 from Deal Escrow compensation.
-- Superseded the broad MVP pack route map with a simple frontend MVP: root problem landing, Creator onboarding/offers/negotiate/result/milestones, and Brand onboarding/matching/negotiate/result/settlement.
-- Removed legacy frontend routes and unused feature/API fixture layers from `frontend/src` so the visible app matches the simple MVP flow.
-- Updated the simple MVP UX so creator offers, brand matching and negotiation
+- Superseded the broad MVP pack route map with a product MVP flow: root problem landing, login/signup, Creator onboarding/criteria/result/brand-detail, Brand onboarding/product/negotiation/result/settlement, role my/settings pages, and dev admin.
+- Removed legacy frontend routes and unused feature/API fixture layers from `frontend/src` so the visible app matches the product MVP flow.
+- Updated the product MVP UX so creator offers, brand matching and negotiation
   are presented as A2A agent work. Screens show animated agent progress,
   sanitized status and negotiated results; private policy fields and internal
   pricing/scoring details are intentionally hidden from the counterparty.
+- Added `frontend/src/product/{dataSource,mockData,types,flow}.ts` so current
+  mock state can be replaced by Firestore/API-backed data without changing page
+  components.
+- Reworked the product frontend away from a connected 01/02/03 stepper. The
+  workspace nav is now a role-specific menu, while the actual business pages
+  are independent surfaces for profile, product/criteria, negotiation, result,
+  settlement/milestones, my page and settings.
+- Added product-like login/signup pages. Signup selects Brand or Creator first,
+  then continues into role onboarding/profile creation.
+- Added Creator result list and brand detail page with agreed-deal milestones
+  and settlement status. Non-agreed deals show sanitized outcome only.
 
 ## Known blockers / open items
 
@@ -96,7 +107,7 @@ cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /, /
 - GCP project switch to `knot-dev-503505` is not verified yet; rerun gcloud auth, ADC quota project, API enablement, Firestore Native check/create, IAM/service accounts and seed/smoke.
 - Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet in `knot-dev-503505`.
 - pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow; sandbox resource not selected.
-- Frontend simple MVP runs as local UI state only; live API wiring, real upload analysis, A2A task streaming, real negotiation execution, real escrow settlement display and Cloud Run deploy remain.
+- Frontend product MVP runs on mock data behind `KnotDataSource`; live API wiring, real upload analysis, A2A task streaming, real negotiation execution, real escrow settlement display and Cloud Run deploy remain.
 - `knot.escrow.client` (anchorpy) is broken against anchor 1.x IDL until anchorpy supports the new format or the client is ported to solders.
 - **Cloud Run frontend deploy is still outstanding and is a hard demo gate** (17 §2 requires a live Cloud Run URL; AGENTS.md requires GCP for all off-chain runtime). Blocked locally because `gcloud` needs re-authentication and cannot prompt in a non-interactive shell — run `gcloud auth login` in a real terminal, then deploy `frontend/` per docs/14.
 - Onboarding calls five API routes that do not exist server-side yet (PRD v2 §12 deltas, 예원's lane). The frontend runs entirely on fixtures behind the exact shapes in `src/lib/api/types.ts`; `POST /brands:ingest` is an addition beyond the PRD §12 list and needs adding to docs/07.

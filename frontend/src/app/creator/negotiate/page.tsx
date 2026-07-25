@@ -1,5 +1,5 @@
-import { Negotiation } from "@/simple/SimpleMvp";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <Negotiation role="creator" />;
+  redirect("/creator/result");
 }

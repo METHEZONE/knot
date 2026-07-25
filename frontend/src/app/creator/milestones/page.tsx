@@ -1,5 +1,5 @@
-import { CreatorMilestones } from "@/simple/SimpleMvp";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CreatorMilestones />;
+  redirect("/creator/brands/glow-bar");
 }
