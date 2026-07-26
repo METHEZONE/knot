@@ -1,3 +1,5 @@
+from collections.abc import Callable
+from typing import TypedDict
 from uuid import uuid4
 
 from libs.a2a.models import (
@@ -12,7 +14,11 @@ from libs.a2a.models import (
     NegotiationPayload,
     TermSheetArtifactData,
 )
-from libs.agents.negotiation import CreatorNegotiationContext, evaluate_creator_message
+from libs.agents.negotiation import (
+    CreatorNegotiationContext,
+    CreatorNegotiationDecision,
+    evaluate_creator_message,
+)
 from libs.domain.models import AgreementResult, AgreementTerms
 
 
@@ -20,11 +26,27 @@ class A2ATaskError(ValueError):
     pass
 
 
+class DisplayRationale(TypedDict):
+    text: str
+    provider: str
+    model: str | None
+    fallbackReason: str | None
+
+
 class InMemoryA2ATaskStore:
-    def __init__(self, context_by_tenant: dict[str, CreatorNegotiationContext]) -> None:
+    def __init__(
+        self,
+        context_by_tenant: dict[str, CreatorNegotiationContext],
+        rationale_provider: Callable[
+            [CreatorNegotiationContext, NegotiationPayload, CreatorNegotiationDecision],
+            object | None,
+        ]
+        | None = None,
+    ) -> None:
         self._context_by_tenant = context_by_tenant
         self._tasks: dict[str, A2ATask] = {}
         self._message_results: dict[str, A2ATask] = {}
+        self._rationale_provider = rationale_provider
 
     def list_tasks(self) -> list[A2ATask]:
         return list(self._tasks.values())
@@ -54,6 +76,7 @@ class InMemoryA2ATaskStore:
 
         payload = _payload_from_message(message)
         decision = evaluate_creator_message(context, payload)
+        rationale = self._display_rationale(context, payload, decision)
         response = _message_from_decision(
             message,
             task_id=task.id,
@@ -68,7 +91,10 @@ class InMemoryA2ATaskStore:
                     else None
                 ),
                 "changedFields": decision.changed_fields,
-                "rationale": decision.rationale,
+                "rationale": rationale["text"],
+                "rationaleProvider": rationale["provider"],
+                "rationaleModel": rationale["model"],
+                "rationaleFallbackReason": rationale["fallbackReason"],
                 "policyDecision": decision.policy_decision.model_dump(by_alias=True),
             },
         )
@@ -86,7 +112,7 @@ class InMemoryA2ATaskStore:
                     agreement_id=decision.agreement_id or f"agreement-{uuid4()}",
                     terms=decision.terms,
                     terms_hash=decision.terms_hash,
-                    rationale=decision.rationale,
+                    rationale=rationale["text"],
                 )
             )
         elif decision.type == NegotiationMessageType.REJECT:
@@ -97,7 +123,7 @@ class InMemoryA2ATaskStore:
                     agreement_id=decision.agreement_id or f"agreement-{uuid4()}",
                     terms=decision.terms,
                     terms_hash=None,
-                    rationale=decision.rationale,
+                    rationale=rationale["text"],
                 )
             )
         else:
@@ -111,6 +137,35 @@ class InMemoryA2ATaskStore:
             return self._context_by_tenant[tenant]
         except KeyError as exc:
             raise A2ATaskError("unknown tenant") from exc
+
+    def _display_rationale(
+        self,
+        context: CreatorNegotiationContext,
+        payload: NegotiationPayload,
+        decision: CreatorNegotiationDecision,
+    ) -> DisplayRationale:
+        if self._rationale_provider is None:
+            return {
+                "text": decision.rationale,
+                "provider": "deterministic",
+                "model": None,
+                "fallbackReason": None,
+            }
+        generated = self._rationale_provider(context, payload, decision)
+        text = getattr(generated, "text", None)
+        if not isinstance(text, str) or not text.strip():
+            return {
+                "text": decision.rationale,
+                "provider": "deterministic",
+                "model": None,
+                "fallbackReason": "invalid_rationale_provider",
+            }
+        return {
+            "text": text,
+            "provider": _optional_str(getattr(generated, "provider", None)) or "unknown",
+            "model": _optional_str(getattr(generated, "model", None)),
+            "fallbackReason": _optional_str(getattr(generated, "fallback_reason", None)),
+        }
 
     def _get_or_create_task(self, message: A2AMessage) -> A2ATask:
         if message.task_id:
@@ -136,6 +191,10 @@ def _payload_from_message(message: A2AMessage) -> NegotiationPayload:
     if part.data is None:
         raise A2ATaskError("KNOT negotiation messages must use Part.data")
     return NegotiationPayload.model_validate(part.data)
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def _message_from_decision(

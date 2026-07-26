@@ -106,6 +106,9 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-003"
     assert candidates[0]["rank"] == 1
     assert candidates[0]["eligible"] is True
+    assert candidates[0]["analysisProvider"] == "deterministic"
+    assert candidates[0]["analysisModel"] is None
+    assert candidates[0]["analysisFallbackReason"] == "gemini_mode_off"
 
     timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]

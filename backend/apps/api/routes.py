@@ -29,6 +29,7 @@ from libs.a2a.store import InMemoryA2ATaskStore
 from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
 from libs.agents.negotiation import CreatorNegotiationContext
+from libs.ai.gemini import AnalysisText, candidate_explanation, creator_rationale
 from libs.domain.hashing import (
     canonical_json,
     canonical_terms_json,
@@ -367,7 +368,16 @@ def build_api_router(
             document = candidate.model_dump(by_alias=True, mode="json")
             document["creatorId"] = creator.creator_id
             document["creatorProfilePath"] = FirestorePaths.creator_profile(creator.creator_id)
-            document["explanation"] = _candidate_explanation(document)
+            explanation = _candidate_explanation(
+                settings=settings,
+                promotion=promotion,
+                creator=creator,
+                candidate=document,
+            )
+            document["explanation"] = explanation.text
+            document["analysisProvider"] = explanation.provider
+            document["analysisModel"] = explanation.model
+            document["analysisFallbackReason"] = explanation.fallback_reason
             document["negotiationId"] = None
             repository.save_raw_document(
                 FirestorePaths.match_candidate(match_run_id, creator.creator_id),
@@ -1287,7 +1297,15 @@ def _send_creator_a2a_task(
             tenant=creator_agent_id,
             message=message,
         )
-    store = InMemoryA2ATaskStore({creator_agent_id: context})
+    store = InMemoryA2ATaskStore(
+        {creator_agent_id: context},
+        rationale_provider=lambda ctx, payload, decision: creator_rationale(
+            settings=settings,
+            context=ctx,
+            payload=payload,
+            decision=decision,
+        ),
+    )
     return store.send_message(creator_agent_id, message)
 
 
@@ -1471,12 +1489,26 @@ def _append_promotion_event(
     repository.save_raw_document(FirestorePaths.promotion_event(promotion_id, event_id), event)
 
 
-def _candidate_explanation(candidate: dict[str, object]) -> str:
+def _candidate_explanation(
+    *,
+    settings: Settings,
+    promotion: Promotion,
+    creator: CreatorProfile,
+    candidate: dict[str, object],
+) -> AnalysisText:
     if candidate["eligible"]:
-        return "Category, rate, schedule, deliverable and usage rights fit the Promotion."
-    hard_filter_reasons = cast(Sequence[object], candidate["hardFilterReasons"])
-    reasons = ", ".join(str(reason) for reason in hard_filter_reasons)
-    return f"Excluded by deterministic hard filters: {reasons}."
+        fallback = "Category, rate, schedule, deliverable and usage rights fit the Promotion."
+    else:
+        hard_filter_reasons = cast(Sequence[object], candidate["hardFilterReasons"])
+        reasons = ", ".join(str(reason) for reason in hard_filter_reasons)
+        fallback = f"Excluded by deterministic hard filters: {reasons}."
+    return candidate_explanation(
+        settings=settings,
+        promotion=promotion,
+        creator=creator,
+        candidate=candidate,
+        fallback=fallback,
+    )
 
 
 def _find_escrow_by_agreement(

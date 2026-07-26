@@ -160,7 +160,7 @@ SNS/PDF analysis.
 |---|---|---|---|---|---|
 | Promotion | yes | yes | yes | n/a | partial |
 | Matching | partial | yes | yes | no pay.sh/Gemini verification | partial |
-| Gemini decisioning | no, deterministic copy only | no | no | no Vertex/Gemini call | no |
+| Gemini analysis | candidate/rationale metadata boundary | optional Vertex mode | provider metadata persisted on candidates | `KNOT_GEMINI_MODE=vertex` calls Vertex AI Gemini for non-authoritative text | partial |
 | A2A negotiation | projection only | Product API can call Creator A2A HTTP when configured | messages/tasks/artifacts persisted | HTTP `message:send` supported; Cloud Run OIDC not wired yet | partial |
 | Agreement | yes | yes | yes | A2A Artifact relation persisted | partial |
 | Escrow lock | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
@@ -194,8 +194,8 @@ SNS/PDF analysis.
 
 - Service-to-service Product API -> Creator A2A `message:send` contract with
   persisted task state reconciliation.
-- Vertex/Gemini profile and negotiation summary contract that cannot authorize
-  payments.
+- Vertex/Gemini profile analysis and evidence-observation contract that cannot
+  authorize payments.
 - pay.sh/x402 paid verification receipt schema in Promotion timeline.
 - Product API -> web3 gateway lock/release request and response schema for real
   devnet signatures.
@@ -210,6 +210,8 @@ SNS/PDF analysis.
 - [ ] M3 — Product API calls private web3 gateway for real devnet lock/release
       signatures.
 - [ ] M4 — pay.sh/x402 verification receipt appears in Promotion timeline.
+- [x] M5 — optional Vertex AI Gemini provider boundary for non-authoritative
+      candidate explanations and Creator Agent rationale.
 
 ### Contracts
 
@@ -224,6 +226,10 @@ SNS/PDF analysis.
 - `KNOT_CREATOR_A2A_MODE=local|http` selects Product API negotiation
   orchestration. `http` posts to `CREATOR_AGENT_BASE_URL/message:send` using
   official A2A headers.
+- `KNOT_GEMINI_MODE=off|vertex` selects whether candidate explanations and
+  Creator Agent display rationale use deterministic fallback text or Vertex AI
+  Gemini. Gemini output is display-only and cannot change rank, eligibility,
+  agreement terms, escrow lock, or release authorization.
 
 ### Validation
 

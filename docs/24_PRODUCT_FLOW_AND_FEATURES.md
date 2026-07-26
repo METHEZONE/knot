@@ -607,6 +607,10 @@ UX 원칙:
 - Product API는 `KNOT_CREATOR_A2A_MODE=http` 설정 시 Creator A2A 서비스의
   `/message:send`를 호출한다. 로컬 기본값은 seed 재현성을 위해 in-process
   A2A fallback이다.
+- `KNOT_GEMINI_MODE=vertex` 설정 시 Product API와 Creator Agent는 Vertex AI
+  Gemini를 표시용 candidate explanation과 Creator Agent rationale 생성에
+  사용한다. Gemini 출력은 매칭 점수, 후보 자격, 계약 조건, escrow
+  lock/release 승인에는 영향을 주지 않는다.
 
 ## 10. Dev 관리자 페이지
 

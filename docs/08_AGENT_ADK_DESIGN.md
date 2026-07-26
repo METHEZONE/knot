@@ -109,6 +109,14 @@ Matching order:
 
 Gemini must not invent missing creator metrics. Explanations cite the input fields used.
 
+Current implementation exposes this as an optional provider boundary:
+
+- default `KNOT_GEMINI_MODE=off` stores deterministic fallback explanations
+- `KNOT_GEMINI_MODE=vertex` calls Vertex AI Gemini through the `google-genai`
+  SDK for display-only candidate explanations
+- generated text is persisted with provider/model metadata but cannot alter
+  rank, eligibility, policy decisions, terms, escrow, or release state
+
 ## 7. Evidence analysis
 
 Gemini may extract observations from fetched content or supplied snapshots. It cannot decide payment. Policy code maps observations to pass, revision-required, escalation or reject.

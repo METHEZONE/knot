@@ -3,6 +3,8 @@ from copy import deepcopy
 from fastapi.testclient import TestClient
 
 from apps.creator_agent.main import create_app
+from libs.a2a.store import InMemoryA2ATaskStore
+from libs.agents.demo_context import demo_creator_contexts
 from tests.test_domain_models import promotion_payload, terms_payload
 
 
@@ -96,6 +98,35 @@ def test_creator_agent_002_accepts_paid_boost_demo_offer() -> None:
     assert task["status"]["state"] == "TASK_STATE_COMPLETED"
     assert task["status"]["message"]["parts"][0]["data"]["type"] == "ACCEPT"
     assert task["artifacts"][0]["parts"][0]["data"]["result"] == "AGREED"
+
+
+def test_creator_agent_can_use_non_authoritative_rationale_provider() -> None:
+    class GeneratedRationale:
+        text = "정책 검사를 통과한 조건이라 Creator Agent가 수락했습니다."
+        provider = "vertex-gemini"
+        model = "gemini-2.5-flash"
+        fallback_reason = None
+
+    task_store = InMemoryA2ATaskStore(
+        demo_creator_contexts(),
+        rationale_provider=lambda context, payload, decision: GeneratedRationale(),
+    )
+    client = TestClient(create_app(task_store=task_store))
+    response = client.post(
+        "/a2a/v1/message:send",
+        json=a2a_request(base_amount_usdc=650),
+        headers=headers(),
+    )
+
+    assert response.status_code == 200
+    task = response.json()["task"]
+    data = task["status"]["message"]["parts"][0]["data"]
+    assert data["type"] == "ACCEPT"
+    assert data["rationale"] == GeneratedRationale.text
+    assert data["rationaleProvider"] == "vertex-gemini"
+    assert data["rationaleModel"] == "gemini-2.5-flash"
+    assert data["rationaleFallbackReason"] is None
+    assert task["artifacts"][0]["parts"][0]["data"]["rationale"] == GeneratedRationale.text
 
 
 def test_creator_agent_reuses_duplicate_message_result() -> None:

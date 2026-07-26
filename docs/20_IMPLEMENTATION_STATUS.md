@@ -89,9 +89,18 @@ Creator Agent runs on `:18081`, Product API runs on `:18080` with
 Promotion match → HTTP A2A negotiation → Agreement → escrow lock → evidence
 verify → content milestone release. Receipts remain `SIMULATED` until the web3
 gateway is wired.
-Verification after this pass: backend targeted pytest `31 passed`, backend Ruff
+Verification after this pass: backend targeted pytest `32 passed`, backend Ruff
 passed, backend mypy passed, frontend typecheck/lint/unit tests passed, and
 frontend production build passed after allowing Google Fonts network access.
+- Added optional Vertex AI Gemini provider boundary. `KNOT_GEMINI_MODE=vertex`
+  lets candidate explanations and Creator Agent display rationale call Gemini
+  via `google-genai`; default `off` keeps deterministic fallback text. Gemini
+  output remains non-authoritative and cannot change matching eligibility,
+  ranks, terms, escrow lock, or milestone release.
+Vertex AI API (`aiplatform.googleapis.com`) is enabled in `knot-dev-503505`.
+Local Vertex smoke passed with `gemini-2.5-flash`. Local HTTP A2A smoke through
+the Next proxy produced `analysisProvider=vertex-gemini` on MatchCandidate and
+`rationaleProvider=vertex-gemini` on the Creator Agent response message.
 GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
 Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
 Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.
@@ -199,9 +208,9 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
 - Firebase Auth/session enforcement is still pending. Current login/signup is
   `local-demo` account bootstrap through Product API and stores only account
   context, not credentials.
-- Real Brand PDF/file analysis and live Creator SNS ingestion are still
-  pending. Current onboarding persists user-entered profile data and generated
-  summaries.
+- Real Brand PDF/file analysis, live Creator SNS ingestion, and Gemini-backed
+  evidence content extraction are still pending. Current onboarding persists
+  user-entered profile data and generated summaries.
 - Wallet issuance/custody interface is still unresolved. Frontend displays only
   public wallet references and never accepts private keys or seed phrases.
 - Frontend dependency audit remediation is pending; Cloud Build surfaced npm
@@ -209,6 +218,8 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
 - Product API→Creator Agent HTTP is implemented but Cloud Run private
   service-to-service OIDC/IAM invocation is not wired yet. Local default remains
   `KNOT_CREATOR_A2A_MODE=local` until deployment config is updated.
+- Cloud Run service environment variables are not yet updated to enable
+  `KNOT_GEMINI_MODE=vertex`; local runtime is already running in Vertex mode.
 
 ## Next task
 

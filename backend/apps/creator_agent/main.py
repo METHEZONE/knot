@@ -4,6 +4,7 @@ from libs.a2a.agent_card import build_creator_agent_card
 from libs.a2a.models import A2A_VERSION, A2ASendRequest
 from libs.a2a.store import A2ATaskError, InMemoryA2ATaskStore
 from libs.agents.demo_context import demo_creator_contexts
+from libs.ai.gemini import creator_rationale
 from libs.observability.middleware import add_request_context
 from libs.settings.config import Settings, get_settings
 
@@ -15,7 +16,15 @@ def create_app(
     settings = settings or get_settings(service_name="knot-creator-agent")
     app = FastAPI(title="KNOT Creator Agent", version=settings.schema_version)
     add_request_context(app, service_name=settings.service_name)
-    app.state.task_store = task_store or InMemoryA2ATaskStore(demo_creator_contexts())
+    app.state.task_store = task_store or InMemoryA2ATaskStore(
+        demo_creator_contexts(),
+        rationale_provider=lambda context, payload, decision: creator_rationale(
+            settings=settings,
+            context=context,
+            payload=payload,
+            decision=decision,
+        ),
+    )
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
