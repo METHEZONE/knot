@@ -23,7 +23,7 @@
       "blockedIndustries": ["gambling", "cryptoTrading"],
       "maxDeliverablesPerMonth": 4,
       "minDaysToPost": 5,
-      "allowedUsageRights": ["organicOnly"],
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
       "maxRevisionRounds": 1,
       "maxExclusivityDays": 0
     },

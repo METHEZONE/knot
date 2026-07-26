@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { createKnotDataSource, resolveDataMode } from "../src/product/dataSource";
-import type { ApiPromotion } from "../src/product/apiClient";
+import { ProductApiClient, ProductApiError, type ApiPromotion } from "../src/product/apiClient";
 
 test("product route surface exposes separated MVP role pages", () => {
   assert.deepEqual(appRoutes, [
@@ -140,6 +140,81 @@ test("API data source reads a pending negotiation without creating agent resourc
     assert.equal(view.agreementId, null);
     assert.equal(view.negotiationId, null);
     assert.deepEqual(calls.map((call) => call.method), ["GET", "GET"]);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("API client does not start negotiation when matching has no eligible creator", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls: Array<{ url: string; method: string }> = [];
+  const promotion: ApiPromotion = {
+    promotionId: "promotion-no-candidate",
+    brandId: "brand-api",
+    brandAgentId: "brand-agent-api",
+    title: "No candidate Promotion",
+    objective: "awareness",
+    category: "gambling",
+    targetAudience: ["20s"],
+    budget: { totalUsdc: 100, maxPerCreatorUsdc: 100 },
+    deliverables: [{ format: "reel", count: 1 }],
+    postingWindow: { start: "2026-08-01", end: "2026-08-10" },
+    usageRights: "paidBoost30d",
+    constraints: { requiredDisclosures: ["ad"], prohibitedClaims: [] },
+    autonomy: { maxNegotiationRounds: 5, autoEscrow: false, autoRelease: false },
+    status: "DRAFT",
+  };
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, method: init?.method ?? "GET" });
+    if (url.endsWith("/api/v1/promotions/promotion-no-candidate")) {
+      return Response.json({ data: { promotion } });
+    }
+    if (url.endsWith("/api/v1/promotions/promotion-no-candidate/matches:run")) {
+      return Response.json(
+        {
+          data: {
+            matchRun: {
+              matchRunId: "match-no-candidate",
+              promotionId: "promotion-no-candidate",
+              brandAgentId: "brand-agent-api",
+              status: "COMPLETED",
+              selectedCreatorId: null,
+              selectedCreatorAgentId: null,
+            },
+          },
+        },
+        { status: 201 },
+      );
+    }
+    if (url.endsWith("/api/v1/match-runs/match-no-candidate/candidates")) {
+      return Response.json({
+        data: {
+          candidates: [
+            {
+              creatorId: "creator-001",
+              creatorAgentId: "creator-agent-001",
+              eligible: false,
+              hardFilterReasons: ["CATEGORY_MISMATCH", "RATE_EXCEEDS_MAX_PER_CREATOR"],
+            },
+          ],
+        },
+      });
+    }
+    return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => new ProductApiClient("").runAgentForPromotion("promotion-no-candidate"),
+      (error) =>
+        error instanceof ProductApiError &&
+        error.code === "NO_ELIGIBLE_CREATOR" &&
+        error.message.includes("CATEGORY_MISMATCH"),
+    );
+    assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET"]);
+    assert.ok(!calls.some((call) => call.url.includes(":start-negotiation")));
   } finally {
     globalThis.fetch = previousFetch;
   }

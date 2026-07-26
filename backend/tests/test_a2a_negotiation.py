@@ -8,6 +8,7 @@ from tests.test_domain_models import promotion_payload, terms_payload
 
 def a2a_request(
     *,
+    tenant: str = "creator-agent-001",
     message_id: str = "message-001",
     context_id: str = "context-001",
     task_id: str | None = None,
@@ -42,7 +43,7 @@ def a2a_request(
     if task_id is not None:
         message["taskId"] = task_id
     return {
-        "tenant": "creator-agent-001",
+        "tenant": tenant,
         "message": message,
         "configuration": {"acceptedOutputModes": ["application/json"]},
     }
@@ -80,6 +81,21 @@ def test_creator_agent_accepts_valid_offer_with_artifact() -> None:
     assert artifact_data["schema"] == "knot.term-sheet.v1"
     assert artifact_data["result"] == "AGREED"
     assert artifact_data["termsHash"].startswith("sha256:")
+
+
+def test_creator_agent_002_accepts_paid_boost_demo_offer() -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/a2a/v1/message:send",
+        json=a2a_request(tenant="creator-agent-002", base_amount_usdc=500),
+        headers=headers(),
+    )
+
+    assert response.status_code == 200
+    task = response.json()["task"]
+    assert task["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert task["status"]["message"]["parts"][0]["data"]["type"] == "ACCEPT"
+    assert task["artifacts"][0]["parts"][0]["data"]["result"] == "AGREED"
 
 
 def test_creator_agent_reuses_duplicate_message_result() -> None:

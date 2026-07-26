@@ -161,7 +161,7 @@ SNS/PDF analysis.
 | Promotion | yes | yes | yes | n/a | partial |
 | Matching | partial | yes | yes | no pay.sh/Gemini verification | partial |
 | Gemini decisioning | no, deterministic copy only | no | no | no Vertex/Gemini call | no |
-| A2A negotiation | projection only | internal orchestration | messages/tasks/artifacts persisted | no service-to-service Creator A2A HTTP call yet | partial |
+| A2A negotiation | projection only | Product API can call Creator A2A HTTP when configured | messages/tasks/artifacts persisted | HTTP `message:send` supported; Cloud Run OIDC not wired yet | partial |
 | Agreement | yes | yes | yes | A2A Artifact relation persisted | partial |
 | Escrow lock | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
 | Evidence verification | yes | yes | yes | deterministic URL/disclosure check, no live content fetch | partial |
@@ -183,8 +183,9 @@ SNS/PDF analysis.
 
 - Product API owns browser-facing reads/writes. Browser code must not create
   official A2A `Message`, `Task`, or `Artifact` payloads directly.
-- Creator A2A service owns the external A2A HTTP surface, but the current Golden
-  Path still starts negotiation through Product API internal orchestration.
+- Creator A2A service owns the external A2A HTTP surface. Product API calls it
+  when `KNOT_CREATOR_A2A_MODE=http`; local/test mode keeps an in-process A2A
+  task store for deterministic seeds.
 - Escrow API currently guards idempotency and deterministic policy checks, then
   records `SIMULATED` receipts. Real lock/release must go through the private
   web3 gateway before being shown as devnet transactions.
@@ -204,7 +205,7 @@ SNS/PDF analysis.
 
 - [x] M1 — default frontend API mode, explicit mock mode, no page-load write
       fallback, resource ID routing, and visible loading/empty/error states.
-- [ ] M2 — Product API calls Creator A2A service over HTTP and persists returned
+- [x] M2 — Product API calls Creator A2A service over HTTP and persists returned
       Task/Message/Artifact state.
 - [ ] M3 — Product API calls private web3 gateway for real devnet lock/release
       signatures.
@@ -220,6 +221,9 @@ SNS/PDF analysis.
   settlement list for a deal without executing lock/release writes.
 - Creator deal detail routes use `/creator/agreements/{agreementId}`. Legacy
   brand slug routes redirect back to the Creator result list.
+- `KNOT_CREATOR_A2A_MODE=local|http` selects Product API negotiation
+  orchestration. `http` posts to `CREATOR_AGENT_BASE_URL/message:send` using
+  official A2A headers.
 
 ### Validation
 
@@ -241,6 +245,10 @@ cd frontend && KNOT_API_BASE_URL=http://127.0.0.1:18080 NEXT_PUBLIC_KNOT_DATA_MO
   render. Phase 1 separates reads from explicit button-triggered writes.
 - 2026-07-26: No fixed `glow-bar` creator detail dependency remains in the
   active route map; creator deal detail is keyed by `agreementId`.
+- 2026-07-26: Product API now has a Creator A2A HTTP client boundary. In HTTP
+  mode it sends official `message:send`, persists returned Task/Message/Artifact
+  state, and materializes an Agreement only from an accepted Artifact. Local
+  mode remains the deterministic seed fallback.
 
 ---
 

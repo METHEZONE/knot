@@ -604,7 +604,9 @@ UX 원칙:
 - 프론트는 Product API가 만든 projection을 소비한다.
 - 백엔드는 Negotiation messages/events, A2A Task, A2A Artifact, Agreement를
   repository boundary를 통해 저장한다.
-- 실제 외부 Creator A2A 서비스와의 service-to-service orchestration은 후속 작업이다.
+- Product API는 `KNOT_CREATOR_A2A_MODE=http` 설정 시 Creator A2A 서비스의
+  `/message:send`를 호출한다. 로컬 기본값은 seed 재현성을 위해 in-process
+  A2A fallback이다.
 
 ## 10. Dev 관리자 페이지
 
@@ -747,7 +749,7 @@ repository boundary를 통해 처리한다.
 - 로그인 세션/권한 검증
 - 실제 SNS ingestion 및 SNS 분석
 - 실제 PDF/제품 문서 업로드 및 분석
-- 외부 Creator A2A service-to-service orchestration
+- Cloud Run private OIDC/IAM 기반 Creator A2A 호출 설정
 - pay.sh/x402 유료 API 호출 receipt 표시
 - Product API에서 web3 gateway를 통한 실제 Solana devnet signing
 - Terraform 기반 GCP 재현 가능 배포

@@ -391,6 +391,12 @@ export class ProductApiClient {
     const promotion = await this.getPromotion(promotionId);
     const matchRun = await this.runMatches(promotionId);
     const candidates = await this.listCandidates(matchRun.matchRunId);
+    if (!matchRun.selectedCreatorAgentId) {
+      throw new ProductApiError(noEligibleCreatorMessage(candidates), 409, "NO_ELIGIBLE_CREATOR", {
+        matchRunId: matchRun.matchRunId,
+        candidates,
+      });
+    }
     const { negotiation, agreement } = await this.startNegotiation(matchRun.matchRunId);
     const timeline = await this.getTimeline(promotionId);
     return { promotion, matchRun, candidates, negotiation, agreement, timeline };
@@ -485,6 +491,14 @@ function toApiError(status: number, body: unknown) {
     const message = typeof body.detail.detail === "string" ? body.detail.detail : body.detail.title;
     return new ProductApiError(message, status, body.detail.code, body.detail);
   }
+  if (isFastApiValidationEnvelope(body)) {
+    return new ProductApiError(
+      validationMessage(body.detail),
+      status,
+      "VALIDATION_ERROR",
+      body.detail,
+    );
+  }
   return new ProductApiError(`Product API request failed with ${status}`, status, "API_ERROR", body);
 }
 
@@ -499,6 +513,29 @@ function isProblemEnvelope(value: unknown): value is {
       "code" in detail &&
       "title" in detail,
   );
+}
+
+function isFastApiValidationEnvelope(value: unknown): value is {
+  detail: Array<{ loc?: unknown[]; msg?: string }>;
+} {
+  if (!value || typeof value !== "object" || !("detail" in value)) return false;
+  return Array.isArray((value as { detail: unknown }).detail);
+}
+
+function validationMessage(errors: Array<{ loc?: unknown[]; msg?: string }>) {
+  const first = errors[0];
+  if (!first) return "입력값을 확인해주세요.";
+  const field = Array.isArray(first.loc) ? first.loc.filter((part) => part !== "body").join(".") : "";
+  return field ? `${field}: ${first.msg ?? "입력값을 확인해주세요."}` : first.msg ?? "입력값을 확인해주세요.";
+}
+
+function noEligibleCreatorMessage(candidates: ApiCandidate[]) {
+  const reasons = candidates
+    .flatMap((candidate) => candidate.hardFilterReasons ?? [])
+    .filter((reason, index, all) => all.indexOf(reason) === index)
+    .slice(0, 3);
+  const hint = reasons.length ? ` 현재 blocker: ${reasons.join(", ")}.` : "";
+  return `선택 가능한 Creator가 없습니다. 카테고리, usage right, 일정, 최대 제안가를 조정한 뒤 다시 실행해주세요.${hint}`;
 }
 
 function withoutStatus(input: PromotionCreateInput) {

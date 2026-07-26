@@ -11,8 +11,8 @@ Update this file at the end of every task.
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; API mode is now the default, and `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is an explicit fixture-only override. `KnotDataSource` reads Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition without page-load write fallbacks. Login/signup/onboarding/Promotion creation forms submit to Product API through a Next `/api/v1/[...path]` proxy. |
-| knot-api | Account/onboarding + escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, and Agreement escrow-state lookup through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
-| creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
+| knot-api | Account/onboarding + A2A/escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, Agreement escrow-state lookup, and configurable Product API→Creator A2A HTTP orchestration through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
+| creator A2A service | HTTP negotiation baseline | 2026-07-26 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store; demo tenants now cover seeded creator agents 001/002/003 |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
 | Terraform/GCP | minimal Cloud Run deploy complete | 2026-07-26 | Target project `knot-dev-503505`; Firestore Native `(default)` created in `us-central1`, Artifact Registry repo `knot` created, `knot-api` and `knot-web` deployed to Cloud Run. Terraform is still not authored/applied. |
@@ -58,6 +58,40 @@ cd backend && ../.venv/bin/python -m ruff check apps/api libs/repositories tests
 cd frontend && npm run typecheck / npm run lint / npm test: passed; product flow tests now cover API default mode and no page-load negotiation writes.
 cd frontend && KNOT_API_BASE_URL=http://127.0.0.1:18080 NEXT_PUBLIC_KNOT_DATA_MODE=api npm run build: passed with network access for Google Fonts.
 Local smoke after backend restart: `GET /readyz` on :18080 passed; frontend :3000 returned 200 for `/login`, `/dev/admin`, `/creator/result`, and `/brand/negotiate`.
+cd backend && ../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py: 28 passed, 1 Starlette/httpx deprecation warning after Creator A2A HTTP boundary.
+cd backend && ../.venv/bin/python -m ruff check apps/api apps/creator_agent libs tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py: passed.
+cd backend && ../.venv/bin/python -m mypy apps libs: passed, 39 source files.
+Local HTTP A2A smoke: temporary Creator Agent :18081 + Product API :18082 with `KNOT_CREATOR_A2A_MODE=http` returned `AGREED`, real A2A task id, and Agreement id. Temporary smoke servers were stopped.
+Local current servers: backend :18080 `/readyz` 200; frontend :3000 `/dev/admin` 200.
+Frontend onboarding form fix: brand/creator onboarding now trims form values,
+falls back only on blank values, normalizes URL fields with `https://` when a
+scheme is omitted, and surfaces FastAPI 422 validation details as readable form
+errors. `cd frontend && npm run typecheck / npm run lint / npm test`: passed.
+No-eligible-creator negotiation guard: Product API now returns
+`NO_ELIGIBLE_CREATOR` instead of a generic missing `selectedCreatorAgentId`
+state, frontend API mode stops before `start-negotiation` when MatchRun has no
+selected creator, and matching/policy category checks normalize common Korean
+and English category aliases. Backend pytest/ruff/mypy and frontend
+typecheck/lint/unit tests passed.
+Product creation now exposes `usageRights` instead of hard-coding it, and the
+demo fitness/health creator seed accepts `paidBoost30d` so the current local
+health Promotion can complete the API-backed Agent flow. Local smoke through
+`:3000` proxy for `promotion-9c3beb19-307a-404b-808b-c08e95ef3ad2` returned a
+new eligible MatchRun (`creator-agent-002`) and `start-negotiation` 201 with an
+AGREED negotiation and Agreement.
+New frontend-created Promotions now default `autoEscrow` and `autoRelease` to
+`true` for the MVP demo path so Agreement → escrow lock → evidence verify →
+milestone release can be exercised without the human-approval placeholder
+blocking settlement.
+Local runtime was switched to a real service boundary for agent negotiation:
+Creator Agent runs on `:18081`, Product API runs on `:18080` with
+`KNOT_CREATOR_A2A_MODE=http`, and local smoke through the Next proxy completed
+Promotion match → HTTP A2A negotiation → Agreement → escrow lock → evidence
+verify → content milestone release. Receipts remain `SIMULATED` until the web3
+gateway is wired.
+Verification after this pass: backend targeted pytest `31 passed`, backend Ruff
+passed, backend mypy passed, frontend typecheck/lint/unit tests passed, and
+frontend production build passed after allowing Google Fonts network access.
 GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
 Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
 Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.
@@ -143,6 +177,11 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
   API reads no longer run match/negotiation/settlement writes on page load,
   creator detail routing uses `agreementId`, and Product API gained read-only
   Agreement/escrow lookup endpoints for frontend composition.
+- Implemented Phase 2 Creator A2A HTTP boundary: `KNOT_CREATOR_A2A_MODE=http`
+  makes Product API call `CREATOR_AGENT_BASE_URL/message:send` with official
+  A2A v1 headers, persist returned Task/Message/Artifact state, and create an
+  Agreement only from an accepted Artifact. Local mode remains the deterministic
+  seed fallback.
 
 ## Known blockers / open items
 
@@ -167,9 +206,9 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
   public wallet references and never accepts private keys or seed phrases.
 - Frontend dependency audit remediation is pending; Cloud Build surfaced npm
   high-severity findings that still need review.
-- Product API still starts negotiation through internal orchestration rather
-  than service-to-service Creator A2A HTTP. This is the next real-A2A contract
-  gap.
+- Product API→Creator Agent HTTP is implemented but Cloud Run private
+  service-to-service OIDC/IAM invocation is not wired yet. Local default remains
+  `KNOT_CREATOR_A2A_MODE=local` until deployment config is updated.
 
 ## Next task
 

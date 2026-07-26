@@ -231,11 +231,11 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
     try {
       const response = await new ProductApiClient().onboardBrand({
         userId: readLocalSession().userId,
-        brandName: String(formData.get("brandName") ?? "Glow Bar Labs"),
-        websiteUrl: String(formData.get("websiteUrl") ?? "https://glowbar.example"),
-        category: String(formData.get("category") ?? "beauty"),
-        targetAudience: splitList(String(formData.get("targetAudience") ?? "")),
-        restrictedClaims: splitList(String(formData.get("restrictedClaims") ?? "")),
+        brandName: formString(formData, "brandName", "Glow Bar Labs"),
+        websiteUrl: formHttpUrl(formData, "websiteUrl", "https://glowbar.example"),
+        category: formString(formData, "category", "beauty"),
+        targetAudience: splitList(formString(formData, "targetAudience", "")),
+        restrictedClaims: splitList(formString(formData, "restrictedClaims", "")),
       });
       saveLocalSession({
         userId: readLocalSession().userId,
@@ -309,23 +309,23 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
         promotionId: undefined,
         brandId: session.brandId || "brand-001",
         brandAgentId: session.brandAgentId || "brand-agent-001",
-        title: String(formData.get("productName") ?? product.title),
-        objective: String(formData.get("objective") ?? "awareness"),
-        category: String(formData.get("category") ?? product.category),
-        targetAudience: splitList(String(formData.get("targetAudience") ?? product.targetAudience)),
+        title: formString(formData, "productName", product.title),
+        objective: formString(formData, "objective", "awareness"),
+        category: formString(formData, "category", product.category),
+        targetAudience: splitList(formString(formData, "targetAudience", product.targetAudience)),
         budget: {
           totalUsdc: numberFromForm(formData, "totalBudget", product.budgetUsdc),
           maxPerCreatorUsdc: numberFromForm(formData, "maxOffer", product.maxOfferUsdc),
         },
         deliverables: [{ format: "reel", count: 1 }],
         postingWindow: { start: "2026-08-05", end: "2026-08-10" },
-        usageRights: "paidBoost30d",
+        usageRights: formString(formData, "usageRights", "paidBoost30d"),
         constraints: {
           requiredDisclosures: ["ad"],
-          prohibitedClaims: splitList(String(formData.get("blockedTerms") ?? "")),
-          requiredCategories: [String(formData.get("category") ?? product.category)],
+          prohibitedClaims: splitList(formString(formData, "blockedTerms", "")),
+          requiredCategories: [formString(formData, "category", product.category)],
         },
-        autonomy: { maxNegotiationRounds: 5, autoEscrow: false, autoRelease: false },
+        autonomy: { maxNegotiationRounds: 5, autoEscrow: true, autoRelease: true },
       });
       saveLocalSession({ ...session, role: "brand", promotionId: promotion.promotionId });
       router.push(`/brand/negotiate?promotionId=${promotion.promotionId}`);
@@ -348,6 +348,17 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
             <TextArea label="Target audience" name="targetAudience" placeholder={product.targetAudience} />
             <TextArea label="Objective" name="objective" placeholder="여름 스킨케어 루틴 인지도와 스토리 링크 전환" />
             <TextArea label="Deliverables" name="deliverables" placeholder={product.deliverables.join(", ")} />
+            <label className="block text-sm font-semibold">
+              Usage rights
+              <select
+                name="usageRights"
+                className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+                defaultValue="paidBoost30d"
+              >
+                <option value="paidBoost30d">Paid boost up to 30 days</option>
+                <option value="organicOnly">Organic usage only</option>
+              </select>
+            </label>
             <div className="grid gap-4 md:grid-cols-2">
               <Input label="Total budget (USDC)" name="totalBudget" placeholder={String(product.budgetUsdc)} type="number" required />
               <Input label="Maximum offer (USDC)" name="maxOffer" placeholder={String(product.maxOfferUsdc)} type="number" required />
@@ -503,9 +514,9 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
     try {
       const response = await new ProductApiClient().onboardCreator({
         userId: readLocalSession().userId,
-        creatorName: String(formData.get("creatorName") ?? "Mina Studio"),
-        snsUrl: String(formData.get("snsUrl") ?? "https://instagram.com/mina.studio"),
-        primaryCategory: String(formData.get("primaryCategory") ?? "beauty"),
+        creatorName: formString(formData, "creatorName", "Mina Studio"),
+        snsUrl: formHttpUrl(formData, "snsUrl", "https://instagram.com/mina.studio"),
+        primaryCategory: formString(formData, "primaryCategory", "beauty"),
       });
       saveLocalSession({
         userId: readLocalSession().userId,
@@ -576,10 +587,10 @@ export function CreatorCriteriaScreen({ criteria }: { criteria: CreatorCriteria 
       const creatorId = session.creatorId || "creator-001";
       await new ProductApiClient().updateCreatorCriteria(creatorId, {
         minimumUsdc: numberFromForm(formData, "minimumUsdc", criteria.minimumUsdc),
-        blockedDomains: splitList(String(formData.get("blockedDomains") ?? "")),
-        preferredContent: splitList(String(formData.get("preferredContent") ?? "")),
-        usageRights: String(formData.get("usageRights") ?? criteria.usageRights),
-        notes: String(formData.get("notes") ?? criteria.notes),
+        blockedDomains: splitList(formString(formData, "blockedDomains", "")),
+        preferredContent: splitList(formString(formData, "preferredContent", "")),
+        usageRights: formString(formData, "usageRights", criteria.usageRights),
+        notes: formString(formData, "notes", criteria.notes),
       });
       router.push("/creator/result");
     } catch (caught) {
@@ -1368,6 +1379,18 @@ function splitList(value: string) {
     .split(/[,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formString(formData: FormData, key: string, fallback: string) {
+  const value = formData.get(key);
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || fallback;
+}
+
+function formHttpUrl(formData: FormData, key: string, fallback: string) {
+  const value = formString(formData, key, fallback);
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  return `https://${value}`;
 }
 
 function numberFromForm(formData: FormData, key: string, fallback: number) {

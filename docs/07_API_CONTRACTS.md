@@ -123,9 +123,21 @@ POST   /negotiations/{negotiationId}:resume
 Current backend baseline implements `start-negotiation` by persisting the
 Negotiation, offer/decision Messages, decision Events, A2A Task, A2A Artifact,
 Agreement and Agreement Milestone documents through the repository boundary.
-The MatchCandidate document is updated with the started `negotiationId`. External
-A2A HTTP orchestration is a later integration step; persisted document shapes
-must remain compatible with the A2A payloads in `docs/09_A2A_PROTOCOL_v1.md`.
+The MatchCandidate document is updated with the started `negotiationId`.
+
+When `KNOT_CREATOR_A2A_MODE=http`, Product API sends an official A2A
+`message:send` request to `CREATOR_AGENT_BASE_URL` with:
+
+```http
+Content-Type: application/a2a+json
+A2A-Version: 1.0
+```
+
+The response Task is validated against the local A2A models. Product API
+materializes an Agreement only from an accepted final Artifact; it does not
+invent `agreementId` or `termsHash` from message rationale. Local/test mode uses
+the same A2A Task store in-process so seeds remain reproducible without running
+the Creator Agent service.
 
 ## 6. Agreement and payment endpoints
 
@@ -218,6 +230,7 @@ AUTH_INVALID_TOKEN
 RESOURCE_NOT_FOUND
 VALIDATION_ERROR
 INVALID_STATE_TRANSITION
+NO_ELIGIBLE_CREATOR
 IDEMPOTENCY_CONFLICT
 POLICY_VIOLATION
 NEGOTIATION_TERMINAL
