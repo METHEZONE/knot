@@ -15,8 +15,8 @@ Update this file at the end of every task.
 | creator A2A service | HTTP negotiation baseline | 2026-07-27 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store; demo tenants cover seeded creator agents 001/002/003 and Cloud Run deploy config is now included. |
 | web3 gateway | Lock/release validation + deployable gateway | 2026-07-27 | Validates lock and milestone release requests, idempotent simulated receipts, persisted non-secret live lock context, and optional `KNOT_WEB3_SIGNING_MODE=devnet` Solana submitter using `@solana/web3.js`/`@solana/spl-token`; Cloud Run deploy config is now included. |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
-| Terraform/GCP | direct Cloud Run deploy baseline | 2026-07-27 | Target project `knot-dev-503505`; Firestore Native `(default)` and Artifact Registry repo `us-central1/knot` exist. Direct deploy script now builds/deploys `knot-web`, `knot-api`, `knot-creator-agent`, and `knot-web3`; Terraform is still not authored/applied. |
-| end-to-end demo | settlement leg proven on devnet; Cloud Run full-service deploy pending smoke | 2026-07-27 | On-chain escrow settlement verified previously. Full Cloud Run service boundary is now scripted; live signer/pay.sh resource configuration remains external. |
+| Terraform/GCP | direct Cloud Run deploy baseline | 2026-07-27 | Target project `knot-dev-503505`; Firestore Native `(default)` and Artifact Registry repo `us-central1/knot` exist. Direct deploy script builds/deploys `knot-web`, `knot-api`, `knot-creator-agent`, and `knot-web3`; latest deployed image tag is `14f8ff2`. Terraform is still not authored/applied. |
+| end-to-end demo | Cloud Run service-boundary smoke passed | 2026-07-27 | Promotion create → match → HTTP A2A negotiation → Agreement → web3 gateway escrow lock → evidence verify → milestone release passed on Cloud Run with Firestore and SIMULATED gateway receipts. Live signer/pay.sh resource configuration remains external. |
 
 ## Contract versions
 
@@ -134,6 +134,23 @@ advisories through Solana JS and ESLint dependency trees; the suggested
 GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
 Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
 Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.
+Cloud Run four-service deploy: `./scripts/deploy_cloud_run_demo.sh` built and
+deployed image tag `14f8ff2` for `knot-api`, `knot-creator-agent`,
+`knot-web3`, and `knot-web`. Latest revisions:
+`knot-api-00003-k2n`, `knot-creator-agent-00002-6wr`,
+`knot-web3-00002-xvx`, and `knot-web-00004-htr`.
+Cloud Run service-boundary smoke: `GET /readyz` passed on API, Creator Agent
+and web3 gateway; `GET /login` passed on web; Product API env has
+`KNOT_CREATOR_A2A_MODE=http`, `CREATOR_A2A_TIMEOUT_SECONDS=60`,
+`KNOT_WEB3_MODE=gateway`, `KNOT_GEMINI_MODE=vertex`, and
+`PAYSH_RESOURCE_ID=replace-me`. A write smoke created
+`promotion-smoke-1785080684`, produced `match-d22888d3-1b52-4676-aaa8-1ccef785be80`,
+completed HTTP A2A negotiation into
+`agreement-45af8765-f089-460f-b6f9-70863d3ccaae`, locked
+`escrow-af888618-ccea-4f62-a282-67905c831730`, verified content evidence as
+`PASSED`, and released the content milestone. Lock/release receipts are
+`SIMULATED` because `knot-web3` is currently deployed with
+`KNOT_WEB3_SIGNING_MODE=simulated`; lock receipt contains `gatewayReceipt`.
 ```
 
 ## Decisions made during implementation
