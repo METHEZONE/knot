@@ -766,8 +766,8 @@ repository boundary를 통해 처리한다.
 - 실제 SNS ingestion 및 SNS 분석
 - 실제 PDF/제품 문서 업로드 및 분석
 - Cloud Run private OIDC/IAM 기반 Creator A2A 호출 설정
-- pay.sh/x402 유료 API 호출 receipt 표시
-- Product API에서 web3 gateway를 통한 실제 Solana devnet signing smoke
+- 실제 pay.sh sandbox resource를 사용한 x402 receipt smoke
+- Secret Manager signer를 사용한 web3 gateway Solana devnet signing smoke
 - Terraform 기반 GCP 재현 가능 배포
 - Cloud Run runtime service account 최소 권한 설정
 - frontend npm dependency audit remediation
@@ -795,5 +795,7 @@ repository boundary를 통해 처리한다.
 
 해커톤 평가 관점에서 아직 가장 큰 proof gap은 다음 두 가지다.
 
-- private web3 gateway devnet signing mode를 실제 signer로 smoke/deploy
-- Brand Agent matching 흐름 안에서 pay.sh/x402 paid verification call 표시
+- Secret Manager에 brand/creator/agent devnet signer를 올리고
+  `KNOT_WEB3_SIGNING_MODE=devnet`으로 Cloud Run gateway를 smoke/deploy
+- 실제 `PAYSH_RESOURCE_ID`를 넣고 Brand Agent matching 흐름에서 fresh
+  pay.sh/x402 sandbox receipt를 생성

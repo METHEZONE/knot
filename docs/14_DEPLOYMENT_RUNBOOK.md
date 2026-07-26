@@ -89,7 +89,55 @@ Seed output includes:
 - wallet public keys
 - expected initial status
 
-## 5. Smoke test
+## 5. Demo Cloud Run deploy
+
+The current repository has a direct demo deploy script for the four Cloud Run
+services. It builds immutable images from the current Git SHA tag, deploys the
+Creator A2A server and web3 gateway first, reads their Cloud Run URLs, then
+deploys Product API and frontend with those URLs.
+
+```text
+PROJECT_ID=knot-dev-503505 REGION=us-central1 ./scripts/deploy_cloud_run_demo.sh
+```
+
+Current script behavior:
+
+- `knot-web`: public Cloud Run service, Next.js API mode.
+- `knot-api`: public demo service, Firestore repository, Vertex Gemini enabled,
+  Creator A2A HTTP mode, web3 gateway mode and pay.sh sandbox mode.
+- `knot-creator-agent`: public demo A2A HTTP service with Vertex Gemini enabled.
+- `knot-web3`: public demo gateway in `KNOT_WEB3_SIGNING_MODE=simulated`.
+
+This public setup is for hackathon demo iteration only. The target production
+topology still requires private IAM/OIDC invocation for `knot-creator-agent`
+and `knot-web3`.
+
+To switch the deployed gateway from simulated receipts to real devnet
+transactions, mount Secret Manager values for the brand, creator and agent
+devnet signer keypairs and set:
+
+```text
+KNOT_WEB3_SIGNING_MODE=devnet
+KNOT_BRAND_KEYPAIR_PATH=/secrets/<brand-keypair-file>
+KNOT_CREATOR_KEYPAIR_PATH=/secrets/<creator-keypair-file>
+KNOT_AGENT_KEYPAIR_PATH=/secrets/<agent-keypair-file>
+```
+
+Use Secret Manager mounts or secret env vars only. Do not commit keypair JSON,
+private keys or seed phrases.
+
+To make pay.sh produce a fresh live sandbox receipt, deploy `knot-api` with a
+real priced sandbox resource:
+
+```text
+PAYSH_MODE=sandbox
+PAYSH_RESOURCE_ID=<pay.sh sandbox resource URL or ID>
+```
+
+The API image installs the `pay` CLI so this works in Cloud Run even when the
+CLI is not installed on a local developer machine.
+
+## 6. Smoke test
 
 The smoke script checks:
 
@@ -101,7 +149,18 @@ The smoke script checks:
 - web3 gateway simulation
 - frontend URL
 
-## 6. Demo-day preparation
+Current manual Cloud Run smoke:
+
+```text
+curl -sS https://<knot-api-url>/readyz
+curl -sS https://<knot-api-url>/api/v1/promotions
+curl -sS https://<knot-creator-agent-url>/readyz
+curl -sS https://<knot-web3-url>/readyz
+curl -sS https://<knot-web-url>/login
+curl -sS https://<knot-web-url>/api/v1/promotions
+```
+
+## 7. Demo-day preparation
 
 - deploy immutable Git SHA
 - set backend minimum instances to 1 shortly before demo
@@ -112,6 +171,6 @@ The smoke script checks:
 - record fallback video after successful run
 - export transaction signatures and key screenshots
 
-## 7. Rollback
+## 8. Rollback
 
 Cloud Run rollback uses the last known good revision. Data migrations must be additive for v1. If an incompatible schema is unavoidable, provide a reversible migration script before deployment.

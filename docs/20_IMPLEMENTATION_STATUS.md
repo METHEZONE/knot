@@ -4,19 +4,19 @@ Update this file at the end of every task.
 
 ## Current milestone
 
-`M4 complete + product MVP frontend/API/GCP baseline in progress`
+`M4 complete + product MVP frontend/API/GCP deploy baseline in progress`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; API mode is now the default, and `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is an explicit fixture-only override. `KnotDataSource` reads Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition without page-load write fallbacks. Login/signup/onboarding/Promotion creation forms submit to Product API through a Next `/api/v1/[...path]` proxy. |
-| knot-api | Account/onboarding + A2A/escrow/pay.sh API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, Agreement escrow-state lookup, configurable Product API→Creator A2A HTTP orchestration, optional Product API→web3 gateway lock/release orchestration, and pay.sh/x402 `API_PAYMENT` PromotionEvents through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired. |
-| creator A2A service | HTTP negotiation baseline | 2026-07-26 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store; demo tenants now cover seeded creator agents 001/002/003 |
-| web3 gateway | Lock/release validation + devnet signing mode | 2026-07-26 | Validates lock and milestone release requests, idempotent simulated receipts, and optional `KNOT_WEB3_SIGNING_MODE=devnet` Solana submitter using `@solana/web3.js`/`@solana/spl-token`; config defaults point at the deployed program id and devnet USDC mint |
+| frontend | Product MVP API integration expanded | 2026-07-27 | Branch `integration/frontend-backend-api`; API mode is now the default, and `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is an explicit fixture-only override. `KnotDataSource` reads Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition without page-load write fallbacks. Login/signup/onboarding/Promotion creation forms submit to Product API through a Next `/api/v1/[...path]` proxy. |
+| knot-api | Account/onboarding + A2A/escrow/pay.sh API | 2026-07-27 | Product API can run against Firestore, call Creator A2A over HTTP, call web3 gateway lock/release endpoints, and record pay.sh/x402 `API_PAYMENT` PromotionEvents. API container now installs the Node 20+ `pay` CLI dependency through a Node 22 Docker stage so Cloud Run can generate live sandbox receipts when `PAYSH_RESOURCE_ID` is configured. |
+| creator A2A service | HTTP negotiation baseline | 2026-07-27 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store; demo tenants cover seeded creator agents 001/002/003 and Cloud Run deploy config is now included. |
+| web3 gateway | Lock/release validation + deployable gateway | 2026-07-27 | Validates lock and milestone release requests, idempotent simulated receipts, persisted non-secret live lock context, and optional `KNOT_WEB3_SIGNING_MODE=devnet` Solana submitter using `@solana/web3.js`/`@solana/spl-token`; Cloud Run deploy config is now included. |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
-| Terraform/GCP | minimal Cloud Run deploy complete | 2026-07-26 | Target project `knot-dev-503505`; Firestore Native `(default)` created in `us-central1`, Artifact Registry repo `knot` created, `knot-api` and `knot-web` deployed to Cloud Run. Terraform is still not authored/applied. |
-| end-to-end demo | settlement leg proven on devnet | 2026-07-25 | on-chain escrow settlement verified; full app→chain wiring, pay.sh flow, frontend↔live API and Cloud Run remain |
+| Terraform/GCP | direct Cloud Run deploy baseline | 2026-07-27 | Target project `knot-dev-503505`; Firestore Native `(default)` and Artifact Registry repo `us-central1/knot` exist. Direct deploy script now builds/deploys `knot-web`, `knot-api`, `knot-creator-agent`, and `knot-web3`; Terraform is still not authored/applied. |
+| end-to-end demo | settlement leg proven on devnet; Cloud Run full-service deploy pending smoke | 2026-07-27 | On-chain escrow settlement verified previously. Full Cloud Run service boundary is now scripted; live signer/pay.sh resource configuration remains external. |
 
 ## Contract versions
 
@@ -225,7 +225,8 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
 ## Known blockers / open items
 
 - Gateway devnet signing code exists, but live smoke/deployment still needs
-  brand/creator/agent devnet signers mounted through Secret Manager.
+  brand/creator/agent devnet signers mounted through Secret Manager and funded
+  with the correct devnet SOL/USDC-SPL balances.
 - web3 gateway npm audit reports transitive high advisories in Solana JS/Eslint
   dependency trees; resolving them needs dependency-major evaluation rather than
   automatic `npm audit fix --force`.
@@ -234,9 +235,9 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
 - Dedicated least-privilege runtime service accounts are not configured yet;
   current Cloud Run services use the default runtime identity.
 - pay.sh flow-1 is wired into Brand Agent matching as an `API_PAYMENT`
-  PromotionEvent, but the deployed runtime still needs a real sandbox
-  `PAYSH_RESOURCE_ID` and `pay` CLI installation to produce a fresh settled
-  x402 receipt during the live demo.
+  PromotionEvent, and the API image includes the `pay` CLI. A real sandbox
+  `PAYSH_RESOURCE_ID` is still required to produce a fresh settled x402 receipt
+  during the live demo.
 - Frontend product MVP has API-backed local-demo login/signup/onboarding and
   Promotion creation. Firebase Auth and production session enforcement are
   still pending.
@@ -254,14 +255,11 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
   public wallet references and never accepts private keys or seed phrases.
 - Frontend dependency audit remediation is pending; Cloud Build surfaced npm
   high-severity findings that still need review.
-- Product API→Creator Agent HTTP is implemented but Cloud Run private
-  service-to-service OIDC/IAM invocation is not wired yet. Local default remains
-  `KNOT_CREATOR_A2A_MODE=local` until deployment config is updated.
-- Cloud Run service environment variables are not yet updated to enable
-  `KNOT_GEMINI_MODE=vertex`; local runtime is already running in Vertex mode.
+- Product API→Creator Agent HTTP is implemented and the demo deploy script
+  enables it. Private service-to-service OIDC/IAM invocation is not wired yet.
 
 ## Next task
 
-Wire the escrow API's SIMULATED receipts to the deployed devnet program through
-the web3 gateway, connect pay.sh flow-1, and replace local-demo auth with
-Firebase Auth/session enforcement.
+Run the four-service Cloud Run deploy script, smoke the deployed API/web/A2A
+gateway boundary, then configure Secret Manager signers and a real pay.sh
+sandbox resource for live receipt smoke.
