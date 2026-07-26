@@ -151,6 +151,20 @@ completed HTTP A2A negotiation into
 `PASSED`, and released the content milestone. Lock/release receipts are
 `SIMULATED` because `knot-web3` is currently deployed with
 `KNOT_WEB3_SIGNING_MODE=simulated`; lock receipt contains `gatewayReceipt`.
+Demo-video prep: added Korean runbook `docs/DEMO_VIDEO_README_KO.md`, seeded
+demo account fixtures (`test1`/`test2` Brand, `test3`/`test4` Creator, all
+password `0000` for UI-only demo guard), and updated the login screen to accept
+those IDs. Authentication remains `local-demo` Product API bootstrap, not
+Firebase Auth or server-side password verification.
+Verification for this pass:
+`git diff --check`; `cd frontend && npm run typecheck`; `cd frontend && npm run
+lint`; `cd frontend && npm run build`; `cd backend && ../.venv/bin/python -m
+ruff check libs/repositories/seed.py tests/test_firestore_repositories.py
+apps/api`; `cd backend && ../.venv/bin/python -m pytest
+tests/test_firestore_repositories.py tests/test_api_onboarding.py
+tests/test_matching.py tests/test_a2a_negotiation.py
+tests/test_brand_orchestration.py tests/test_api_promotions.py
+tests/test_api_escrow.py tests/test_settlement.py`.
 ```
 
 ## Decisions made during implementation

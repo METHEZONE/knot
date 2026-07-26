@@ -1,0 +1,62 @@
+[
+  {
+    "userId": "user-test1",
+    "email": "test1@knot.demo",
+    "displayName": "Brand Test 1",
+    "roles": ["brand"],
+    "activeRole": "brand",
+    "brandId": "brand-001",
+    "brandAgentId": "brand-agent-001",
+    "authProvider": "local-demo",
+    "demoLoginId": "test1",
+    "demoPasswordHint": "0000",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "userId": "user-test2",
+    "email": "test2@knot.demo",
+    "displayName": "Brand Test 2",
+    "roles": ["brand"],
+    "activeRole": "brand",
+    "brandId": "brand-001",
+    "brandAgentId": "brand-agent-001",
+    "authProvider": "local-demo",
+    "demoLoginId": "test2",
+    "demoPasswordHint": "0000",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "userId": "user-test3",
+    "email": "test3@knot.demo",
+    "displayName": "Creator Test 1",
+    "roles": ["creator"],
+    "activeRole": "creator",
+    "creatorId": "creator-001",
+    "creatorAgentId": "creator-agent-001",
+    "authProvider": "local-demo",
+    "demoLoginId": "test3",
+    "demoPasswordHint": "0000",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "userId": "user-test4",
+    "email": "test4@knot.demo",
+    "displayName": "Creator Test 2",
+    "roles": ["creator"],
+    "activeRole": "creator",
+    "creatorId": "creator-003",
+    "creatorAgentId": "creator-agent-003",
+    "authProvider": "local-demo",
+    "demoLoginId": "test4",
+    "demoPasswordHint": "0000",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  }
+]

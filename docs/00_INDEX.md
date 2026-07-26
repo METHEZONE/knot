@@ -26,6 +26,7 @@
 | `22_FIRESTORE_RUNBOOK.md` | Firestore setup, seed, indexes, invariants and verification | DB/API persistence work |
 | `23_EXPERIENCE_PRD_v2.md` | Experience layer: onboarding, agent hatching, expedition map, replay sharing, dual dashboards | Frontend and onboarding work |
 | `24_PRODUCT_FLOW_AND_FEATURES.md` | Current implemented product flow, feature inventory, deployment baseline and remaining gaps | Product demo handoff and status review |
+| `DEMO_VIDEO_README_KO.md` | Korean demo-video runbook, test accounts, flow script and current-real-vs-simulated status | Demo recording and QA rehearsal |
 
 ## Minimal context set per task
 

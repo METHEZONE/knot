@@ -79,11 +79,25 @@ export function LoginScreen() {
     setStatus("saving");
     setError(null);
     try {
-      const role = String(formData.get("role") ?? "brand") as Role;
-      const email = String(formData.get("email") ?? "");
-      const displayName = email.split("@")[0] || "KNOT user";
+      const selectedRole = String(formData.get("role") ?? "brand") as Role;
+      const loginId = String(formData.get("loginId") ?? "");
+      const password = String(formData.get("password") ?? "");
+      const demoAccount = resolveDemoAccount(loginId);
+      if (demoAccount && password !== "0000") {
+        throw new Error("Demo account password is 0000.");
+      }
+      const role = demoAccount?.role ?? selectedRole;
+      const email = demoAccount?.email ?? loginId;
+      const displayName = demoAccount?.displayName ?? email.split("@")[0] ?? "KNOT user";
       const user = await new ProductApiClient().bootstrapUser({ email, displayName, role });
-      saveLocalSession({ userId: user.userId, role });
+      saveLocalSession({
+        userId: user.userId,
+        role,
+        brandId: user.brandId,
+        brandAgentId: user.brandAgentId,
+        creatorId: user.creatorId,
+        creatorAgentId: user.creatorAgentId,
+      });
       router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
     } catch (caught) {
       setError(errorMessage(caught));
@@ -99,8 +113,8 @@ export function LoginScreen() {
     >
       <Panel>
         <form action={submit} className="grid gap-4">
-          <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
-          <Input label="Password" name="password" placeholder="Password" type="password" required />
+          <Input label="ID or Email" name="loginId" placeholder="test1 or you@company.com" required />
+          <Input label="Password" name="password" placeholder="0000 for demo accounts" type="password" required />
           <label className="mt-4 block">
             <span className="text-sm font-semibold">Workspace role</span>
             <select name="role" className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" defaultValue="brand">
@@ -127,6 +141,11 @@ export function LoginScreen() {
         <p className="mt-5 text-sm text-muted">
           계정이 없으면 <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>에서 역할을 선택하세요.
         </p>
+        <div className="mt-5 grid gap-2 rounded border border-border-subtle bg-surface p-4 text-sm text-muted">
+          <p className="font-semibold text-foreground">Demo accounts</p>
+          <p>Brand: test1 / 0000, test2 / 0000</p>
+          <p>Creator: test3 / 0000, test4 / 0000</p>
+        </div>
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
         <RoleJumpCard role="brand" title="Brand workspace" href="/brand/onboarding" />
@@ -1357,6 +1376,17 @@ type LocalSession = {
 };
 
 const LOCAL_SESSION_KEY = "knot.localSession";
+
+const DEMO_ACCOUNTS: Record<string, { email: string; displayName: string; role: Role }> = {
+  test1: { email: "test1@knot.demo", displayName: "Brand Test 1", role: "brand" },
+  test2: { email: "test2@knot.demo", displayName: "Brand Test 2", role: "brand" },
+  test3: { email: "test3@knot.demo", displayName: "Creator Test 1", role: "creator" },
+  test4: { email: "test4@knot.demo", displayName: "Creator Test 2", role: "creator" },
+};
+
+function resolveDemoAccount(loginId: string) {
+  return DEMO_ACCOUNTS[loginId.trim().toLowerCase()];
+}
 
 function readLocalSession(): LocalSession {
   if (typeof window === "undefined") return {};

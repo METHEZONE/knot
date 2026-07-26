@@ -86,6 +86,8 @@ def test_demo_seed_is_idempotent_and_loads_core_collections() -> None:
     ]
     assert "brands/brand-001" in store.paths()
     assert "agents/brand-agent-001" in store.paths()
+    assert "users/user-test1" in store.paths()
+    assert "users/user-test4" in store.paths()
 
 
 def test_repository_returns_copies_not_mutable_store_references() -> None:

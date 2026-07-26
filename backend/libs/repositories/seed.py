@@ -25,6 +25,11 @@ def seed_demo_repository(
 ) -> None:
     fixture_root = fixtures_dir or backend_root() / "fixtures"
 
+    users_path = fixture_root / "users.json"
+    if users_path.exists():
+        for user in load_json_array(users_path):
+            repository.save_raw_document(FirestorePaths.user(_require_str(user, "userId")), user)
+
     for brand in load_json_array(fixture_root / "brands.json"):
         repository.save_raw_document(FirestorePaths.brand(_require_str(brand, "brandId")), brand)
 
