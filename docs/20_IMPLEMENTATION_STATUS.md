@@ -165,6 +165,12 @@ tests/test_firestore_repositories.py tests/test_api_onboarding.py
 tests/test_matching.py tests/test_a2a_negotiation.py
 tests/test_brand_orchestration.py tests/test_api_promotions.py
 tests/test_api_escrow.py tests/test_settlement.py`.
+Deployment/seed for this pass: deployed tag `cdca915` to Cloud Run
+(`knot-creator-agent-00003-6dz`, `knot-web3-00003-8mq`,
+`knot-api-00004-74w`, `knot-web-00005-qhz`), seeded Firestore in
+`knot-dev-503505`, verified `/readyz` for API/Creator Agent/web3, verified web
+`/login` returns 200 and includes demo account copy, and verified Product API
+`users:bootstrap` returns seeded `user-test1` and `user-test3`.
 ```
 
 ## Decisions made during implementation
