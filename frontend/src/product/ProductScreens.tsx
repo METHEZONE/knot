@@ -3,8 +3,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
+import { ROLE_ENTRY, ROLE_LABEL, signIn } from "./session";
 import type {
   AgentTask,
   BrandProduct,
@@ -72,8 +74,8 @@ export function LoginScreen() {
   return (
     <AuthFrame
       eyebrow="Sign in"
-      title="계정으로 로그인"
-      body="실제 인증 연동 전까지는 mock session으로 역할별 워크스페이스를 확인합니다."
+      title="어느 쪽으로 로그인할까요?"
+      body="로그인은 이 창에만 적용됩니다. 창을 두 개 띄워 한쪽은 브랜드로, 다른 쪽은 크리에이터로 로그인하면 두 사용자가 서로 협상하는 걸 나란히 볼 수 있어요."
     >
       <Panel>
         <div className="grid gap-4">
@@ -81,9 +83,10 @@ export function LoginScreen() {
           <Input label="Password" placeholder="Password" type="password" />
           <button
             type="button"
-            className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-background"
+            disabled
+            className="rounded-full border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
           >
-            Continue
+            이메일 로그인 · 준비 중
           </button>
           <button
             type="button"
@@ -94,12 +97,22 @@ export function LoginScreen() {
           </button>
         </div>
         <p className="mt-5 text-sm text-muted">
-          계정이 없으면 <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>에서 역할을 선택하세요.
+          이메일·구글·솔라나 지갑 로그인은 이후에 붙습니다. 지금은 아래에서 역할을
+          골라 들어가세요. 계정을 새로 만들려면{" "}
+          <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>.
         </p>
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
-        <RoleJumpCard role="brand" title="Brand workspace" href="/brand/onboarding" />
-        <RoleJumpCard role="creator" title="Creator workspace" href="/creator/onboarding" />
+        <RoleSignInCard
+          role="brand"
+          title="브랜드로 로그인"
+          body="제품 제안서를 올리고, Brand Agent가 크리에이터를 찾아 협상합니다."
+        />
+        <RoleSignInCard
+          role="creator"
+          title="크리에이터로 로그인"
+          body="협상 기준만 정해두면, Creator Agent가 들어온 제안을 선별합니다."
+        />
       </div>
     </AuthFrame>
   );
@@ -131,7 +144,8 @@ export function SignupScreen() {
 }
 
 export function RoleSignupScreen({ role, session }: { role: Role; session: RoleSession }) {
-  const nextHref = role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
+  const router = useRouter();
+  const nextHref = ROLE_ENTRY[role];
   return (
     <AuthFrame
       eyebrow={`${role} signup`}
@@ -153,7 +167,14 @@ export function RoleSignupScreen({ role, session }: { role: Role; session: RoleS
           <Input label="Workspace handle" placeholder={role === "brand" ? "glow-bar-labs" : "mina-studio"} />
         </div>
         <div className="mt-6">
-          <PrimaryLink href={nextHref}>온보딩 계속</PrimaryLink>
+          <PrimaryAction
+            onClick={() => {
+              signIn(role);
+              router.push(nextHref);
+            }}
+          >
+            온보딩 계속
+          </PrimaryAction>
         </div>
       </Panel>
     </AuthFrame>
@@ -561,6 +582,7 @@ function WorkspaceShell({
 }
 
 function RoleChoiceCard({ role, title, body, href }: { role: Role; title: string; body: string; href: string }) {
+  const router = useRouter();
   return (
     <Panel>
       <div className="flex items-center gap-4">
@@ -572,23 +594,44 @@ function RoleChoiceCard({ role, title, body, href }: { role: Role; title: string
       </div>
       <p className="mt-4 text-muted">{body}</p>
       <div className="mt-6">
-        <PrimaryLink href={href}>선택</PrimaryLink>
+        <PrimaryAction
+          onClick={() => {
+            signIn(role);
+            router.push(href);
+          }}
+        >
+          선택
+        </PrimaryAction>
       </div>
     </Panel>
   );
 }
 
-function RoleJumpCard({ role, title, href }: { role: Role; title: string; href: string }) {
+/**
+ * 이 창을 해당 역할로 로그인시킨다. 세션은 창 단위(sessionStorage)라서, 창을
+ * 두 개 띄워 한쪽은 브랜드로 한쪽은 크리에이터로 로그인하면 두 유저가 된다.
+ */
+function RoleSignInCard({ role, title, body }: { role: Role; title: string; body: string }) {
+  const router = useRouter();
+  const label = ROLE_LABEL[role];
   return (
-    <Link href={href} className="sketch ink block border border-border-subtle bg-surface p-5 hover:bg-surface-raised">
+    <button
+      type="button"
+      onClick={() => {
+        signIn(role);
+        router.push(ROLE_ENTRY[role]);
+      }}
+      className="sketch ink block w-full border border-border-subtle bg-surface p-5 text-left hover:bg-surface-raised"
+    >
       <div className="flex items-center gap-3">
         <AgentCharacter agentId={`${role}-jump-agent`} side={role} category="wellness" pose="idle" size={64} />
         <div>
-          <Pill>mock session</Pill>
+          <Pill>{label.org}</Pill>
           <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
         </div>
       </div>
-    </Link>
+      <p className="mt-3 text-sm text-muted">{body}</p>
+    </button>
   );
 }
 
@@ -908,6 +951,14 @@ function Panel({ children }: { children: ReactNode }) {
 
 function Pill({ children }: { children: ReactNode }) {
   return <span className="sketch-pill ink inline-flex border border-border-subtle bg-surface-raised px-3 py-1 font-mono text-xs uppercase text-muted">{children}</span>;
+}
+
+function PrimaryAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+      {children}
+    </button>
+  );
 }
 
 function PrimaryLink({ href, children }: { href: string; children: ReactNode }) {
