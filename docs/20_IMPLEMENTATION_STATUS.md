@@ -11,9 +11,9 @@ Update this file at the end of every task.
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
 | frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; API mode is now the default, and `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is an explicit fixture-only override. `KnotDataSource` reads Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition without page-load write fallbacks. Login/signup/onboarding/Promotion creation forms submit to Product API through a Next `/api/v1/[...path]` proxy. |
-| knot-api | Account/onboarding + A2A/escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, Agreement escrow-state lookup, and configurable Product API→Creator A2A HTTP orchestration through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
+| knot-api | Account/onboarding + A2A/escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, Agreement escrow-state lookup, configurable Product API→Creator A2A HTTP orchestration, and optional Product API→web3 gateway lock/release orchestration through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; gateway receipts are still SIMULATED pending on-chain signing. |
 | creator A2A service | HTTP negotiation baseline | 2026-07-26 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store; demo tenants now cover seeded creator agents 001/002/003 |
-| web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
+| web3 gateway | Lock/release validation (SIMULATED) | 2026-07-26 | Validates lock and milestone release requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
 | Terraform/GCP | minimal Cloud Run deploy complete | 2026-07-26 | Target project `knot-dev-503505`; Firestore Native `(default)` created in `us-central1`, Artifact Registry repo `knot` created, `knot-api` and `knot-web` deployed to Cloud Run. Terraform is still not authored/applied. |
 | end-to-end demo | settlement leg proven on devnet | 2026-07-25 | on-chain escrow settlement verified; full app→chain wiring, pay.sh flow, frontend↔live API and Cloud Run remain |
@@ -101,6 +101,15 @@ Vertex AI API (`aiplatform.googleapis.com`) is enabled in `knot-dev-503505`.
 Local Vertex smoke passed with `gemini-2.5-flash`. Local HTTP A2A smoke through
 the Next proxy produced `analysisProvider=vertex-gemini` on MatchCandidate and
 `rationaleProvider=vertex-gemini` on the Creator Agent response message.
+Web3 gateway boundary pass: `KNOT_WEB3_MODE=gateway` makes Product API call
+private gateway lock/release endpoints and persist the returned
+`gatewayReceipt`. Verification: `cd backend && ../.venv/bin/python -m pytest
+tests/test_api_escrow.py tests/test_api_promotions.py tests/test_a2a_negotiation.py`
+passed with 33 tests, backend Ruff passed, backend mypy passed, and
+`cd web3/gateway && npm test / npm run lint / npm run build` passed. Local
+gateway-mode smoke on `:18084` through gateway `:18083` completed
+Promotion→MatchRun→Negotiation→Evidence→Escrow lock→Milestone release with
+`lockGatewayReceipt=true` and `releaseGatewayReceipt=true`.
 GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
 Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
 Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.

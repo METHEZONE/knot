@@ -163,9 +163,9 @@ SNS/PDF analysis.
 | Gemini analysis | candidate/rationale metadata boundary | optional Vertex mode | provider metadata persisted on candidates | `KNOT_GEMINI_MODE=vertex` calls Vertex AI Gemini for non-authoritative text | partial |
 | A2A negotiation | projection only | Product API can call Creator A2A HTTP when configured | messages/tasks/artifacts persisted | HTTP `message:send` supported; Cloud Run OIDC not wired yet | partial |
 | Agreement | yes | yes | yes | A2A Artifact relation persisted | partial |
-| Escrow lock | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
+| Escrow lock | yes | yes | yes | Product API can call private web3 gateway in `KNOT_WEB3_MODE=gateway`; gateway receipt still SIMULATED | partial |
 | Evidence verification | yes | yes | yes | deterministic URL/disclosure check, no live content fetch | partial |
-| Escrow release | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
+| Escrow release | yes | yes | yes | Product API can call private web3 gateway in `KNOT_WEB3_MODE=gateway`; gateway receipt still SIMULATED | partial |
 
 ### Mock dependency locations
 
@@ -186,9 +186,9 @@ SNS/PDF analysis.
 - Creator A2A service owns the external A2A HTTP surface. Product API calls it
   when `KNOT_CREATOR_A2A_MODE=http`; local/test mode keeps an in-process A2A
   task store for deterministic seeds.
-- Escrow API currently guards idempotency and deterministic policy checks, then
-  records `SIMULATED` receipts. Real lock/release must go through the private
-  web3 gateway before being shown as devnet transactions.
+- Escrow API guards idempotency and deterministic policy checks. In local mode
+  it records `SIMULATED` receipts directly; in gateway mode it calls the private
+  web3 gateway and stores the returned gateway receipt.
 
 ### Missing Golden Path contracts
 
@@ -197,8 +197,8 @@ SNS/PDF analysis.
 - Vertex/Gemini profile analysis and evidence-observation contract that cannot
   authorize payments.
 - pay.sh/x402 paid verification receipt schema in Promotion timeline.
-- Product API -> web3 gateway lock/release request and response schema for real
-  devnet signatures.
+- Private web3 gateway signing implementation for real devnet lock/release
+  signatures.
 - Firebase Auth/session claims contract for Brand/Creator resource ownership.
 
 ### Milestones
@@ -207,8 +207,8 @@ SNS/PDF analysis.
       fallback, resource ID routing, and visible loading/empty/error states.
 - [x] M2 — Product API calls Creator A2A service over HTTP and persists returned
       Task/Message/Artifact state.
-- [ ] M3 — Product API calls private web3 gateway for real devnet lock/release
-      signatures.
+- [ ] M3 — Product API calls private web3 gateway for lock/release; gateway
+      signing still needs real devnet signatures.
 - [ ] M4 — pay.sh/x402 verification receipt appears in Promotion timeline.
 - [x] M5 — optional Vertex AI Gemini provider boundary for non-authoritative
       candidate explanations and Creator Agent rationale.

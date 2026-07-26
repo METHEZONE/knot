@@ -13,12 +13,26 @@ export const lockRequestSchema = z.object({
   creatorDestination: z.string().min(1)
 });
 
-export type LockReceipt = {
+export const releaseRequestSchema = z.object({
+  agreementId: z.string().min(1),
+  escrowId: z.string().min(1),
+  milestoneId: z.string().min(1),
+  termsHash: z.string().startsWith("sha256:"),
+  expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/),
+  mint: z.string().min(1),
+  programId: z.string().min(1),
+  network: z.literal("solanaDevnet"),
+  creatorDestination: z.string().min(1)
+});
+
+export type GatewayReceipt = {
   status: "SIMULATED";
   agreementId: string;
   escrowId: string;
+  milestoneId?: string;
   termsHash: string;
-  lockedAmountBaseUnits: string;
+  lockedAmountBaseUnits?: string;
+  releasedAmountBaseUnits?: string;
   mint: string;
   programId: string;
   network: "solanaDevnet";
@@ -28,13 +42,15 @@ export type LockReceipt = {
 };
 
 export type LockResult =
-  | { statusCode: 202; body: { data: LockReceipt; detail: string } }
-  | { statusCode: 200; body: { data: LockReceipt; idempotentReplay: true } }
+  | { statusCode: 202; body: { data: GatewayReceipt; detail: string } }
+  | { statusCode: 200; body: { data: GatewayReceipt; idempotentReplay: true } }
   | { statusCode: 400; body: { code: "VALIDATION_ERROR"; detail: string } }
   | { statusCode: 409; body: { code: "POLICY_VIOLATION"; detail: string } };
 
+export type ReleaseResult = LockResult;
+
 export class EscrowLockService {
-  private readonly receipts = new Map<string, LockReceipt>();
+  private readonly receipts = new Map<string, GatewayReceipt>();
 
   lock(config: GatewayConfig, idempotencyKey: string | undefined, body: unknown): LockResult {
     if (!idempotencyKey) {
@@ -83,7 +99,7 @@ export class EscrowLockService {
       };
     }
 
-    const receipt: LockReceipt = {
+    const receipt: GatewayReceipt = {
       status: "SIMULATED",
       agreementId: result.data.agreementId,
       escrowId: result.data.escrowId,
@@ -102,6 +118,83 @@ export class EscrowLockService {
       body: {
         data: receipt,
         detail: "Escrow lock request validated; signing is not implemented in the M3 skeleton"
+      }
+    };
+  }
+
+  release(
+    config: GatewayConfig,
+    idempotencyKey: string | undefined,
+    escrowId: string,
+    milestoneId: string,
+    body: unknown
+  ): ReleaseResult {
+    if (!idempotencyKey) {
+      return {
+        statusCode: 400,
+        body: {
+          code: "VALIDATION_ERROR",
+          detail: "Idempotency-Key header is required"
+        }
+      };
+    }
+
+    const result = releaseRequestSchema.safeParse(body);
+    if (!result.success || result.data.escrowId !== escrowId || result.data.milestoneId !== milestoneId) {
+      return {
+        statusCode: 400,
+        body: {
+          code: "VALIDATION_ERROR",
+          detail: "Invalid milestone release request"
+        }
+      };
+    }
+
+    const existing = this.receipts.get(idempotencyKey);
+    if (existing) {
+      return { statusCode: 200, body: { data: existing, idempotentReplay: true } };
+    }
+
+    if (result.data.mint !== config.allowedMint || result.data.programId !== config.allowedProgramId) {
+      return {
+        statusCode: 409,
+        body: {
+          code: "POLICY_VIOLATION",
+          detail: "Mint or programId is not allowed"
+        }
+      };
+    }
+
+    if (BigInt(result.data.expectedAmountBaseUnits) <= 0n) {
+      return {
+        statusCode: 409,
+        body: {
+          code: "POLICY_VIOLATION",
+          detail: "Release amount must be positive"
+        }
+      };
+    }
+
+    const receipt: GatewayReceipt = {
+      status: "SIMULATED",
+      agreementId: result.data.agreementId,
+      escrowId: result.data.escrowId,
+      milestoneId: result.data.milestoneId,
+      termsHash: result.data.termsHash,
+      releasedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+      mint: result.data.mint,
+      programId: result.data.programId,
+      network: result.data.network,
+      idempotencyKey,
+      signature: null,
+      explorerUrl: null
+    };
+    this.receipts.set(idempotencyKey, receipt);
+    return {
+      statusCode: 202,
+      body: {
+        data: receipt,
+        detail: "Milestone release request validated; signing is not implemented yet"
       }
     };
   }

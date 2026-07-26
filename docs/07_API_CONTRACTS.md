@@ -153,10 +153,31 @@ Every payment POST requires an `Idempotency-Key` header.
 
 `GET /agreements/{agreementId}` returns the persisted Agreement document,
 including structured `terms`, `canonicalTermsJson`, `termsHash`, and `status`.
-Payment mutation endpoints are intentionally deferred until web3 gateway signing
-is wired. When wired, payment attempts must be represented by
-`paymentOperations/{operationId}`; `transactionReceipts/{receiptId}` points to
-the PaymentOperation instead of directly to Escrow or Settlement.
+Payment mutation endpoints perform deterministic policy checks in Product API.
+When `KNOT_WEB3_MODE=local`, they persist `SIMULATED` receipts directly for
+local/demo testing. When `KNOT_WEB3_MODE=gateway`, Product API calls the private
+web3 gateway:
+
+```text
+POST /internal/v1/escrows:lock
+POST /internal/v1/escrows/{escrowId}/milestones/{milestoneId}:release
+```
+
+Payment attempts are represented by `paymentOperations/{operationId}`;
+`transactionReceipts/{receiptId}` points to the PaymentOperation instead of
+directly to Escrow or Settlement. Gateway responses are stored under
+`transactionReceipts/{receiptId}.gatewayReceipt`. The current gateway returns
+`SIMULATED` receipts until Solana signing is enabled.
+
+Possible payment error codes:
+
+- `VALIDATION_ERROR`: missing idempotency key or invalid payload.
+- `POLICY_VIOLATION`: deterministic policy gate failed.
+- `ESCROW_ALREADY_LOCKED`: Agreement already has an escrow with another key.
+- `MILESTONE_ALREADY_RELEASED`: Milestone was already settled with another key.
+- `IDEMPOTENCY_CONFLICT`: key reused for a different payload.
+- `WEB3_GATEWAY_UNAVAILABLE`: Product API could not complete the private web3
+  gateway call.
 
 ## 7. Evidence endpoints
 

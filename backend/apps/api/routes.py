@@ -48,6 +48,7 @@ from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import IdempotencyConflictError, KnotRepository
 from libs.settings.config import Settings, get_settings
+from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
 
 
 def build_api_router(
@@ -935,6 +936,13 @@ def build_api_router(
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
         milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        gateway_receipt = _lock_with_web3_gateway(
+            settings=settings,
+            idempotency_key=key,
+            agreement=agreement,
+            escrow_id=escrow_id,
+            locked_amount=locked_amount,
+        )
         escrow = {
             "escrowId": escrow_id,
             "agreementId": agreement_id,
@@ -951,7 +959,7 @@ def build_api_router(
             "termsHash": agreement["termsHash"],
             "milestoneAmounts": {mid: str(amount) for mid, amount in milestone_amounts.items()},
             "status": "LOCKED",
-            "lockSignature": None,
+            "lockSignature": gateway_receipt.get("signature") if gateway_receipt else None,
             "lockReceiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -969,6 +977,16 @@ def build_api_router(
             idempotency_key=key,
             now=now,
             network=settings.escrow_network,
+            receipt=(
+                receipt_from_gateway(
+                    receipt_id=receipt_id,
+                    operation_id=operation_id,
+                    gateway_receipt=gateway_receipt,
+                    created_at=now,
+                )
+                if gateway_receipt
+                else None
+            ),
         )
         _append_promotion_event(
             repository,
@@ -978,7 +996,7 @@ def build_api_router(
                 "agreementId": agreement_id,
                 "escrowId": escrow_id,
                 "lockedAmountBaseUnits": str(locked_amount),
-                "receiptStatus": "SIMULATED",
+                "receiptStatus": receipt["status"],
             },
         )
         _append_audit(
@@ -1075,6 +1093,14 @@ def build_api_router(
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
         new_released = released + amount
+        gateway_receipt = _release_with_web3_gateway(
+            settings=settings,
+            idempotency_key=key,
+            escrow=escrow,
+            agreement_id=agreement_id,
+            milestone_id=milestone_id,
+            amount=amount,
+        )
         settlement = {
             "settlementId": settlement_id,
             "escrowId": escrow_id,
@@ -1082,8 +1108,8 @@ def build_api_router(
             "milestoneId": milestone_id,
             "amountBaseUnits": str(amount),
             "network": settings.escrow_network,
-            "status": "SIMULATED",
-            "signature": None,
+            "status": gateway_receipt.get("status") if gateway_receipt else "SIMULATED",
+            "signature": gateway_receipt.get("signature") if gateway_receipt else None,
             "receiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -1121,6 +1147,16 @@ def build_api_router(
             now=now,
             network=settings.escrow_network,
             extra={"settlementId": settlement_id, "milestoneId": milestone_id},
+            receipt=(
+                receipt_from_gateway(
+                    receipt_id=receipt_id,
+                    operation_id=operation_id,
+                    gateway_receipt=gateway_receipt,
+                    created_at=now,
+                )
+                if gateway_receipt
+                else None
+            ),
         )
         _append_promotion_event(
             repository,
@@ -1131,7 +1167,7 @@ def build_api_router(
                 "milestoneId": milestone_id,
                 "amountBaseUnits": str(amount),
                 "settlementId": settlement_id,
-                "receiptStatus": "SIMULATED",
+                "receiptStatus": receipt["status"],
             },
         )
         _append_audit(
@@ -1563,6 +1599,75 @@ def _receipt_by_id(repository: KnotRepository, receipt_id: object) -> dict[str, 
     return repository.get_raw_document(FirestorePaths.transaction_receipt(receipt_id))
 
 
+def _lock_with_web3_gateway(
+    *,
+    settings: Settings,
+    idempotency_key: str,
+    agreement: dict[str, object],
+    escrow_id: str,
+    locked_amount: int,
+) -> dict[str, object] | None:
+    if settings.web3_mode != "gateway":
+        return None
+    try:
+        return Web3GatewayClient(settings.web3_gateway_base_url).lock_escrow(
+            idempotency_key=idempotency_key,
+            payload={
+                "agreementId": agreement["agreementId"],
+                "escrowId": escrow_id,
+                "termsHash": agreement["termsHash"],
+                "expectedAmountBaseUnits": str(locked_amount),
+                "mint": settings.usdc_mint,
+                "programId": settings.escrow_program_id,
+                "network": settings.escrow_network,
+                "brandAuthority": agreement["brandAgentId"],
+                "creatorDestination": agreement["creatorAgentId"],
+            },
+        )
+    except Web3GatewayError as exc:
+        raise _problem(
+            status.HTTP_502_BAD_GATEWAY,
+            "WEB3_GATEWAY_UNAVAILABLE",
+            f"Web3 gateway lock failed: {exc}",
+        ) from exc
+
+
+def _release_with_web3_gateway(
+    *,
+    settings: Settings,
+    idempotency_key: str,
+    escrow: dict[str, object],
+    agreement_id: str,
+    milestone_id: str,
+    amount: int,
+) -> dict[str, object] | None:
+    if settings.web3_mode != "gateway":
+        return None
+    try:
+        return Web3GatewayClient(settings.web3_gateway_base_url).release_milestone(
+            escrow_id=_require_document_str(escrow, "escrowId"),
+            milestone_id=milestone_id,
+            idempotency_key=idempotency_key,
+            payload={
+                "agreementId": agreement_id,
+                "escrowId": escrow["escrowId"],
+                "milestoneId": milestone_id,
+                "termsHash": escrow["termsHash"],
+                "expectedAmountBaseUnits": str(amount),
+                "mint": settings.usdc_mint,
+                "programId": settings.escrow_program_id,
+                "network": settings.escrow_network,
+                "creatorDestination": escrow["creatorAgentId"],
+            },
+        )
+    except Web3GatewayError as exc:
+        raise _problem(
+            status.HTTP_502_BAD_GATEWAY,
+            "WEB3_GATEWAY_UNAVAILABLE",
+            f"Web3 gateway release failed: {exc}",
+        ) from exc
+
+
 def _simulated_receipt(
     receipt_id: str,
     operation_id: str,
@@ -1641,10 +1746,10 @@ def _record_operation(
     now: str,
     network: str,
     extra: dict[str, object] | None = None,
+    receipt: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    """Persist the SIMULATED transaction receipt + PaymentOperation for a
-    settlement action and return the receipt."""
-    receipt = _simulated_receipt(receipt_id, operation_id, network, now)
+    """Persist the transaction receipt and PaymentOperation for a settlement action."""
+    receipt = receipt or _simulated_receipt(receipt_id, operation_id, network, now)
     operation = {
         "operationId": operation_id,
         "operationType": operation_type,
@@ -1653,7 +1758,7 @@ def _record_operation(
         "idempotencyKey": idempotency_key,
         "idempotencyRecordPath": FirestorePaths.idempotency_record(idempotency_key),
         "receiptId": receipt_id,
-        "status": "SIMULATED",
+        "status": receipt["status"],
         "createdAt": now,
         **(extra or {}),
     }

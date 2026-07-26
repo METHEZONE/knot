@@ -423,7 +423,10 @@ Deal Escrow
 ```
 
 현재 이 화면의 escrow/release receipt는 API-backed이지만 실제 온체인
-서명이 아니라 `SIMULATED` 상태다.
+서명이 아니라 `SIMULATED` 상태다. `KNOT_WEB3_MODE=gateway`를 사용하면
+Product API가 private web3 gateway의 lock/release endpoint를 호출하고,
+해당 gateway receipt를 `transactionReceipts.gatewayReceipt`에 저장한다.
+현재 gateway도 서명 전 단계라 실제 Solana signature는 아직 만들지 않는다.
 
 ## 8. 크리에이터 유저 플로우
 
@@ -783,5 +786,5 @@ repository boundary를 통해 처리한다.
 
 해커톤 평가 관점에서 아직 가장 큰 proof gap은 다음 두 가지다.
 
-- Product API/gateway 경로에서 실제 on-chain escrow lock/release signature 생성
+- private web3 gateway에서 실제 on-chain escrow lock/release signature 생성
 - Brand Agent matching 흐름 안에서 pay.sh/x402 paid verification call 표시

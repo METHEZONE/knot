@@ -3,15 +3,16 @@ from fastapi.testclient import TestClient
 from apps.api.main import create_app
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
+from libs.settings.config import Settings
 
 CLEAN_EVIDENCE_URL = "https://social.example/post/with-brand-and-ad"
 
 
-def seeded() -> tuple[TestClient, KnotRepository]:
+def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository]:
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
     seed_demo_repository(repository)
-    return TestClient(create_app(repository=repository)), repository
+    return TestClient(create_app(settings=settings, repository=repository)), repository
 
 
 def accepted_agreement(client: TestClient) -> dict[str, object]:
@@ -195,6 +196,91 @@ def test_releasing_all_milestones_completes_escrow() -> None:
     ).json()["data"]
     assert final["escrow"]["status"] == "COMPLETED"
     assert final["escrow"]["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]
+
+
+def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
+    class FakeGatewayClient:
+        lock_payload: dict[str, object] = {}
+        release_payload: dict[str, object] = {}
+
+        def __init__(self, base_url: str) -> None:
+            self.base_url = base_url
+
+        def lock_escrow(
+            self,
+            *,
+            idempotency_key: str,
+            payload: dict[str, object],
+        ) -> dict[str, object]:
+            FakeGatewayClient.lock_payload = {"idempotencyKey": idempotency_key, **payload}
+            return {
+                "status": "SIMULATED",
+                "agreementId": payload["agreementId"],
+                "escrowId": payload["escrowId"],
+                "termsHash": payload["termsHash"],
+                "lockedAmountBaseUnits": payload["expectedAmountBaseUnits"],
+                "mint": payload["mint"],
+                "programId": payload["programId"],
+                "network": payload["network"],
+                "idempotencyKey": idempotency_key,
+                "signature": None,
+                "explorerUrl": None,
+            }
+
+        def release_milestone(
+            self,
+            *,
+            escrow_id: str,
+            milestone_id: str,
+            idempotency_key: str,
+            payload: dict[str, object],
+        ) -> dict[str, object]:
+            FakeGatewayClient.release_payload = {"idempotencyKey": idempotency_key, **payload}
+            assert payload["escrowId"] == escrow_id
+            assert payload["milestoneId"] == milestone_id
+            return {
+                "status": "SIMULATED",
+                "agreementId": payload["agreementId"],
+                "escrowId": payload["escrowId"],
+                "milestoneId": payload["milestoneId"],
+                "termsHash": payload["termsHash"],
+                "releasedAmountBaseUnits": payload["expectedAmountBaseUnits"],
+                "mint": payload["mint"],
+                "programId": payload["programId"],
+                "network": payload["network"],
+                "idempotencyKey": idempotency_key,
+                "signature": None,
+                "explorerUrl": None,
+            }
+
+    monkeypatch.setattr("apps.api.routes.Web3GatewayClient", FakeGatewayClient)
+    client, _ = seeded(
+        Settings(web3_mode="gateway", web3_gateway_base_url="http://web3-gateway.test")
+    )
+    agreement = accepted_agreement(client)
+    pass_evidence(client, agreement, "content")
+
+    lock_data = lock(client, agreement, "gateway-lock")
+    lock_receipt = lock_data["receipt"]
+    escrow = lock_data["escrow"]
+    assert lock_receipt["gatewayReceipt"]["idempotencyKey"] == "gateway-lock"
+    assert FakeGatewayClient.lock_payload["escrowId"] == escrow["escrowId"]
+    assert FakeGatewayClient.lock_payload["expectedAmountBaseUnits"] == escrow[
+        "lockedAmountBaseUnits"
+    ]
+
+    release = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={"Idempotency-Key": "gateway-release"},
+    )
+    assert release.status_code == 200, release.text
+    release_data = release.json()["data"]
+    release_receipt = release_data["receipt"]
+    assert release_receipt["gatewayReceipt"]["idempotencyKey"] == "gateway-release"
+    assert release_receipt["gatewayReceipt"]["milestoneId"] == "content"
+    assert FakeGatewayClient.release_payload["expectedAmountBaseUnits"] == escrow[
+        "milestoneAmounts"
+    ]["content"]
 
 
 def test_release_is_idempotent_on_repeated_key() -> None:

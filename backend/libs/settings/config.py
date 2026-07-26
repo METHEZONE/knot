@@ -35,6 +35,8 @@ class Settings(BaseModel):
     schema_version: str = "v1"
     creator_agent_base_url: str = "http://localhost:8081/a2a/v1"
     creator_a2a_mode: str = "local"
+    web3_gateway_base_url: str = "http://localhost:8082"
+    web3_mode: str = "local"
     repository_backend: str = "memory"
     firestore_project_id: str | None = None
     vertex_ai_location: str = "us-central1"
@@ -57,6 +59,8 @@ def get_settings(service_name: str | None = None) -> Settings:
             "CREATOR_AGENT_BASE_URL", "http://localhost:8081/a2a/v1"
         ),
         creator_a2a_mode=os.getenv("KNOT_CREATOR_A2A_MODE", "local"),
+        web3_gateway_base_url=os.getenv("WEB3_GATEWAY_BASE_URL", "http://localhost:8082"),
+        web3_mode=os.getenv("KNOT_WEB3_MODE", "local"),
         repository_backend=os.getenv("KNOT_REPOSITORY_BACKEND", "memory"),
         firestore_project_id=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID"),
         vertex_ai_location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
