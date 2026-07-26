@@ -40,7 +40,9 @@ function forwardedHeaders(request: NextRequest) {
   const headers = new Headers();
   const contentType = request.headers.get("Content-Type");
   const idempotencyKey = request.headers.get("Idempotency-Key");
+  const authorization = request.headers.get("Authorization");
   if (contentType) headers.set("Content-Type", contentType);
   if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
+  if (authorization) headers.set("Authorization", authorization);
   return headers;
 }

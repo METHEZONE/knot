@@ -1,7 +1,12 @@
-import { BrandOnboardingScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+"use client";
 
-export default async function Page() {
-  const session = await knotDataSource.getRoleSession("brand");
-  return <BrandOnboardingScreen session={session} />;
+import { AuthGate } from "@/auth/AuthGate";
+import { BrandOnboardingScreen } from "@/product/ProductScreens";
+
+export default function Page() {
+  return (
+    <AuthGate expectedRole="BRAND" completedRedirect="/brand">
+      {() => <BrandOnboardingScreen />}
+    </AuthGate>
+  );
 }

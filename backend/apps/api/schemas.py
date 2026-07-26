@@ -34,6 +34,69 @@ class UserBootstrapRequest(DomainModel):
         return value
 
 
+class CurrentUserRoleRequest(DomainModel):
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"BRAND", "CREATOR"}:
+            raise ValueError("role must be BRAND or CREATOR")
+        return normalized
+
+
+class CurrentUserBrandProfileRequest(DomainModel):
+    brand_name: str = Field(alias="brandName")
+    website_url: str = Field(alias="websiteUrl")
+    categories: list[str] = Field(default_factory=list)
+    custom_category: str | None = Field(default=None, alias="customCategory")
+    target_audience: str = Field(alias="targetAudience")
+    restricted_claims: list[str] = Field(default_factory=list, alias="restrictedClaims")
+    description: str = ""
+
+    @field_validator("website_url")
+    @classmethod
+    def validate_website_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("websiteUrl must use http or https")
+        return value
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, value: list[str]) -> list[str]:
+        categories = [item.strip() for item in value if item.strip()]
+        if not categories:
+            raise ValueError("at least one category is required")
+        return categories
+
+
+class CurrentUserCreatorProfileRequest(DomainModel):
+    creator_name: str = Field(alias="creatorName")
+    sns_url: str = Field(alias="snsUrl")
+    categories: list[str] = Field(default_factory=list)
+    custom_category: str | None = Field(default=None, alias="customCategory")
+    minimum_usdc: int = Field(default=300, alias="minimumUsdc", ge=1)
+    blocked_domains: list[str] = Field(default_factory=list, alias="blockedDomains")
+    preferred_content: list[str] = Field(default_factory=list, alias="preferredContent")
+    wallet_address: str | None = Field(default=None, alias="walletAddress")
+
+    @field_validator("sns_url")
+    @classmethod
+    def validate_sns_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("snsUrl must use http or https")
+        return value
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, value: list[str]) -> list[str]:
+        categories = [item.strip() for item in value if item.strip()]
+        if not categories:
+            raise ValueError("at least one category is required")
+        return categories
+
+
 class BrandOnboardingRequest(DomainModel):
     user_id: str | None = Field(default=None, alias="userId")
     brand_name: str = Field(alias="brandName")

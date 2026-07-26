@@ -11,6 +11,9 @@ from apps.api.schemas import (
     BrandOnboardingRequest,
     CreatorCriteriaRequest,
     CreatorOnboardingRequest,
+    CurrentUserBrandProfileRequest,
+    CurrentUserCreatorProfileRequest,
+    CurrentUserRoleRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
@@ -32,6 +35,7 @@ from libs.agents.brand import build_initial_terms
 from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
 from libs.agents.negotiation import CreatorNegotiationContext
 from libs.ai.gemini import AnalysisText, candidate_explanation, creator_rationale
+from libs.auth.firebase import AuthenticatedUser, AuthError, FirebaseTokenVerifier
 from libs.domain.hashing import (
     canonical_json,
     canonical_terms_json,
@@ -61,10 +65,316 @@ def build_api_router(
 ) -> APIRouter:
     settings = settings or get_settings()
     router = APIRouter(prefix="/api/v1")
+    token_verifier = FirebaseTokenVerifier(settings)
 
     @router.get("")
     def api_root() -> dict[str, object]:
         return _ok({"service": "knot-api"})
+
+    @router.get("/me")
+    def get_me(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        return _ok(_current_user_payload(repository, user))
+
+    @router.post("/me/role")
+    def select_current_user_role(
+        payload: CurrentUserRoleRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        existing_role = user.get("role")
+        if isinstance(existing_role, str) and existing_role:
+            if existing_role != payload.role:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "ROLE_ALREADY_SELECTED",
+                    "A KNOT v1 account can only have one role.",
+                )
+            return _ok(_current_user_payload(repository, user))
+
+        key = _require_idempotency_key(idempotency_key)
+        _claim_idempotency(
+            repository,
+            key,
+            payload={"uid": auth_user.uid, "role": payload.role},
+            owner_path=FirestorePaths.user(auth_user.uid),
+        )
+
+        now = _now()
+        role = payload.role
+        agent_id = f"{role.lower()}-agent-{auth_user.uid}"
+        agent = {
+            "agentId": agent_id,
+            "agentType": role,
+            "ownerUid": auth_user.uid,
+            "ownerId": None,
+            "ownerType": role,
+            "displayName": f"{_account_label(user)} Agent",
+            "service": "knot-api" if role == "BRAND" else "knot-creator-agent",
+            "status": "DRAFT",
+            "active": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        updated = {
+            **user,
+            "role": role,
+            "onboardingStatus": "PROFILE_REQUIRED",
+            "agentId": agent_id,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.agent(agent_id), agent)
+        repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
+        _append_audit(
+            repository,
+            action="USER_ROLE_SELECTED",
+            data={"uid": auth_user.uid, "role": role, "agentId": agent_id},
+        )
+        return _ok(_current_user_payload(repository, updated))
+
+    @router.post("/me/brand-profile", status_code=status.HTTP_201_CREATED)
+    def create_current_brand_profile(
+        payload: CurrentUserBrandProfileRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_role(repository, auth_user, "BRAND")
+        existing_brand_id = user.get("brandId")
+        if isinstance(existing_brand_id, str) and existing_brand_id:
+            brand = repository.get_raw_document(FirestorePaths.brand(existing_brand_id))
+            agent = repository.get_raw_document(FirestorePaths.agent(str(user.get("agentId"))))
+            return _ok({"brand": brand, "agent": agent, **_current_user_payload(repository, user)})
+
+        key = _require_idempotency_key(idempotency_key)
+        _claim_idempotency(
+            repository,
+            key,
+            payload=payload.model_dump(by_alias=True, mode="json") | {"uid": auth_user.uid},
+            owner_path=FirestorePaths.user(auth_user.uid),
+        )
+
+        now = _now()
+        brand_id = f"brand-{uuid4()}"
+        agent_id = str(user.get("agentId") or f"brand-agent-{auth_user.uid}")
+        brand = {
+            "brandId": brand_id,
+            "ownerUid": auth_user.uid,
+            "name": payload.brand_name,
+            "displayName": payload.brand_name,
+            "websiteUrl": payload.website_url,
+            "category": payload.categories[0],
+            "categories": _with_custom_category(payload.categories, payload.custom_category),
+            "targetAudience": payload.target_audience,
+            "description": payload.description,
+            "restrictedClaims": payload.restricted_claims,
+            "status": "ACTIVE",
+            "active": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        agent = {
+            "agentId": agent_id,
+            "agentType": "BRAND",
+            "ownerUid": auth_user.uid,
+            "ownerId": brand_id,
+            "ownerType": "BRAND",
+            "displayName": f"{payload.brand_name} Agent",
+            "service": "knot-api",
+            "status": "ACTIVE",
+            "active": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        updated_user = {
+            **user,
+            "brandId": brand_id,
+            "agentId": agent_id,
+            "brandAgentId": agent_id,
+            "onboardingStatus": "COMPLETED",
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.brand(brand_id), brand)
+        repository.save_raw_document(FirestorePaths.agent(agent_id), agent)
+        repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated_user)
+        _append_audit(
+            repository,
+            action="BRAND_PROFILE_CREATED",
+            data={"uid": auth_user.uid, "brandId": brand_id, "agentId": agent_id},
+        )
+        return _ok(
+            {
+                "brand": brand,
+                "agent": agent,
+                **_current_user_payload(repository, updated_user),
+            }
+        )
+
+    @router.post("/me/creator-profile", status_code=status.HTTP_201_CREATED)
+    def create_current_creator_profile(
+        payload: CurrentUserCreatorProfileRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_role(repository, auth_user, "CREATOR")
+        existing_creator_id = user.get("creatorId")
+        if isinstance(existing_creator_id, str) and existing_creator_id:
+            creator = repository.get_raw_document(
+                FirestorePaths.creator_profile(existing_creator_id)
+            )
+            agent = repository.get_raw_document(FirestorePaths.agent(str(user.get("agentId"))))
+            return _ok(
+                {
+                    "creator": creator,
+                    "agent": agent,
+                    **_current_user_payload(repository, user),
+                }
+            )
+
+        key = _require_idempotency_key(idempotency_key)
+        _claim_idempotency(
+            repository,
+            key,
+            payload=payload.model_dump(by_alias=True, mode="json") | {"uid": auth_user.uid},
+            owner_path=FirestorePaths.user(auth_user.uid),
+        )
+
+        now = _now()
+        creator_id = f"creator-{uuid4()}"
+        agent_id = str(user.get("agentId") or f"creator-agent-{auth_user.uid}")
+        creator = CreatorProfile(
+            creatorId=creator_id,
+            creatorAgentId=agent_id,
+            displayName=payload.creator_name,
+            categories=_with_custom_category(payload.categories, payload.custom_category),
+            prohibitedIndustries=payload.blocked_domains,
+            supportedDeliverableFormats=_preferred_formats(payload.preferred_content),
+            allowedUsageRights=[UsageRights.ORGANIC_ONLY, UsageRights.PAID_BOOST_30D],
+            minDaysToPost=5,
+            availableFrom=date.today(),
+            monthlyCapacity=4,
+            activeDeliverablesThisMonth=0,
+            completedDealCount=0,
+            rateCard=RateCard(
+                minBaseUsdc=payload.minimum_usdc,
+                maxBaseUsdc=max(payload.minimum_usdc, 800),
+            ),
+            active=True,
+        )
+        creator_doc = {
+            **model_to_document(creator),
+            "ownerUid": auth_user.uid,
+            "socialLinks": [
+                {"platform": _social_platform(payload.sns_url), "url": payload.sns_url}
+            ],
+            "publicRateBand": {
+                "currency": "USDC",
+                "minimum": payload.minimum_usdc,
+                "maximum": max(payload.minimum_usdc, 800),
+            },
+            "walletAddress": payload.wallet_address,
+            "receivingOffers": True,
+            "status": "ACTIVE",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        policy = {
+            "agentId": agent_id,
+            "policyVersion": 1,
+            "agentType": "CREATOR",
+            "ownerUid": auth_user.uid,
+            "creator": {
+                "minBaseUsdc": payload.minimum_usdc,
+                "blockedIndustries": payload.blocked_domains,
+                "maxDeliverablesPerMonth": 4,
+                "minDaysToPost": 5,
+                "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+                "maxRevisionRounds": 1,
+                "maxExclusivityDays": 0,
+            },
+            "preferredContent": payload.preferred_content,
+            "active": True,
+            "createdAt": now,
+        }
+        agent = {
+            "agentId": agent_id,
+            "agentType": "CREATOR",
+            "ownerUid": auth_user.uid,
+            "ownerId": creator_id,
+            "ownerType": "CREATOR",
+            "displayName": f"{payload.creator_name} Agent",
+            "service": "knot-creator-agent",
+            "a2aEndpoint": "/a2a/v1",
+            "status": "ACTIVE",
+            "active": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        updated_user = {
+            **user,
+            "creatorId": creator_id,
+            "agentId": agent_id,
+            "creatorAgentId": agent_id,
+            "onboardingStatus": "COMPLETED",
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.creator_profile(creator_id), creator_doc)
+        repository.save_raw_document(FirestorePaths.agent_policy(agent_id), policy)
+        repository.save_raw_document(FirestorePaths.agent(agent_id), agent)
+        repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated_user)
+        _append_audit(
+            repository,
+            action="CREATOR_PROFILE_CREATED",
+            data={"uid": auth_user.uid, "creatorId": creator_id, "agentId": agent_id},
+        )
+        return _ok(
+            {
+                "creator": creator_doc,
+                "agent": agent,
+                "policy": policy,
+                **_current_user_payload(repository, updated_user),
+            }
+        )
+
+    @router.post("/logout/revoke")
+    def revoke_logout(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        if settings.auth_mode.lower() == "firebase":
+            try:
+                from firebase_admin import auth
+
+                auth.revoke_refresh_tokens(auth_user.uid)
+            except Exception as exc:
+                raise _problem(
+                    status.HTTP_502_BAD_GATEWAY,
+                    "AUTH_REVOKE_FAILED",
+                    f"Firebase token revocation failed: {exc}",
+                ) from exc
+        return _ok({"revoked": True, "uid": auth_user.uid})
+
+    @router.get("/brand/dashboard")
+    def get_brand_dashboard(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        return _ok({"dashboard": _brand_dashboard(repository, user)})
+
+    @router.get("/creator/dashboard")
+    def get_creator_dashboard(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        return _ok({"dashboard": _creator_dashboard(repository, user)})
 
     @router.post("/users:bootstrap", status_code=status.HTTP_201_CREATED)
     def bootstrap_user(payload: UserBootstrapRequest) -> dict[str, object]:
@@ -1218,6 +1528,432 @@ def _get_promotion(repository: KnotRepository, promotion_id: str) -> Promotion:
     if promotion is None:
         raise _not_found("promotion", promotion_id)
     return promotion
+
+
+def _require_auth_user(
+    token_verifier: FirebaseTokenVerifier,
+    authorization: str | None,
+) -> AuthenticatedUser:
+    try:
+        return token_verifier.verify_authorization_header(authorization)
+    except AuthError as exc:
+        raise _problem(status.HTTP_401_UNAUTHORIZED, "UNAUTHENTICATED", str(exc)) from exc
+
+
+def _bootstrap_authenticated_user(
+    repository: KnotRepository,
+    auth_user: AuthenticatedUser,
+) -> dict[str, object]:
+    path = FirestorePaths.user(auth_user.uid)
+    now = _now()
+    existing = repository.get_raw_document(path)
+    if existing is None:
+        user: dict[str, object] = {
+            "uid": auth_user.uid,
+            "userId": auth_user.uid,
+            "email": auth_user.email,
+            "displayName": auth_user.display_name or _email_label(auth_user.email),
+            "photoUrl": auth_user.photo_url,
+            "role": None,
+            "onboardingStatus": "ROLE_REQUIRED",
+            "status": "ACTIVE",
+            "brandId": None,
+            "creatorId": None,
+            "agentId": None,
+            "schemaVersion": 2,
+            "createdAt": now,
+            "updatedAt": now,
+            "lastLoginAt": now,
+        }
+        repository.save_raw_document(path, user)
+        _append_audit(repository, action="USER_BOOTSTRAPPED", data={"uid": auth_user.uid})
+        return user
+
+    user = dict(existing)
+    role = user.get("role")
+    onboarding_status = user.get("onboardingStatus")
+    if onboarding_status is None:
+        onboarding_status = _derive_onboarding_status(user)
+    user.update(
+        {
+            "uid": auth_user.uid,
+            "userId": auth_user.uid,
+            "email": auth_user.email or user.get("email"),
+            "displayName": auth_user.display_name
+            or user.get("displayName")
+            or _email_label(auth_user.email),
+            "photoUrl": (
+                auth_user.photo_url if auth_user.photo_url is not None else user.get("photoUrl")
+            ),
+            "role": role,
+            "onboardingStatus": onboarding_status,
+            "status": user.get("status") or "ACTIVE",
+            "schemaVersion": 2,
+            "updatedAt": now,
+            "lastLoginAt": now,
+        }
+    )
+    repository.save_raw_document(path, user)
+    return user
+
+
+def _require_role(
+    repository: KnotRepository,
+    auth_user: AuthenticatedUser,
+    role: str,
+) -> dict[str, object]:
+    user = _bootstrap_authenticated_user(repository, auth_user)
+    if user.get("role") != role:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            f"Current account must have {role} role.",
+        )
+    return user
+
+
+def _require_completed_role(
+    repository: KnotRepository,
+    auth_user: AuthenticatedUser,
+    role: str,
+) -> dict[str, object]:
+    user = _require_role(repository, auth_user, role)
+    if user.get("onboardingStatus") != "COMPLETED":
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "ONBOARDING_REQUIRED",
+            f"{role} onboarding must be completed before accessing the dashboard.",
+        )
+    if role == "BRAND":
+        brand_id = user.get("brandId")
+        if not isinstance(brand_id, str) or not brand_id:
+            raise _not_found("brandProfile", auth_user.uid)
+        if repository.get_raw_document(FirestorePaths.brand(brand_id)) is None:
+            raise _not_found("brandProfile", brand_id)
+    if role == "CREATOR":
+        creator_id = user.get("creatorId")
+        if not isinstance(creator_id, str) or not creator_id:
+            raise _not_found("creatorProfile", auth_user.uid)
+        if repository.get_raw_document(FirestorePaths.creator_profile(creator_id)) is None:
+            raise _not_found("creatorProfile", creator_id)
+    return user
+
+
+def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dict[str, object]:
+    brand_id = _require_document_str(user, "brandId")
+    brand = repository.get_raw_document(FirestorePaths.brand(brand_id))
+    if brand is None:
+        raise _not_found("brandProfile", brand_id)
+
+    promotions = [
+        model_to_document(promotion)
+        for promotion in repository.list_promotions()
+        if promotion.brand_id == brand_id
+    ]
+    promotions = _sorted_recent(promotions)[:10]
+    promotion_ids = {str(promotion.get("promotionId")) for promotion in promotions}
+    agreements = [
+        document
+        for document in repository.list_raw_documents(COLLECTIONS.agreements)
+        if document.get("brandId") == brand_id
+        or str(document.get("promotionId")) in promotion_ids
+    ]
+    negotiations = [
+        document
+        for document in repository.list_raw_documents(COLLECTIONS.negotiations)
+        if str(document.get("promotionId")) in promotion_ids
+    ]
+    events = _promotion_events(repository, promotion_ids, limit=8)
+    contracted_creator_agent_ids = {
+        str(agreement.get("creatorAgentId"))
+        for agreement in agreements
+        if agreement.get("creatorAgentId")
+    }
+    contracted_creators = [
+        _creator_projection(creator)
+        for creator in repository.list_creator_profiles()
+        if creator.creator_agent_id in contracted_creator_agent_ids
+    ]
+    locked_escrow = sum(
+        _int_string(document.get("lockedAmountBaseUnits"))
+        for document in repository.list_raw_documents(COLLECTIONS.escrows)
+        if str(document.get("promotionId")) in promotion_ids
+    )
+    return {
+        "brand": brand,
+        "summary": {
+            "activePromotions": sum(
+                1
+                for promotion in promotions
+                if str(promotion.get("status")) not in {"DRAFT", "CANCELED", "FAILED"}
+            ),
+            "negotiationsInProgress": sum(
+                1
+                for negotiation in negotiations
+                if str(negotiation.get("status")) in {"CREATED", "OFFERED", "COUNTERED"}
+            ),
+            "agreements": len(agreements),
+            "lockedEscrowBaseUnits": str(locked_escrow),
+        },
+        "activePromotions": promotions,
+        "recentAgentActivity": events,
+        "contractedCreators": contracted_creators[:10],
+    }
+
+
+def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> dict[str, object]:
+    creator_id = _require_document_str(user, "creatorId")
+    creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
+    if creator is None:
+        raise _not_found("creatorProfile", creator_id)
+    agent_id = str(
+        user.get("agentId") or user.get("creatorAgentId") or creator.get("creatorAgentId")
+    )
+    negotiations = [
+        document
+        for document in repository.list_raw_documents(COLLECTIONS.negotiations)
+        if document.get("creatorId") == creator_id or document.get("creatorAgentId") == agent_id
+    ]
+    agreements = [
+        document
+        for document in repository.list_raw_documents(COLLECTIONS.agreements)
+        if document.get("creatorId") == creator_id or document.get("creatorAgentId") == agent_id
+    ]
+    promotion_ids = {
+        str(item.get("promotionId"))
+        for item in [*negotiations, *agreements]
+        if item.get("promotionId")
+    }
+    promotions_by_id = {
+        promotion.promotion_id: model_to_document(promotion)
+        for promotion in repository.list_promotions()
+        if promotion.promotion_id in promotion_ids
+    }
+    offers = [
+        _offer_projection(negotiation, promotions_by_id.get(str(negotiation.get("promotionId"))))
+        for negotiation in _sorted_recent(negotiations)[:10]
+    ]
+    active_sponsorships = [
+        _agreement_projection(
+            agreement,
+            promotions_by_id.get(str(agreement.get("promotionId"))),
+        )
+        for agreement in _sorted_recent(agreements)[:10]
+    ]
+    pending_payout = sum(
+        _int_string(document.get("amountBaseUnits"))
+        for document in repository.list_raw_documents(COLLECTIONS.settlements)
+        if document.get("creatorId") == creator_id or document.get("creatorAgentId") == agent_id
+    )
+    recent_activity = _creator_activity(negotiations, agreements, limit=8)
+    return {
+        "creator": creator,
+        "summary": {
+            "newOffers": sum(1 for offer in offers if offer["status"] in {"OFFERED", "CREATED"}),
+            "agentNegotiations": len(negotiations),
+            "activeSponsorships": len(agreements),
+            "pendingPayoutBaseUnits": str(pending_payout),
+        },
+        "offers": offers,
+        "activeSponsorships": active_sponsorships,
+        "recentAgentActivity": recent_activity,
+    }
+
+
+def _promotion_events(
+    repository: KnotRepository,
+    promotion_ids: set[str],
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for promotion_id in promotion_ids:
+        events.extend(
+            repository.list_raw_documents(
+                f"{COLLECTIONS.promotions}/{promotion_id}/{COLLECTIONS.promotion_events}"
+            )
+        )
+    return _sorted_recent(events)[:limit]
+
+
+def _creator_activity(
+    negotiations: list[dict[str, object]],
+    agreements: list[dict[str, object]],
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    events = [
+        {
+            "eventId": f"activity-{item.get('negotiationId')}",
+            "type": "NEGOTIATION",
+            "label": f"Negotiation {item.get('status')}",
+            "negotiationId": item.get("negotiationId"),
+            "promotionId": item.get("promotionId"),
+            "createdAt": item.get("updatedAt") or item.get("createdAt"),
+        }
+        for item in negotiations
+    ]
+    events.extend(
+        {
+            "eventId": f"activity-{item.get('agreementId')}",
+            "type": "AGREEMENT",
+            "label": f"Agreement {item.get('status')}",
+            "agreementId": item.get("agreementId"),
+            "promotionId": item.get("promotionId"),
+            "createdAt": item.get("updatedAt") or item.get("createdAt"),
+        }
+        for item in agreements
+    )
+    return _sorted_recent(events)[:limit]
+
+
+def _creator_projection(creator: CreatorProfile) -> dict[str, object]:
+    return {
+        "creatorId": creator.creator_id,
+        "creatorAgentId": creator.creator_agent_id,
+        "displayName": creator.display_name,
+        "categories": creator.categories,
+        "completedDealCount": creator.completed_deal_count,
+    }
+
+
+def _offer_projection(
+    negotiation: dict[str, object],
+    promotion: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "negotiationId": negotiation.get("negotiationId"),
+        "promotionId": negotiation.get("promotionId"),
+        "brandAgentId": negotiation.get("brandAgentId"),
+        "title": promotion.get("title") if promotion else "Promotion",
+        "status": negotiation.get("status"),
+        "currentRound": negotiation.get("currentRound"),
+        "updatedAt": negotiation.get("updatedAt") or negotiation.get("createdAt"),
+    }
+
+
+def _agreement_projection(
+    agreement: dict[str, object],
+    promotion: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "agreementId": agreement.get("agreementId"),
+        "promotionId": agreement.get("promotionId"),
+        "title": promotion.get("title") if promotion else "Agreement",
+        "status": agreement.get("status"),
+        "termsHash": agreement.get("termsHash"),
+        "updatedAt": agreement.get("updatedAt") or agreement.get("createdAt"),
+    }
+
+
+def _sorted_recent(documents: list[dict[str, object]]) -> list[dict[str, object]]:
+    return sorted(
+        documents,
+        key=lambda item: str(item.get("updatedAt") or item.get("createdAt") or ""),
+        reverse=True,
+    )
+
+
+def _int_string(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return 0
+
+
+def _with_custom_category(categories: list[str], custom_category: str | None) -> list[str]:
+    normalized = [category.strip() for category in categories if category.strip()]
+    if custom_category and custom_category.strip():
+        normalized.append(f"custom:{custom_category.strip()}")
+    return list(dict.fromkeys(normalized))
+
+
+def _social_platform(url: str) -> str:
+    lowered = url.lower()
+    if "instagram." in lowered:
+        return "INSTAGRAM"
+    if "tiktok." in lowered:
+        return "TIKTOK"
+    if "youtube." in lowered or "youtu.be" in lowered:
+        return "YOUTUBE"
+    return "OTHER"
+
+
+def _current_user_payload(
+    repository: KnotRepository,
+    user: dict[str, object],
+) -> dict[str, object]:
+    role = user.get("role")
+    profile_summary: dict[str, object] | None = None
+    if role == "BRAND" and isinstance(user.get("brandId"), str):
+        brand = repository.get_raw_document(FirestorePaths.brand(str(user["brandId"])))
+        if brand is not None:
+            profile_summary = {
+                "type": "BRAND",
+                "id": brand.get("brandId"),
+                "displayName": brand.get("displayName"),
+                "agentId": user.get("agentId") or user.get("brandAgentId"),
+            }
+    elif role == "CREATOR" and isinstance(user.get("creatorId"), str):
+        creator = repository.get_raw_document(
+            FirestorePaths.creator_profile(str(user["creatorId"]))
+        )
+        if creator is not None:
+            profile_summary = {
+                "type": "CREATOR",
+                "id": creator.get("creatorId"),
+                "displayName": creator.get("displayName"),
+                "agentId": user.get("agentId") or user.get("creatorAgentId"),
+            }
+    account = {
+        "uid": user.get("uid") or user.get("userId"),
+        "userId": user.get("uid") or user.get("userId"),
+        "email": user.get("email"),
+        "displayName": user.get("displayName"),
+        "photoUrl": user.get("photoUrl"),
+        "role": role,
+        "onboardingStatus": user.get("onboardingStatus") or _derive_onboarding_status(user),
+        "status": user.get("status") or "ACTIVE",
+        "brandId": user.get("brandId"),
+        "creatorId": user.get("creatorId"),
+        "agentId": user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId"),
+        "schemaVersion": user.get("schemaVersion") or 2,
+    }
+    return {
+        "account": account,
+        "profileSummary": profile_summary,
+        "dashboardTarget": _dashboard_target(account),
+    }
+
+
+def _derive_onboarding_status(user: dict[str, object]) -> str:
+    role = user.get("role")
+    if role == "BRAND":
+        return "COMPLETED" if user.get("brandId") else "PROFILE_REQUIRED"
+    if role == "CREATOR":
+        return "COMPLETED" if user.get("creatorId") else "PROFILE_REQUIRED"
+    return "ROLE_REQUIRED"
+
+
+def _dashboard_target(account: dict[str, object]) -> str:
+    role = account.get("role")
+    status_value = account.get("onboardingStatus")
+    if role == "BRAND":
+        return "/brand/onboarding" if status_value != "COMPLETED" else "/brand/products/new"
+    if role == "CREATOR":
+        return "/creator/onboarding" if status_value != "COMPLETED" else "/creator/result"
+    return "/signup"
+
+
+def _account_label(user: dict[str, object]) -> str:
+    return str(user.get("displayName") or _email_label(user.get("email")) or "KNOT user")
+
+
+def _email_label(email: object) -> str:
+    if isinstance(email, str) and email:
+        return email.split("@")[0]
+    return "KNOT user"
 
 
 def _find_user_by_email(

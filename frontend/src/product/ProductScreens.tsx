@@ -3,9 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
-import { ProductApiClient } from "./apiClient";
+import {
+  authConfigurationError,
+  createFirebaseAccount,
+  currentIdToken,
+  firebaseConfigured,
+  signInWithEmail,
+  signInWithGoogle,
+} from "@/auth/firebaseClient";
+import {
+  ProductApiClient,
+  ProductApiError,
+  type BrandDashboard,
+  type CreatorDashboard,
+  type CurrentUserContext,
+} from "./apiClient";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import type {
   AgentTask,
@@ -20,7 +34,10 @@ import type {
   Settlement,
 } from "./types";
 
+ProductApiClient.setAuthTokenProvider(currentIdToken);
+
 type WorkspacePage =
+  | "dashboard"
   | "onboarding"
   | "product"
   | "criteria"
@@ -74,31 +91,34 @@ export function LoginScreen() {
   const router = useRouter();
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
+  const configured = firebaseConfigured();
 
   async function submit(formData: FormData) {
     setStatus("saving");
     setError(null);
     try {
-      const selectedRole = String(formData.get("role") ?? "brand") as Role;
-      const loginId = String(formData.get("loginId") ?? "");
+      if (!configured) throw new Error(authConfigurationError());
+      const email = String(formData.get("email") ?? "");
       const password = String(formData.get("password") ?? "");
-      const demoAccount = resolveDemoAccount(loginId);
-      if (demoAccount && password !== "0000") {
-        throw new Error("Demo account password is 0000.");
-      }
-      const role = demoAccount?.role ?? selectedRole;
-      const email = demoAccount?.email ?? loginId;
-      const displayName = demoAccount?.displayName ?? email.split("@")[0] ?? "KNOT user";
-      const user = await new ProductApiClient().bootstrapUser({ email, displayName, role });
-      saveLocalSession({
-        userId: user.userId,
-        role,
-        brandId: user.brandId,
-        brandAgentId: user.brandAgentId,
-        creatorId: user.creatorId,
-        creatorAgentId: user.creatorAgentId,
-      });
-      router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
+      await signInWithEmail(email, password);
+      const account = await new ProductApiClient().getMe();
+      saveCurrentAccount(account);
+      router.push(account.dashboardTarget);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
+  async function google() {
+    setStatus("saving");
+    setError(null);
+    try {
+      if (!configured) throw new Error(authConfigurationError());
+      await signInWithGoogle();
+      const account = await new ProductApiClient().getMe();
+      saveCurrentAccount(account);
+      router.push(account.dashboardTarget);
     } catch (caught) {
       setError(errorMessage(caught));
       setStatus("idle");
@@ -109,43 +129,33 @@ export function LoginScreen() {
     <AuthFrame
       eyebrow="Sign in"
       title="계정으로 로그인"
-      body="현재는 local-demo 계정으로 Product API user document를 만들고 역할 워크스페이스로 이동합니다."
+      body="Firebase Auth로 로그인하고 Product API가 검증한 account context를 기준으로 이동합니다."
     >
       <Panel>
         <form action={submit} className="grid gap-4">
-          <Input label="ID or Email" name="loginId" placeholder="test1 or you@company.com" required />
-          <Input label="Password" name="password" placeholder="0000 for demo accounts" type="password" required />
-          <label className="mt-4 block">
-            <span className="text-sm font-semibold">Workspace role</span>
-            <select name="role" className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" defaultValue="brand">
-              <option value="brand">Brand</option>
-              <option value="creator">Creator</option>
-            </select>
-          </label>
+          <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
+          <Input label="Password" name="password" placeholder="Password" type="password" required />
           <button
             type="submit"
             className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-background"
-            disabled={status === "saving"}
+            disabled={status === "saving" || !configured}
           >
             {status === "saving" ? "Signing in..." : "Continue"}
           </button>
-          {error && <FormError message={error} />}
           <button
             type="button"
-            disabled
+            onClick={google}
+            disabled={status === "saving" || !configured}
             className="rounded-full border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
           >
-            Continue with Google · Coming soon
+            Continue with Google
           </button>
+          {!configured && <FormError message={authConfigurationError()} />}
+          {error && <FormError message={error} />}
         </form>
         <p className="mt-5 text-sm text-muted">
           계정이 없으면 <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>에서 역할을 선택하세요.
         </p>
-        <div className="mt-5 grid gap-2 rounded border border-border-subtle bg-surface p-4 text-sm text-muted">
-          <p className="font-semibold text-foreground">Demo accounts</p>
-          <p>Brand: test1 / 0000, test2 / 0000</p>
-          <p>Creator: test3 / 0000, test4 / 0000</p>
-        </div>
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
         <RoleJumpCard role="brand" title="Brand workspace" href="/brand/onboarding" />
@@ -180,20 +190,186 @@ export function SignupScreen() {
   );
 }
 
-export function RoleSignupScreen({ role, session }: { role: Role; session: RoleSession }) {
+export function BrandDashboardScreen({ context }: { context: CurrentUserContext }) {
+  const [state, setState] = useDashboardState<BrandDashboard>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().getBrandDashboard(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="brand" active="dashboard" title="브랜드 대시보드" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getBrandDashboard(), setState)}>
+        {(dashboard) => (
+          <div className="grid gap-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric label="Active Promotions" value={dashboard.summary.activePromotions} />
+              <Metric label="Negotiations" value={dashboard.summary.negotiationsInProgress} />
+              <Metric label="Agreements" value={dashboard.summary.agreements} />
+              <Metric label="Locked escrow" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+              <Panel>
+                <SectionTitle eyebrow="Promotions" title="Active Promotions" />
+                {dashboard.activePromotions.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.activePromotions.map((promotion) => (
+                      <DashboardRow
+                        key={promotion.promotionId}
+                        title={promotion.title}
+                        meta={`${promotion.status} · ${promotion.category}`}
+                        href={`/brand/negotiate?promotionId=${promotion.promotionId}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 Promotion이 없습니다. 브랜드 프로필을 기준으로 첫 협찬 제안을 만들 수 있습니다." />
+                )}
+                <div className="mt-5">
+                  <PrimaryLink href="/brand/products/new">New Promotion</PrimaryLink>
+                </div>
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="Creators" title="Contracted Creators" />
+                {dashboard.contractedCreators.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.contractedCreators.map((creator) => (
+                      <DashboardRow
+                        key={String(creator.creatorId)}
+                        title={String(creator.displayName ?? "Creator")}
+                        meta={stringList(creator.categories).join(", ") || "category pending"}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 계약 완료된 Creator가 없습니다." />
+                )}
+              </Panel>
+            </div>
+            <Panel>
+              <SectionTitle eyebrow="Agent Activity" title="Recent Agent Activity" />
+              {dashboard.recentAgentActivity.length ? (
+                <div className="mt-4 grid gap-3">
+                  {dashboard.recentAgentActivity.map((event) => (
+                    <DashboardRow
+                      key={event.eventId}
+                      title={event.type}
+                      meta={event.createdAt}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text={`${context.account.displayName ?? "Brand"} 계정에서 아직 Agent activity가 없습니다.`} />
+              )}
+            </Panel>
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function CreatorDashboardScreen({ context }: { context: CurrentUserContext }) {
+  const [state, setState] = useDashboardState<CreatorDashboard>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="dashboard" title="크리에이터 대시보드" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState)}>
+        {(dashboard) => (
+          <div className="grid gap-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric label="New Offers" value={dashboard.summary.newOffers} />
+              <Metric label="Negotiations" value={dashboard.summary.agentNegotiations} />
+              <Metric label="Sponsorships" value={dashboard.summary.activeSponsorships} />
+              <Metric label="Pending payout" value={`${baseUnitsToUsdc(dashboard.summary.pendingPayoutBaseUnits)} USDC`} />
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+              <Panel>
+                <SectionTitle eyebrow="Offers" title="Agent Offers" />
+                {dashboard.offers.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.offers.map((offer) => (
+                      <DashboardRow
+                        key={String(offer.negotiationId)}
+                        title={String(offer.title ?? "Offer")}
+                        meta={`${String(offer.status ?? "PENDING")} · round ${String(offer.currentRound ?? "-")}`}
+                        href={`/creator/result?negotiationId=${String(offer.negotiationId)}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 새 제안이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
+                )}
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="Sponsorships" title="Active Sponsorships" />
+                {dashboard.activeSponsorships.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.activeSponsorships.map((agreement) => (
+                      <DashboardRow
+                        key={String(agreement.agreementId)}
+                        title={String(agreement.title ?? "Agreement")}
+                        meta={String(agreement.status ?? "ACTIVE")}
+                        href={`/creator/agreements/${String(agreement.agreementId)}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState text="진행 중인 협찬이 없습니다." />
+                )}
+                <div className="mt-5">
+                  <SecondaryLink href="/creator/settings">Agent criteria</SecondaryLink>
+                </div>
+              </Panel>
+            </div>
+            <Panel>
+              <SectionTitle eyebrow="Agent Activity" title="Recent Agent Activity" />
+              {dashboard.recentAgentActivity.length ? (
+                <div className="mt-4 grid gap-3">
+                  {dashboard.recentAgentActivity.map((event) => (
+                    <DashboardRow
+                      key={String(event.eventId)}
+                      title={String(event.label ?? event.type ?? "Activity")}
+                      meta={String(event.createdAt ?? "")}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text={`${context.account.displayName ?? "Creator"} 계정에서 아직 Agent activity가 없습니다.`} />
+              )}
+            </Panel>
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function RoleSignupScreen({ role, session }: { role: Role; session?: RoleSession }) {
+  const roleSession = session ?? fallbackRoleSession(role);
   const router = useRouter();
   const nextHref = role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
+  const configured = firebaseConfigured();
 
   async function submit(formData: FormData) {
     setStatus("saving");
     setError(null);
     try {
-      const displayName = String(formData.get("name") ?? session.userLabel);
+      if (!configured) throw new Error(authConfigurationError());
+      const displayName = String(formData.get("name") ?? roleSession.userLabel);
       const email = String(formData.get("email") ?? "");
-      const user = await new ProductApiClient().bootstrapUser({ email, displayName, role });
-      saveLocalSession({ userId: user.userId, role });
+      const password = String(formData.get("password") ?? "");
+      await createFirebaseAccount(email, password, displayName);
+      const api = new ProductApiClient();
+      await api.getMe();
+      const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
+      saveCurrentAccount(account);
       router.push(nextHref);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -204,29 +380,31 @@ export function RoleSignupScreen({ role, session }: { role: Role; session: RoleS
   return (
     <AuthFrame
       eyebrow={`${role} signup`}
-      title={`${session.organizationLabel} 프로필 생성`}
-      body="계정 정보를 Product API에 저장한 뒤 역할별 온보딩으로 이어집니다."
+      title={`${roleSession.organizationLabel} 프로필 생성`}
+      body="Firebase 계정을 만들고, Product API가 검증한 UID에 역할을 연결합니다."
     >
       <Panel>
         <form action={submit}>
           <div className="flex items-center gap-4">
-            <AgentCharacter agentId={session.agentId} side={role} category="wellness" pose="greet" size={82} />
+            <AgentCharacter agentId={roleSession.agentId} side={role} category="wellness" pose="greet" size={82} />
             <div>
-              <Pill>{session.agentLabel}</Pill>
+              <Pill>{roleSession.agentLabel}</Pill>
               <h2 className="mt-2 text-3xl font-semibold">기본 계정 정보</h2>
             </div>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Input label="Name" name="name" placeholder={session.userLabel} required />
-            <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={session.organizationLabel} required />
+            <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
+            <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
             <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
+            <Input label="Password" name="password" placeholder="Password" type="password" required />
             <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "glow-bar-labs" : "mina-studio"} />
           </div>
+          {!configured && <FormError message={authConfigurationError()} />}
           {error && <FormError message={error} />}
           <div className="mt-6">
             <button
               type="submit"
-              disabled={status === "saving"}
+              disabled={status === "saving" || !configured}
               className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {status === "saving" ? "저장 중..." : "온보딩 계속"}
@@ -238,9 +416,8 @@ export function RoleSignupScreen({ role, session }: { role: Role; session: RoleS
   );
 }
 
-export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
-  const [analyzed, setAnalyzed] = useState(false);
-  const [summary, setSummary] = useState(session.profileSummary);
+export function BrandOnboardingScreen() {
+  const router = useRouter();
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -248,23 +425,22 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
     setStatus("saving");
     setError(null);
     try {
-      const response = await new ProductApiClient().onboardBrand({
-        userId: readLocalSession().userId,
-        brandName: formString(formData, "brandName", "Glow Bar Labs"),
-        websiteUrl: formHttpUrl(formData, "websiteUrl", "https://glowbar.example"),
-        category: formString(formData, "category", "beauty"),
-        targetAudience: splitList(formString(formData, "targetAudience", "")),
+      const response = await new ProductApiClient().createMyBrandProfile({
+        brandName: formString(formData, "brandName", "Brand"),
+        websiteUrl: formHttpUrl(formData, "websiteUrl", "https://brand.example"),
+        categories: splitList(formString(formData, "categories", "")),
+        customCategory: formString(formData, "customCategory", ""),
+        targetAudience: formString(formData, "targetAudience", ""),
+        description: formString(formData, "description", ""),
         restrictedClaims: splitList(formString(formData, "restrictedClaims", "")),
-      });
+      }, `brand-profile-${Date.now()}`);
+      saveCurrentAccount(response);
       saveLocalSession({
-        userId: readLocalSession().userId,
         role: "brand",
         brandId: String(response.brand.brandId ?? ""),
         brandAgentId: String(response.agent.agentId ?? ""),
       });
-      setSummary(response.session.profileSummary);
-      setAnalyzed(true);
-      setStatus("saved");
+      router.push("/brand");
     } catch (caught) {
       setError(errorMessage(caught));
       setStatus("idle");
@@ -272,42 +448,40 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
   }
 
   return (
-    <WorkspaceShell role="brand" active="onboarding" title="브랜드 온보딩" session={session}>
-      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+    <WorkspaceShell role="brand" active="onboarding" title="브랜드 온보딩" session={null}>
+      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="Brand source" title="브랜드 정보를 추가합니다" />
-            <Input label="Brand website URL" name="websiteUrl" placeholder="https://glowbar.example" required />
-            <Input label="Brand name" name="brandName" placeholder="Glow Bar Labs" required />
-            <Input label="Category" name="category" placeholder="beauty" required />
-            <TextArea label="Target audience" name="targetAudience" placeholder="25-34, clean beauty, daily routine focused" />
-            <TextArea label="Restricted claims" name="restrictedClaims" placeholder="의료 효능 과장, 무검수 게시, 무기한 사용권" />
+            <SectionTitle eyebrow="Brand profile" title="안정적인 브랜드 정보만 저장합니다" />
+            <Input label="Brand name" name="brandName" placeholder="Brand name" required />
+            <Input label="Brand website URL" name="websiteUrl" placeholder="https://brand.example" required />
+            <ChoiceGroup
+              label="Categories"
+              name="categories"
+              options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
+              defaultSelected={["beauty"]}
+            />
+            <Input label="Custom category" name="customCategory" placeholder="clean skincare" />
+            <TextArea label="Primary target audience" name="targetAudience" placeholder="예: 25-34, clean beauty에 관심 있는 직장인" />
+            <TextArea label="Description" name="description" placeholder="브랜드 톤, 가치, 고객에게 주는 핵심 경험" />
+            <TextArea label="Restricted claims" name="restrictedClaims" placeholder="의료 효능 과장, 무검수 게시 등" />
             {error && <FormError message={error} />}
             <button
               type="submit"
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "Demo profile 저장"}
+              {status === "saving" ? "저장 중..." : "Brand profile 저장"}
             </button>
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Profile draft" title={analyzed ? "저장된 demo profile" : "입력 대기"} />
-          {analyzed ? (
-            <div className="space-y-3">
-              <InfoBox label="Brand summary" value={summary} />
-              <InfoBox label="Tone" value="신뢰감 있고 일상적인 제품 경험 중심" />
-              <InfoBox label="Restricted claims" value="의료 효능 과장, 무검수 게시, 무기한 사용권 제외" />
-            </div>
-          ) : (
-            <EmptyState text="현재는 실제 웹 분석 없이 입력한 정보를 profile reference로 저장합니다." />
-          )}
-          {analyzed && (
-            <div className="mt-6">
-              <PrimaryLink href="/brand/products/new">제품 추가로 이동</PrimaryLink>
-            </div>
-          )}
+          <SectionTitle eyebrow="Scope" title="Promotion 정보는 다음 단계에서 입력합니다" />
+          <div className="space-y-3">
+            <InfoBox label="이 페이지에 저장" value="브랜드명, 웹사이트, 카테고리, 타겟, 제한 표현" />
+            <InfoBox label="여기서 제외" value="제품명, 예산, deliverables, usage rights, deadline" />
+            <InfoBox label="저장 위치" value="Product API가 verified UID로 Brand Profile과 Brand Agent를 생성" />
+          </div>
         </Panel>
       </div>
     </WorkspaceShell>
@@ -521,9 +695,8 @@ export function BrandSettlementEmptyScreen({ message }: { message: string }) {
   );
 }
 
-export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
-  const [analyzed, setAnalyzed] = useState(false);
-  const [summary, setSummary] = useState(session.profileSummary);
+export function CreatorOnboardingScreen() {
+  const router = useRouter();
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -531,21 +704,23 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
     setStatus("saving");
     setError(null);
     try {
-      const response = await new ProductApiClient().onboardCreator({
-        userId: readLocalSession().userId,
-        creatorName: formString(formData, "creatorName", "Mina Studio"),
-        snsUrl: formHttpUrl(formData, "snsUrl", "https://instagram.com/mina.studio"),
-        primaryCategory: formString(formData, "primaryCategory", "beauty"),
-      });
+      const response = await new ProductApiClient().createMyCreatorProfile({
+        creatorName: formString(formData, "creatorName", "Creator"),
+        snsUrl: formHttpUrl(formData, "snsUrl", "https://instagram.com/creator"),
+        categories: splitList(formString(formData, "categories", "")),
+        customCategory: formString(formData, "customCategory", ""),
+        minimumUsdc: numberFromForm(formData, "minimumUsdc", 300),
+        blockedDomains: splitList(formString(formData, "blockedDomains", "")),
+        preferredContent: splitList(formString(formData, "preferredContent", "")),
+        walletAddress: formString(formData, "walletAddress", ""),
+      }, `creator-profile-${Date.now()}`);
+      saveCurrentAccount(response);
       saveLocalSession({
-        userId: readLocalSession().userId,
         role: "creator",
         creatorId: response.creator.creatorId,
         creatorAgentId: response.creator.creatorAgentId,
       });
-      setSummary(response.session.profileSummary);
-      setAnalyzed(true);
-      setStatus("saved");
+      router.push("/creator");
     } catch (caught) {
       setError(errorMessage(caught));
       setStatus("idle");
@@ -553,40 +728,51 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
   }
 
   return (
-    <WorkspaceShell role="creator" active="onboarding" title="크리에이터 온보딩" session={session}>
-      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+    <WorkspaceShell role="creator" active="onboarding" title="크리에이터 온보딩" session={null}>
+      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="SNS source" title="내 SNS reference를 저장합니다" />
-            <Input label="Creator name" name="creatorName" placeholder="Mina Studio" required />
-            <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/mina.studio" required />
-            <Input label="Primary category" name="primaryCategory" placeholder="beauty" required />
+            <SectionTitle eyebrow="Creator profile" title="프로필과 기본 Agent 기준을 저장합니다" />
+            <Input label="Creator display name" name="creatorName" placeholder="Creator name" required />
+            <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/creator" required />
+            <ChoiceGroup
+              label="Categories"
+              name="categories"
+              options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
+              defaultSelected={["beauty"]}
+            />
+            <Input label="Custom category" name="customCategory" placeholder="vegan lifestyle" />
+            <Input label="Minimum sponsorship amount" name="minimumUsdc" placeholder="500" type="number" required />
+            <ChoiceGroup
+              label="Preferred content"
+              name="preferredContent"
+              options={["Instagram Reels", "TikTok short", "Story link", "YouTube Shorts", "UGC review"]}
+              defaultSelected={["Instagram Reels"]}
+            />
+            <ChoiceGroup
+              label="Blocked domains"
+              name="blockedDomains"
+              options={["담배", "도박", "성인", "고위험 투자", "의료 효능 과장", "정치"]}
+              defaultSelected={["담배", "도박"]}
+            />
+            <Input label="Settlement wallet public address" name="walletAddress" placeholder="Optional" />
             {error && <FormError message={error} />}
             <button
               type="submit"
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "Creator Agent profile 저장"}
+              {status === "saving" ? "저장 중..." : "Creator profile 저장"}
             </button>
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Public profile" title={analyzed ? "저장된 demo profile" : "입력 대기"} />
-          {analyzed ? (
-            <div className="space-y-3">
-              <InfoBox label="Creator summary" value={summary} />
-              <InfoBox label="Content style" value="일상 루틴, 제품 리뷰, Reels 중심" />
-              <InfoBox label="Past performance" value="스토리 링크 전환과 저장률이 높은 편" />
-            </div>
-          ) : (
-            <EmptyState text="현재는 실제 SNS ingestion 없이 URL reference와 입력값으로 profile draft를 저장합니다." />
-          )}
-          {analyzed && (
-            <div className="mt-6">
-              <PrimaryLink href="/creator/criteria">협상 기준 추가</PrimaryLink>
-            </div>
-          )}
+          <SectionTitle eyebrow="Private criteria" title="브랜드에게 공개되지 않는 기준입니다" />
+          <div className="space-y-3">
+            <InfoBox label="공개 프로필" value="이름, SNS reference, 카테고리, 공개 rate band" />
+            <InfoBox label="비공개 Agent 기준" value="minimum, blocked domains, preferred content" />
+            <InfoBox label="주의" value="SNS 분석은 ingestion이 연결된 뒤에만 표시합니다" />
+          </div>
         </Panel>
       </div>
     </WorkspaceShell>
@@ -734,25 +920,26 @@ export function CreatorBrandDetailScreen({ deal }: { deal: CreatorDeal }) {
   );
 }
 
-export function RoleMeScreen({ role, session }: { role: Role; session: RoleSession }) {
+export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSession }) {
+  const roleSession = session ?? fallbackRoleSession(role);
   return (
-    <WorkspaceShell role={role} active="me" title="마이페이지" session={session}>
+    <WorkspaceShell role={role} active="me" title="마이페이지" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <Panel>
           <div className="flex items-center gap-4">
-            <AgentCharacter agentId={session.agentId} side={role} category="wellness" pose="idle" size={92} />
+            <AgentCharacter agentId={roleSession.agentId} side={role} category="wellness" pose="idle" size={92} />
             <div>
               <Pill>{role}</Pill>
-              <h2 className="mt-2 text-3xl font-semibold">{session.organizationLabel}</h2>
+              <h2 className="mt-2 text-3xl font-semibold">{roleSession.organizationLabel}</h2>
             </div>
           </div>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Profile" title="프로필 요약" />
-          <p className="text-muted">{session.profileSummary}</p>
+          <p className="text-muted">{roleSession.profileSummary}</p>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <InfoBox label="User" value={session.userLabel} />
-            <InfoBox label="Wallet" value={session.walletAddress} />
+            <InfoBox label="User" value={roleSession.userLabel} />
+            <InfoBox label="Wallet" value={roleSession.walletAddress} />
           </div>
         </Panel>
       </div>
@@ -760,24 +947,25 @@ export function RoleMeScreen({ role, session }: { role: Role; session: RoleSessi
   );
 }
 
-export function RoleSettingsScreen({ role, session }: { role: Role; session: RoleSession }) {
+export function RoleSettingsScreen({ role, session }: { role: Role; session?: RoleSession }) {
+  const roleSession = session ?? fallbackRoleSession(role);
   return (
-    <WorkspaceShell role={role} active="settings" title="설정" session={session}>
+    <WorkspaceShell role={role} active="settings" title="설정" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-3">
         <Panel>
           <SectionTitle eyebrow="Account" title="계정" />
-          <Input label="Display name" placeholder={session.userLabel} />
-          <Input label="Workspace" placeholder={session.organizationLabel} />
+          <Input label="Display name" placeholder={roleSession.userLabel} />
+          <Input label="Workspace" placeholder={roleSession.organizationLabel} />
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Agent" title="에이전트" />
-          <InfoBox label="Agent ID" value={session.agentId} />
+          <InfoBox label="Agent ID" value={roleSession.agentId} />
           <InfoBox label="Mode" value="ACTIVE" />
           <PrivacyNote>Agent policy 변경은 audit event로 남기고, 결제 승인은 deterministic checks를 통과해야 합니다.</PrivacyNote>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
-          <Input label="Wallet address" placeholder={session.walletAddress} />
+          <Input label="Wallet address" placeholder={roleSession.walletAddress} />
           <InfoBox label="Network" value="Solana Devnet" />
         </Panel>
       </div>
@@ -1196,6 +1384,107 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
+type DashboardState<T> =
+  | { type: "loading" }
+  | { type: "ready"; data: T }
+  | { type: "empty"; message: string }
+  | { type: "forbidden"; message: string }
+  | { type: "not-found"; message: string }
+  | { type: "error"; message: string };
+
+function useDashboardState<T>() {
+  return useState<DashboardState<T>>({ type: "loading" });
+}
+
+async function loadDashboard<T>(
+  loader: () => Promise<T>,
+  setState: (state: DashboardState<T>) => void,
+) {
+  setState({ type: "loading" });
+  try {
+    const data = await loader();
+    setState({ type: "ready", data });
+  } catch (error) {
+    if (error instanceof ProductApiError && error.status === 403) {
+      setState({ type: "forbidden", message: error.message });
+      return;
+    }
+    if (error instanceof ProductApiError && error.status === 404) {
+      setState({ type: "not-found", message: error.message });
+      return;
+    }
+    setState({ type: "error", message: errorMessage(error) });
+  }
+}
+
+function DashboardStatus<T>({
+  state,
+  retry,
+  children,
+}: {
+  state: DashboardState<T>;
+  retry: () => void;
+  children: (data: T) => ReactNode;
+}) {
+  if (state.type === "ready") return children(state.data);
+  if (state.type === "loading") {
+    return (
+      <Panel>
+        <SectionTitle eyebrow="Loading" title="데이터를 불러오는 중입니다" />
+        <ProgressBar progress={64} />
+      </Panel>
+    );
+  }
+  if (state.type === "empty") {
+    return (
+      <Panel>
+        <SectionTitle eyebrow="Empty" title="아직 표시할 데이터가 없습니다" />
+        <EmptyState text={state.message} />
+      </Panel>
+    );
+  }
+  const title =
+    state.type === "forbidden"
+      ? "접근 권한이 없습니다"
+      : state.type === "not-found"
+        ? "데이터를 찾을 수 없습니다"
+        : "다시 시도해주세요";
+  return (
+    <Panel>
+      <SectionTitle eyebrow={state.type} title={title} />
+      <p className="text-sm text-muted">{state.message}</p>
+      {state.type === "error" && (
+        <button
+          type="button"
+          onClick={retry}
+          className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
+        >
+          Retry
+        </button>
+      )}
+    </Panel>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded border border-border-subtle bg-surface p-4">
+      <div className="text-xs font-semibold uppercase text-muted">{label}</div>
+      <div className="mt-2 text-3xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function DashboardRow({ title, meta, href }: { title: string; meta: string; href?: string }) {
+  const content = (
+    <div className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised">
+      <div className="font-semibold">{title}</div>
+      <div className="mt-1 text-sm text-muted">{meta}</div>
+    </div>
+  );
+  return href ? <Link href={href}>{content}</Link> : content;
+}
+
 function ChoiceGroup({
   label,
   name,
@@ -1240,6 +1529,18 @@ function ChoiceGroup({
       <div className="mt-2 font-mono text-xs text-muted">selected: {selectedText || "none"}</div>
     </div>
   );
+}
+
+function baseUnitsToUsdc(value: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "0";
+  return (amount / 1_000_000).toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function PageTitle({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
@@ -1377,17 +1678,6 @@ type LocalSession = {
 
 const LOCAL_SESSION_KEY = "knot.localSession";
 
-const DEMO_ACCOUNTS: Record<string, { email: string; displayName: string; role: Role }> = {
-  test1: { email: "test1@knot.demo", displayName: "Brand Test 1", role: "brand" },
-  test2: { email: "test2@knot.demo", displayName: "Brand Test 2", role: "brand" },
-  test3: { email: "test3@knot.demo", displayName: "Creator Test 1", role: "creator" },
-  test4: { email: "test4@knot.demo", displayName: "Creator Test 2", role: "creator" },
-};
-
-function resolveDemoAccount(loginId: string) {
-  return DEMO_ACCOUNTS[loginId.trim().toLowerCase()];
-}
-
 function readLocalSession(): LocalSession {
   if (typeof window === "undefined") return {};
   const raw = window.localStorage.getItem(LOCAL_SESSION_KEY);
@@ -1402,6 +1692,31 @@ function readLocalSession(): LocalSession {
 function saveLocalSession(next: LocalSession) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ ...readLocalSession(), ...next }));
+}
+
+function saveCurrentAccount(context: CurrentUserContext) {
+  const account = context.account;
+  saveLocalSession({
+    userId: account.uid,
+    role: account.role === "BRAND" ? "brand" : account.role === "CREATOR" ? "creator" : undefined,
+    brandId: account.brandId ?? undefined,
+    brandAgentId: account.role === "BRAND" ? account.agentId ?? undefined : undefined,
+    creatorId: account.creatorId ?? undefined,
+    creatorAgentId: account.role === "CREATOR" ? account.agentId ?? undefined : undefined,
+  });
+}
+
+function fallbackRoleSession(role: Role): RoleSession {
+  const brand = role === "brand";
+  return {
+    role,
+    userLabel: brand ? "Brand operator" : "Creator",
+    organizationLabel: brand ? "Brand workspace" : "Creator workspace",
+    agentId: `${role}-signup-agent`,
+    agentLabel: brand ? "Brand Agent" : "Creator Agent",
+    profileSummary: "Account context is created after Firebase sign-up.",
+    walletAddress: "not-connected",
+  };
 }
 
 function splitList(value: string) {

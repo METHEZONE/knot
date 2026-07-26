@@ -11,6 +11,7 @@ test("product route surface exposes separated MVP role pages", () => {
     "/signup",
     "/signup/brand",
     "/signup/creator",
+    "/brand",
     "/brand/onboarding",
     "/brand/products/new",
     "/brand/negotiate",
@@ -18,6 +19,7 @@ test("product route surface exposes separated MVP role pages", () => {
     "/brand/settlement",
     "/brand/me",
     "/brand/settings",
+    "/creator",
     "/creator/onboarding",
     "/creator/criteria",
     "/creator/result",
@@ -30,13 +32,13 @@ test("product route surface exposes separated MVP role pages", () => {
 
 test("workspace nav is menu-like and role-specific", () => {
   assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), [
-    "/brand/onboarding",
+    "/brand",
     "/brand/products/new",
     "/brand/negotiate",
     "/brand/settlement",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
-    "/creator/onboarding",
+    "/creator",
     "/creator/criteria",
     "/creator/result",
     "/creator/result",
@@ -70,10 +72,10 @@ test("data source defaults to API mode unless mock mode is explicitly requested"
 });
 
 test("role route helpers point to current MVP entry points", () => {
-  assert.equal(roleHome("brand"), "/brand/onboarding");
+  assert.equal(roleHome("brand"), "/brand");
   assert.equal(roleNegotiation("brand"), "/brand/negotiate");
   assert.equal(roleResult("brand"), "/brand/result");
-  assert.equal(roleHome("creator"), "/creator/onboarding");
+  assert.equal(roleHome("creator"), "/creator");
   assert.equal(roleNegotiation("creator"), "/creator/result");
   assert.equal(roleResult("creator"), "/creator/result");
 });
@@ -216,6 +218,103 @@ test("API client does not start negotiation when matching has no eligible creato
     assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET"]);
     assert.ok(!calls.some((call) => call.url.includes(":start-negotiation")));
   } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("API client forwards Firebase bearer token when configured", async () => {
+  const previousFetch = globalThis.fetch;
+  let observedAuthorization: string | null = null;
+  ProductApiClient.setAuthTokenProvider(async () => "firebase-test-token");
+
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    observedAuthorization = new Headers(init?.headers).get("Authorization");
+    return Response.json({
+      data: {
+        account: {
+          uid: "firebase-uid",
+          userId: "firebase-uid",
+          email: "tester@example.com",
+          displayName: "Tester",
+          photoUrl: null,
+          role: null,
+          onboardingStatus: "ROLE_REQUIRED",
+          status: "ACTIVE",
+          brandId: null,
+          creatorId: null,
+          agentId: null,
+          schemaVersion: 2,
+        },
+        profileSummary: null,
+        dashboardTarget: "/signup",
+      },
+    });
+  }) as typeof fetch;
+
+  try {
+    const context = await new ProductApiClient("").getMe();
+    assert.equal(context.account.uid, "firebase-uid");
+    assert.equal(observedAuthorization, "Bearer firebase-test-token");
+  } finally {
+    ProductApiClient.setAuthTokenProvider(null);
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("API client reads authenticated role dashboards without mock fallback", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls: string[] = [];
+  ProductApiClient.setAuthTokenProvider(async () => "firebase-dashboard-token");
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(String(input));
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer firebase-dashboard-token");
+    if (String(input).endsWith("/api/v1/brand/dashboard")) {
+      return Response.json({
+        data: {
+          dashboard: {
+            brand: { brandId: "brand-owned", displayName: "Brand" },
+            summary: {
+              activePromotions: 0,
+              negotiationsInProgress: 0,
+              agreements: 0,
+              lockedEscrowBaseUnits: "0",
+            },
+            activePromotions: [],
+            recentAgentActivity: [],
+            contractedCreators: [],
+          },
+        },
+      });
+    }
+    if (String(input).endsWith("/api/v1/creator/dashboard")) {
+      return Response.json({
+        data: {
+          dashboard: {
+            creator: { creatorId: "creator-owned", displayName: "Creator" },
+            summary: {
+              newOffers: 0,
+              agentNegotiations: 0,
+              activeSponsorships: 0,
+              pendingPayoutBaseUnits: "0",
+            },
+            offers: [],
+            activeSponsorships: [],
+            recentAgentActivity: [],
+          },
+        },
+      });
+    }
+    return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const api = new ProductApiClient("");
+    assert.equal((await api.getBrandDashboard()).brand.brandId, "brand-owned");
+    assert.equal((await api.getCreatorDashboard()).creator.creatorId, "creator-owned");
+    assert.deepEqual(calls, ["/api/v1/brand/dashboard", "/api/v1/creator/dashboard"]);
+  } finally {
+    ProductApiClient.setAuthTokenProvider(null);
     globalThis.fetch = previousFetch;
   }
 });

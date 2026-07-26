@@ -40,6 +40,8 @@ class Settings(BaseModel):
     web3_mode: str = "local"
     repository_backend: str = "memory"
     firestore_project_id: str | None = None
+    auth_mode: str = "firebase"
+    firebase_project_id: str | None = None
     vertex_ai_location: str = "us-central1"
     gemini_mode: str = "off"
     gemini_model: str = "gemini-2.5-flash"
@@ -68,6 +70,12 @@ def get_settings(service_name: str | None = None) -> Settings:
         web3_mode=os.getenv("KNOT_WEB3_MODE", "local"),
         repository_backend=os.getenv("KNOT_REPOSITORY_BACKEND", "memory"),
         firestore_project_id=os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID"),
+        auth_mode=os.getenv("KNOT_AUTH_MODE", "firebase"),
+        firebase_project_id=(
+            os.getenv("FIREBASE_PROJECT_ID")
+            or os.getenv("GOOGLE_CLOUD_PROJECT")
+            or os.getenv("GCP_PROJECT_ID")
+        ),
         vertex_ai_location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
         gemini_mode=os.getenv("KNOT_GEMINI_MODE", "off"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),

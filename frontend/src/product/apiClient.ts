@@ -54,6 +54,27 @@ export type ApiUser = {
   creatorAgentId?: string;
 };
 
+export type CurrentAccount = {
+  uid: string;
+  userId: string;
+  email: string | null;
+  displayName: string | null;
+  photoUrl: string | null;
+  role: "BRAND" | "CREATOR" | null;
+  onboardingStatus: "ROLE_REQUIRED" | "PROFILE_REQUIRED" | "COMPLETED";
+  status: "ACTIVE" | "DISABLED" | "DELETION_PENDING" | "DELETED";
+  brandId?: string | null;
+  creatorId?: string | null;
+  agentId?: string | null;
+  schemaVersion: number;
+};
+
+export type CurrentUserContext = {
+  account: CurrentAccount;
+  profileSummary: Record<string, unknown> | null;
+  dashboardTarget: string;
+};
+
 export type ApiRoleSession = {
   role: "brand" | "creator";
   userLabel: string;
@@ -84,6 +105,27 @@ export type CreatorOnboardingInput = {
   creatorName: string;
   snsUrl: string;
   primaryCategory: string;
+};
+
+export type CurrentBrandProfileInput = {
+  brandName: string;
+  websiteUrl: string;
+  categories: string[];
+  customCategory?: string;
+  targetAudience: string;
+  description?: string;
+  restrictedClaims: string[];
+};
+
+export type CurrentCreatorProfileInput = {
+  creatorName: string;
+  snsUrl: string;
+  categories: string[];
+  customCategory?: string;
+  minimumUsdc: number;
+  blockedDomains: string[];
+  preferredContent: string[];
+  walletAddress?: string;
 };
 
 export type CreatorCriteriaInput = {
@@ -233,6 +275,32 @@ export type ApiReceipt = {
   detail?: string;
 };
 
+export type BrandDashboard = {
+  brand: Record<string, unknown>;
+  summary: {
+    activePromotions: number;
+    negotiationsInProgress: number;
+    agreements: number;
+    lockedEscrowBaseUnits: string;
+  };
+  activePromotions: ApiPromotion[];
+  recentAgentActivity: ApiTimelineEvent[];
+  contractedCreators: Array<Record<string, unknown>>;
+};
+
+export type CreatorDashboard = {
+  creator: Record<string, unknown>;
+  summary: {
+    newOffers: number;
+    agentNegotiations: number;
+    activeSponsorships: number;
+    pendingPayoutBaseUnits: string;
+  };
+  offers: Array<Record<string, unknown>>;
+  activeSponsorships: Array<Record<string, unknown>>;
+  recentAgentActivity: Array<Record<string, unknown>>;
+};
+
 export type ApiNegotiationBundle = {
   promotion: ApiPromotion;
   matchRun: ApiMatchRun;
@@ -270,19 +338,71 @@ export class ProductApiError extends Error {
 }
 
 export class ProductApiClient {
+  private static authTokenProvider: (() => Promise<string | null>) | null = null;
   private baseUrl: string;
 
   constructor(baseUrl = apiBaseUrl()) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
+  static setAuthTokenProvider(provider: (() => Promise<string | null>) | null) {
+    ProductApiClient.authTokenProvider = provider;
+  }
+
   async health() {
     return this.raw<{ status: string; service: string }>("/readyz");
+  }
+
+  async getMe() {
+    return this.request<CurrentUserContext>("/api/v1/me");
+  }
+
+  async selectMyRole(role: "BRAND" | "CREATOR", idempotencyKey: string) {
+    return this.request<CurrentUserContext>("/api/v1/me/role", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async createMyBrandProfile(input: CurrentBrandProfileInput, idempotencyKey: string) {
+    return this.request<{
+      brand: Record<string, unknown>;
+      agent: Record<string, unknown>;
+    } & CurrentUserContext>("/api/v1/me/brand-profile", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(input),
+    });
+  }
+
+  async createMyCreatorProfile(input: CurrentCreatorProfileInput, idempotencyKey: string) {
+    return this.request<{
+      creator: { creatorId: string; creatorAgentId: string };
+      agent: Record<string, unknown>;
+      policy: Record<string, unknown>;
+    } & CurrentUserContext>("/api/v1/me/creator-profile", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(input),
+    });
   }
 
   async listPromotions() {
     const response = await this.request<{ promotions: ApiPromotion[] }>("/api/v1/promotions");
     return response.promotions;
+  }
+
+  async getBrandDashboard() {
+    const response = await this.request<{ dashboard: BrandDashboard }>("/api/v1/brand/dashboard");
+    return response.dashboard;
+  }
+
+  async getCreatorDashboard() {
+    const response = await this.request<{ dashboard: CreatorDashboard }>(
+      "/api/v1/creator/dashboard",
+    );
+    return response.dashboard;
   }
 
   async bootstrapUser(input: BootstrapUserInput) {
@@ -465,13 +585,11 @@ export class ProductApiClient {
   }
 
   private async raw<T>(path: string, init?: RequestInit): Promise<T> {
+    const headers = await this.headers(init);
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       cache: "no-store",
-      headers: {
-        ...(init?.body ? { "Content-Type": "application/json" } : {}),
-        ...init?.headers,
-      },
+      headers,
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -483,6 +601,18 @@ export class ProductApiClient {
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const envelope = await this.raw<ApiEnvelope<T>>(path, init);
     return envelope.data;
+  }
+
+  private async headers(init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    if (init?.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    const token = await ProductApiClient.authTokenProvider?.();
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return headers;
   }
 }
 

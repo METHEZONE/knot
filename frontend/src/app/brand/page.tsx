@@ -1,5 +1,12 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { AuthGate } from "@/auth/AuthGate";
+import { BrandDashboardScreen } from "@/product/ProductScreens";
 
 export default function Page() {
-  redirect("/brand/onboarding");
+  return (
+    <AuthGate expectedRole="BRAND" requireCompleted>
+      {(context) => <BrandDashboardScreen context={context} />}
+    </AuthGate>
+  );
 }

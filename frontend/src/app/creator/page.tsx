@@ -1,5 +1,12 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { AuthGate } from "@/auth/AuthGate";
+import { CreatorDashboardScreen } from "@/product/ProductScreens";
 
 export default function Page() {
-  redirect("/creator/onboarding");
+  return (
+    <AuthGate expectedRole="CREATOR" requireCompleted>
+      {(context) => <CreatorDashboardScreen context={context} />}
+    </AuthGate>
+  );
 }

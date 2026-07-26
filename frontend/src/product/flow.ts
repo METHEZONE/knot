@@ -6,6 +6,7 @@ export const appRoutes = [
   "/signup",
   "/signup/brand",
   "/signup/creator",
+  "/brand",
   "/brand/onboarding",
   "/brand/products/new",
   "/brand/negotiate",
@@ -13,6 +14,7 @@ export const appRoutes = [
   "/brand/settlement",
   "/brand/me",
   "/brand/settings",
+  "/creator",
   "/creator/onboarding",
   "/creator/criteria",
   "/creator/result",
@@ -23,7 +25,7 @@ export const appRoutes = [
 ] as const;
 
 export function roleHome(role: Role) {
-  return `/${role}/onboarding`;
+  return `/${role}`;
 }
 
 export function roleNegotiation(role: Role) {
@@ -35,14 +37,14 @@ export function roleResult(role: Role) {
 }
 
 export const brandWorkspaceRoutes = [
-  { href: "/brand/onboarding", label: "Profile" },
+  { href: "/brand", label: "Dashboard" },
   { href: "/brand/products/new", label: "Promotions" },
   { href: "/brand/negotiate", label: "Negotiations" },
   { href: "/brand/settlement", label: "Settlements" },
 ] as const;
 
 export const creatorWorkspaceRoutes = [
-  { href: "/creator/onboarding", label: "Profile" },
+  { href: "/creator", label: "Dashboard" },
   { href: "/creator/criteria", label: "Criteria" },
   { href: "/creator/result", label: "Offers" },
   { href: "/creator/result", label: "Deals" },
