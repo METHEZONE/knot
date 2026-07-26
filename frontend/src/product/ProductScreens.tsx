@@ -84,14 +84,14 @@ export function LoginScreen() {
           <button
             type="button"
             disabled
-            className="rounded-full border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
+            className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
           >
             이메일 로그인 · 준비 중
           </button>
           <button
             type="button"
             disabled
-            className="rounded-full border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
+            className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
           >
             Continue with Google · Coming soon
           </button>
@@ -195,7 +195,7 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
           <button
             type="button"
             onClick={() => setAnalyzed(true)}
-            className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
+            className="mt-5 sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background"
           >
             Agent에게 분석 맡기기
           </button>
@@ -330,7 +330,7 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
           <button
             type="button"
             onClick={() => setAnalyzed(true)}
-            className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
+            className="mt-5 sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background"
           >
             Creator Agent에게 분석 맡기기
           </button>
@@ -514,7 +514,7 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
         <SectionTitle eyebrow="Routes" title="MVP app surface" />
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {[...brandWorkspaceRoutes, ...creatorWorkspaceRoutes].map((route) => (
-            <Link key={route.href} href={route.href} className="rounded border border-border-subtle bg-background p-3 text-sm hover:bg-surface-raised">
+            <Link key={route.href} href={route.href} className="sketch-alt ink border border-border-subtle bg-background p-3 text-sm hover:bg-surface-raised">
               {route.href}
             </Link>
           ))}
@@ -524,7 +524,7 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
         <SectionTitle eyebrow="Events" title="System events" />
         <div className="mt-4 space-y-3">
           {overview.events.map((event) => (
-            <div key={event.id} className="grid gap-3 rounded border border-border-subtle bg-background p-4 md:grid-cols-[80px_1fr_100px]">
+            <div key={event.id} className="grid gap-3 sketch-alt ink border border-border-subtle bg-background p-4 md:grid-cols-[80px_1fr_100px]">
               <span className="font-mono text-xs text-muted">{event.type}</span>
               <span>{event.label}</span>
               <span className="font-mono text-xs uppercase text-muted">{event.status}</span>
@@ -567,10 +567,10 @@ function WorkspaceShell({
             {session && <p className="mt-2 text-sm text-muted">{session.organizationLabel}</p>}
           </div>
           <nav aria-label={`${role} account actions`} className="flex flex-wrap gap-2 text-sm font-semibold">
-            <Link href={`/${role}/me`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
+            <Link href={`/${role}/me`} className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
               My
             </Link>
-            <Link href={`/${role}/settings`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
+            <Link href={`/${role}/settings`} className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
               Settings
             </Link>
           </nav>
@@ -637,7 +637,7 @@ function RoleSignInCard({ role, title, body }: { role: Role; title: string; body
 
 function AgentRelayScene() {
   return (
-    <div className="relative min-h-[390px] overflow-hidden rounded border border-border-subtle bg-background">
+    <div className="relative min-h-[390px] overflow-hidden sketch-alt ink border border-border-subtle bg-background">
       <div className="absolute left-6 top-6">
         <div className="font-mono text-xs uppercase text-muted">A2A task stream</div>
         <div className="mt-1 text-3xl font-semibold">협상 진행중</div>
@@ -688,7 +688,7 @@ function AgentNegotiationPanel({ view, nextHref }: { view: NegotiationView; next
         <button
           type="button"
           onClick={() => setRevealed(true)}
-          className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
+          className="sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background"
         >
           협상 완료 상태 보기
         </button>
@@ -707,7 +707,7 @@ function AgreementPanel({ view }: { view: NegotiationView }) {
           <InfoBox key={term.label} label={term.label} value={term.value} />
         ))}
       </div>
-      <div className="mt-5 rounded border border-border-subtle bg-background p-4">
+      <div className="mt-5 sketch-alt ink border border-border-subtle bg-background p-4">
         <div className="font-mono text-xs uppercase text-muted">termsHash</div>
         <div className="mt-1 break-all font-mono text-sm">{view.termsHash}</div>
       </div>
@@ -742,7 +742,7 @@ function MilestonePanel({ milestones, mode }: { milestones: Milestone[]; mode: "
       <SectionTitle eyebrow="Milestones" title={mode === "brand" ? "검증 및 지급 단계" : "수행할 작업"} />
       <div className="mt-4 space-y-3">
         {milestones.map((milestone) => (
-          <div key={milestone.id} className="rounded border border-border-subtle bg-background p-4">
+          <div key={milestone.id} className="sketch-alt ink border border-border-subtle bg-background p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="font-semibold">{milestone.title}</div>
@@ -762,7 +762,7 @@ function MilestonePanel({ milestones, mode }: { milestones: Milestone[]; mode: "
 
 function CandidateCard({ name, score, reason, selected = false }: { name: string; score: string; reason: string; selected?: boolean }) {
   return (
-    <div className={`rounded border p-4 ${selected ? "border-positive bg-positive/10" : "border-border-subtle bg-background"}`}>
+    <div className={`sketch-alt ink border p-4 ${selected ? "border-positive bg-positive/10" : "border-border-subtle bg-background"}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold">{name}</span>
         <span className="font-mono text-sm">score {score}</span>
@@ -792,7 +792,7 @@ function CreatorDealCard({ deal }: { deal: CreatorDeal }) {
 
 function AgentProgressCard({ role, title, body, progress }: { role: Role; title: string; body: string; progress: number }) {
   return (
-    <div className="rounded border border-border-subtle bg-background p-5">
+    <div className="sketch-alt ink border border-border-subtle bg-background p-5">
       <div className="flex items-center gap-5">
         <div className="relative">
           {progress < 100 && <div className="absolute -inset-4 animate-ping rounded-full border border-border-subtle opacity-40" />}
@@ -811,7 +811,7 @@ function AgentProgressCard({ role, title, body, progress }: { role: Role; title:
 function TaskRow({ task, forceDone }: { task: AgentTask; forceDone: boolean }) {
   const status = forceDone && task.status !== "queued" ? "done" : task.status;
   return (
-    <div className="rounded border border-border-subtle bg-background p-4">
+    <div className="sketch-alt ink border border-border-subtle bg-background p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-semibold">{task.label}</span>
         <span className="font-mono text-xs uppercase text-muted">{status}</span>
@@ -892,7 +892,7 @@ function Input({ label, placeholder, type = "text" }: { label: string; placehold
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
-      <input type={type} className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
+      <input type={type} className="mt-2 w-full sketch-alt ink border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
     </label>
   );
 }
@@ -901,18 +901,18 @@ function TextArea({ label, placeholder }: { label: string; placeholder: string }
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
-      <textarea rows={4} className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
+      <textarea rows={4} className="mt-2 w-full sketch-alt ink border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
     </label>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div className="rounded border border-border-subtle bg-background p-5 text-sm text-muted">{text}</div>;
+  return <div className="sketch-alt ink border border-border-subtle bg-background p-5 text-sm text-muted">{text}</div>;
 }
 
 function PrivacyNote({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-5 rounded border border-caution/40 bg-caution/10 p-3 text-sm text-muted">
+    <div className="sketch-alt ink mt-5 border border-caution/40 bg-caution/10 p-3 text-sm text-muted">
       {children}
     </div>
   );
@@ -920,7 +920,7 @@ function PrivacyNote({ children }: { children: ReactNode }) {
 
 function TxBox({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded border border-border-subtle bg-background p-3">
+    <div className="sketch-alt ink border border-border-subtle bg-background p-3">
       <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
       <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live devnet transaction"}</div>
     </div>
@@ -938,7 +938,7 @@ function InfoPanel({ label, value }: { label: string; value: string }) {
 
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-border-subtle bg-background p-3">
+    <div className="sketch-alt ink border border-border-subtle bg-background p-3">
       <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
       <div className="mt-1 text-sm font-semibold">{value}</div>
     </div>
@@ -955,16 +955,16 @@ function Pill({ children }: { children: ReactNode }) {
 
 function PrimaryAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+    <button type="button" onClick={onClick} className="inline-flex sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
       {children}
     </button>
   );
 }
 
 function PrimaryLink({ href, children }: { href: string; children: ReactNode }) {
-  return <Link href={href} className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">{children}</Link>;
+  return <Link href={href} className="inline-flex sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">{children}</Link>;
 }
 
 function SecondaryLink({ href, children }: { href: string; children: ReactNode }) {
-  return <Link href={href} className="inline-flex rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised">{children}</Link>;
+  return <Link href={href} className="inline-flex sketch-pill ink border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised">{children}</Link>;
 }
