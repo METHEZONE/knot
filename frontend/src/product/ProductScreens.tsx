@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
+import { ProductApiClient } from "./apiClient";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import type {
   AgentTask,
@@ -69,22 +71,51 @@ export function LandingScreen() {
 }
 
 export function LoginScreen() {
+  const router = useRouter();
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const role = String(formData.get("role") ?? "brand") as Role;
+      const email = String(formData.get("email") ?? "");
+      const displayName = email.split("@")[0] || "KNOT user";
+      const user = await new ProductApiClient().bootstrapUser({ email, displayName, role });
+      saveLocalSession({ userId: user.userId, role });
+      router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <AuthFrame
       eyebrow="Sign in"
       title="계정으로 로그인"
-      body="실제 인증 연동 전까지는 mock session으로 역할별 워크스페이스를 확인합니다."
+      body="현재는 local-demo 계정으로 Product API user document를 만들고 역할 워크스페이스로 이동합니다."
     >
       <Panel>
-        <div className="grid gap-4">
-          <Input label="Email" placeholder="you@company.com" type="email" />
-          <Input label="Password" placeholder="Password" type="password" />
+        <form action={submit} className="grid gap-4">
+          <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
+          <Input label="Password" name="password" placeholder="Password" type="password" required />
+          <label className="mt-4 block">
+            <span className="text-sm font-semibold">Workspace role</span>
+            <select name="role" className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" defaultValue="brand">
+              <option value="brand">Brand</option>
+              <option value="creator">Creator</option>
+            </select>
+          </label>
           <button
-            type="button"
+            type="submit"
             className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-background"
+            disabled={status === "saving"}
           >
-            Continue
+            {status === "saving" ? "Signing in..." : "Continue"}
           </button>
+          {error && <FormError message={error} />}
           <button
             type="button"
             disabled
@@ -92,7 +123,7 @@ export function LoginScreen() {
           >
             Continue with Google · Coming soon
           </button>
-        </div>
+        </form>
         <p className="mt-5 text-sm text-muted">
           계정이 없으면 <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>에서 역할을 선택하세요.
         </p>
@@ -131,30 +162,58 @@ export function SignupScreen() {
 }
 
 export function RoleSignupScreen({ role, session }: { role: Role; session: RoleSession }) {
+  const router = useRouter();
   const nextHref = role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const displayName = String(formData.get("name") ?? session.userLabel);
+      const email = String(formData.get("email") ?? "");
+      const user = await new ProductApiClient().bootstrapUser({ email, displayName, role });
+      saveLocalSession({ userId: user.userId, role });
+      router.push(nextHref);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <AuthFrame
       eyebrow={`${role} signup`}
       title={`${session.organizationLabel} 프로필 생성`}
-      body="지금 화면은 프로덕트 플로우 검증용 mock form입니다. 저장 인터페이스는 이후 Firestore profile document로 연결합니다."
+      body="계정 정보를 Product API에 저장한 뒤 역할별 온보딩으로 이어집니다."
     >
       <Panel>
-        <div className="flex items-center gap-4">
-          <AgentCharacter agentId={session.agentId} side={role} category="wellness" pose="greet" size={82} />
-          <div>
-            <Pill>{session.agentLabel}</Pill>
-            <h2 className="mt-2 text-3xl font-semibold">기본 계정 정보</h2>
+        <form action={submit}>
+          <div className="flex items-center gap-4">
+            <AgentCharacter agentId={session.agentId} side={role} category="wellness" pose="greet" size={82} />
+            <div>
+              <Pill>{session.agentLabel}</Pill>
+              <h2 className="mt-2 text-3xl font-semibold">기본 계정 정보</h2>
+            </div>
           </div>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <Input label="Name" placeholder={session.userLabel} />
-          <Input label={role === "brand" ? "Company" : "Creator name"} placeholder={session.organizationLabel} />
-          <Input label="Email" placeholder="you@knot.demo" type="email" />
-          <Input label="Workspace handle" placeholder={role === "brand" ? "glow-bar-labs" : "mina-studio"} />
-        </div>
-        <div className="mt-6">
-          <PrimaryLink href={nextHref}>온보딩 계속</PrimaryLink>
-        </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <Input label="Name" name="name" placeholder={session.userLabel} required />
+            <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={session.organizationLabel} required />
+            <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
+            <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "glow-bar-labs" : "mina-studio"} />
+          </div>
+          {error && <FormError message={error} />}
+          <div className="mt-6">
+            <button
+              type="submit"
+              disabled={status === "saving"}
+              className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {status === "saving" ? "저장 중..." : "온보딩 계속"}
+            </button>
+          </div>
+        </form>
       </Panel>
     </AuthFrame>
   );
@@ -162,37 +221,74 @@ export function RoleSignupScreen({ role, session }: { role: Role; session: RoleS
 
 export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
   const [analyzed, setAnalyzed] = useState(false);
+  const [summary, setSummary] = useState(session.profileSummary);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const response = await new ProductApiClient().onboardBrand({
+        userId: readLocalSession().userId,
+        brandName: String(formData.get("brandName") ?? "Glow Bar Labs"),
+        websiteUrl: String(formData.get("websiteUrl") ?? "https://glowbar.example"),
+        category: String(formData.get("category") ?? "beauty"),
+        targetAudience: splitList(String(formData.get("targetAudience") ?? "")),
+        restrictedClaims: splitList(String(formData.get("restrictedClaims") ?? "")),
+      });
+      saveLocalSession({
+        userId: readLocalSession().userId,
+        role: "brand",
+        brandId: String(response.brand.brandId ?? ""),
+        brandAgentId: String(response.agent.agentId ?? ""),
+      });
+      setSummary(response.session.profileSummary);
+      setAnalyzed(true);
+      setStatus("saved");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <WorkspaceShell role="brand" active="onboarding" title="브랜드 온보딩" session={session}>
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel>
-          <SectionTitle eyebrow="Brand source" title="브랜드 정보를 추가합니다" />
-          <Input label="Brand website URL" placeholder="https://glowbar.example" />
-          <Input label="Brand name" placeholder="Glow Bar Labs" />
-          <Input label="Category" placeholder="wellness skincare" />
-          <TextArea label="Target audience" placeholder="25-34, clean beauty, daily routine focused" />
-          <button
-            type="button"
-            onClick={() => setAnalyzed(true)}
-            className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
-          >
-            Agent에게 분석 맡기기
-          </button>
+          <form action={submit}>
+            <SectionTitle eyebrow="Brand source" title="브랜드 정보를 추가합니다" />
+            <Input label="Brand website URL" name="websiteUrl" placeholder="https://glowbar.example" required />
+            <Input label="Brand name" name="brandName" placeholder="Glow Bar Labs" required />
+            <Input label="Category" name="category" placeholder="beauty" required />
+            <TextArea label="Target audience" name="targetAudience" placeholder="25-34, clean beauty, daily routine focused" />
+            <TextArea label="Restricted claims" name="restrictedClaims" placeholder="의료 효능 과장, 무검수 게시, 무기한 사용권" />
+            {error && <FormError message={error} />}
+            <button
+              type="submit"
+              disabled={status === "saving"}
+              className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+            >
+              {status === "saving" ? "저장 및 분석 중..." : "Agent에게 분석 맡기기"}
+            </button>
+          </form>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Profile draft" title={analyzed ? "분석 결과" : "분석 대기"} />
           {analyzed ? (
             <div className="space-y-3">
-              <InfoBox label="Brand summary" value={session.profileSummary} />
+              <InfoBox label="Brand summary" value={summary} />
               <InfoBox label="Tone" value="신뢰감 있고 일상적인 제품 경험 중심" />
               <InfoBox label="Restricted claims" value="의료 효능 과장, 무검수 게시, 무기한 사용권 제외" />
             </div>
           ) : (
             <EmptyState text="URL과 기본 정보를 입력하면 공개 정보 기반 draft를 생성합니다." />
           )}
-          <div className="mt-6">
-            <PrimaryLink href="/brand/products/new">제품 추가로 이동</PrimaryLink>
-          </div>
+          {analyzed && (
+            <div className="mt-6">
+              <PrimaryLink href="/brand/products/new">제품 추가로 이동</PrimaryLink>
+            </div>
+          )}
         </Panel>
       </div>
     </WorkspaceShell>
@@ -200,21 +296,72 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
 }
 
 export function BrandProductScreen({ product }: { product: BrandProduct }) {
+  const router = useRouter();
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const session = readLocalSession();
+      const promotion = await new ProductApiClient().createPromotion({
+        promotionId: undefined,
+        brandId: session.brandId || "brand-001",
+        brandAgentId: session.brandAgentId || "brand-agent-001",
+        title: String(formData.get("productName") ?? product.title),
+        objective: String(formData.get("objective") ?? "awareness"),
+        category: String(formData.get("category") ?? product.category),
+        targetAudience: splitList(String(formData.get("targetAudience") ?? product.targetAudience)),
+        budget: {
+          totalUsdc: numberFromForm(formData, "totalBudget", product.budgetUsdc),
+          maxPerCreatorUsdc: numberFromForm(formData, "maxOffer", product.maxOfferUsdc),
+        },
+        deliverables: [{ format: "reel", count: 1 }],
+        postingWindow: { start: "2026-08-05", end: "2026-08-10" },
+        usageRights: "paidBoost30d",
+        constraints: {
+          requiredDisclosures: ["ad"],
+          prohibitedClaims: splitList(String(formData.get("blockedTerms") ?? "")),
+          requiredCategories: [String(formData.get("category") ?? product.category)],
+        },
+        autonomy: { maxNegotiationRounds: 5, autoEscrow: false, autoRelease: false },
+      });
+      saveLocalSession({ ...session, role: "brand", promotionId: promotion.promotionId });
+      router.push("/brand/negotiate");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <WorkspaceShell role="brand" active="product" title="제품 추가" session={null}>
       <div className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
         <Panel>
-          <SectionTitle eyebrow="Promotion input" title="협찬할 제품 내용을 추가합니다" />
-          <Input label="Product document" placeholder="PDF 또는 제품 설명 파일 업로드 예정" />
-          <Input label="Product name" placeholder={product.title} />
-          <Input label="Product URL" placeholder="https://glowbar.example/summer-kit" />
-          <TextArea label="Objective" placeholder="여름 스킨케어 루틴 인지도와 스토리 링크 전환" />
-          <TextArea label="Deliverables" placeholder={product.deliverables.join(", ")} />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Total budget (USDC)" placeholder={String(product.budgetUsdc)} />
-            <Input label="Maximum offer (USDC)" placeholder={String(product.maxOfferUsdc)} />
-          </div>
-          <ChoiceGroup label="제외 조건" options={["무기한 사용권", "과장 효능 표현", "무검수 게시", "가격 미공개"]} defaultSelected={product.blockedTerms} />
+          <form action={submit}>
+            <SectionTitle eyebrow="Promotion input" title="협찬할 제품 내용을 추가합니다" />
+            <Input label="Product document" name="documentHint" placeholder="PDF 또는 제품 설명 파일 업로드 예정" />
+            <Input label="Product name" name="productName" placeholder={product.title} required />
+            <Input label="Product URL" name="productUrl" placeholder="https://glowbar.example/summer-kit" />
+            <Input label="Category" name="category" placeholder={product.category} required />
+            <TextArea label="Target audience" name="targetAudience" placeholder={product.targetAudience} />
+            <TextArea label="Objective" name="objective" placeholder="여름 스킨케어 루틴 인지도와 스토리 링크 전환" />
+            <TextArea label="Deliverables" name="deliverables" placeholder={product.deliverables.join(", ")} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Total budget (USDC)" name="totalBudget" placeholder={String(product.budgetUsdc)} type="number" required />
+              <Input label="Maximum offer (USDC)" name="maxOffer" placeholder={String(product.maxOfferUsdc)} type="number" required />
+            </div>
+            <ChoiceGroup name="blockedTerms" label="제외 조건" options={["무기한 사용권", "과장 효능 표현", "무검수 게시", "가격 미공개"]} defaultSelected={product.blockedTerms} />
+            {error && <FormError message={error} />}
+            <button
+              type="submit"
+              disabled={status === "saving"}
+              className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+            >
+              {status === "saving" ? "저장 중..." : "크리에이터 매칭 및 협상 시작"}
+            </button>
+          </form>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Agent handoff" title="Brand Agent가 사용할 공개 조건" />
@@ -226,9 +373,6 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
           <PrivacyNote>
             내부 hard cap, 정책 score, 승인 기준은 Creator Agent에게 공개하지 않습니다. A2A 메시지는 공개 가능한 offer/counter terms만 전달합니다.
           </PrivacyNote>
-          <div className="mt-6">
-            <PrimaryLink href="/brand/negotiate">크리에이터 매칭 및 협상 시작</PrimaryLink>
-          </div>
         </Panel>
       </div>
     </WorkspaceShell>
@@ -300,34 +444,70 @@ export function BrandSettlementScreen({ settlement, milestones }: { settlement: 
 
 export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
   const [analyzed, setAnalyzed] = useState(false);
+  const [summary, setSummary] = useState(session.profileSummary);
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const response = await new ProductApiClient().onboardCreator({
+        userId: readLocalSession().userId,
+        creatorName: String(formData.get("creatorName") ?? "Mina Studio"),
+        snsUrl: String(formData.get("snsUrl") ?? "https://instagram.com/mina.studio"),
+        primaryCategory: String(formData.get("primaryCategory") ?? "beauty"),
+      });
+      saveLocalSession({
+        userId: readLocalSession().userId,
+        role: "creator",
+        creatorId: response.creator.creatorId,
+        creatorAgentId: response.creator.creatorAgentId,
+      });
+      setSummary(response.session.profileSummary);
+      setAnalyzed(true);
+      setStatus("saved");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <WorkspaceShell role="creator" active="onboarding" title="크리에이터 온보딩" session={session}>
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel>
-          <SectionTitle eyebrow="SNS source" title="내 SNS를 분석합니다" />
-          <Input label="Instagram / TikTok / YouTube URL" placeholder="https://instagram.com/mina.studio" />
-          <button
-            type="button"
-            onClick={() => setAnalyzed(true)}
-            className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
-          >
-            Creator Agent에게 분석 맡기기
-          </button>
+          <form action={submit}>
+            <SectionTitle eyebrow="SNS source" title="내 SNS를 분석합니다" />
+            <Input label="Creator name" name="creatorName" placeholder="Mina Studio" required />
+            <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/mina.studio" required />
+            <Input label="Primary category" name="primaryCategory" placeholder="beauty" required />
+            {error && <FormError message={error} />}
+            <button
+              type="submit"
+              disabled={status === "saving"}
+              className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+            >
+              {status === "saving" ? "저장 및 분석 중..." : "Creator Agent에게 분석 맡기기"}
+            </button>
+          </form>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Public profile" title={analyzed ? "분석 결과" : "분석 대기"} />
           {analyzed ? (
             <div className="space-y-3">
-              <InfoBox label="Creator summary" value={session.profileSummary} />
+              <InfoBox label="Creator summary" value={summary} />
               <InfoBox label="Content style" value="일상 루틴, 제품 리뷰, Reels 중심" />
               <InfoBox label="Past performance" value="스토리 링크 전환과 저장률이 높은 편" />
             </div>
           ) : (
             <EmptyState text="SNS URL을 입력하면 공개 프로필 draft를 생성합니다." />
           )}
-          <div className="mt-6">
-            <PrimaryLink href="/creator/criteria">협상 기준 추가</PrimaryLink>
-          </div>
+          {analyzed && (
+            <div className="mt-6">
+              <PrimaryLink href="/creator/criteria">협상 기준 추가</PrimaryLink>
+            </div>
+          )}
         </Panel>
       </div>
     </WorkspaceShell>
@@ -335,23 +515,67 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
 }
 
 export function CreatorCriteriaScreen({ criteria }: { criteria: CreatorCriteria }) {
+  const router = useRouter();
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const session = readLocalSession();
+      const creatorId = session.creatorId || "creator-001";
+      await new ProductApiClient().updateCreatorCriteria(creatorId, {
+        minimumUsdc: numberFromForm(formData, "minimumUsdc", criteria.minimumUsdc),
+        blockedDomains: splitList(String(formData.get("blockedDomains") ?? "")),
+        preferredContent: splitList(String(formData.get("preferredContent") ?? "")),
+        usageRights: String(formData.get("usageRights") ?? criteria.usageRights),
+        notes: String(formData.get("notes") ?? criteria.notes),
+      });
+      router.push("/creator/result");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <WorkspaceShell role="creator" active="criteria" title="협상 기준 추가" session={null}>
       <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
         <Panel>
-          <SectionTitle eyebrow="Private criteria" title="Agent가 지킬 기준을 정합니다" />
-          <Input label="Minimum amount (USDC)" placeholder={String(criteria.minimumUsdc)} />
-          <ChoiceGroup
-            label="받지 않을 주제"
-            options={["담배", "도박", "고위험 금융", "의료 효능 과장", "정치 캠페인", "성인 콘텐츠", "환경오염 논란"]}
-            defaultSelected={criteria.blockedDomains}
-          />
-          <ChoiceGroup
-            label="선호 콘텐츠"
-            options={["Instagram Reels", "제품 리뷰", "스토리 링크", "UGC 컷다운", "라이브 쇼핑", "롱폼 리뷰"]}
-            defaultSelected={criteria.preferredContent}
-          />
-          <TextArea label="기타 기준" placeholder={criteria.notes} />
+          <form action={submit}>
+            <SectionTitle eyebrow="Private criteria" title="Agent가 지킬 기준을 정합니다" />
+            <Input label="Minimum amount (USDC)" name="minimumUsdc" placeholder={String(criteria.minimumUsdc)} type="number" required />
+            <ChoiceGroup
+              name="blockedDomains"
+              label="받지 않을 주제"
+              options={["담배", "도박", "고위험 금융", "의료 효능 과장", "정치 캠페인", "성인 콘텐츠", "환경오염 논란"]}
+              defaultSelected={criteria.blockedDomains}
+            />
+            <ChoiceGroup
+              name="preferredContent"
+              label="선호 콘텐츠"
+              options={["Instagram Reels", "제품 리뷰", "스토리 링크", "UGC 컷다운", "라이브 쇼핑", "롱폼 리뷰"]}
+              defaultSelected={criteria.preferredContent}
+            />
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold">Usage rights</span>
+              <select name="usageRights" className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" defaultValue={criteria.usageRights}>
+                <option value="organicOnly">organicOnly</option>
+                <option value="paidBoost30d">paidBoost30d</option>
+                <option value="fullLicense90d">fullLicense90d</option>
+              </select>
+            </label>
+            <TextArea label="기타 기준" name="notes" placeholder={criteria.notes} />
+            {error && <FormError message={error} />}
+            <button
+              type="submit"
+              disabled={status === "saving"}
+              className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+            >
+              {status === "saving" ? "저장 중..." : "Agent 기준 저장하고 결과 보기"}
+            </button>
+          </form>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Privacy boundary" title="비공개 기준은 노출하지 않습니다" />
@@ -361,9 +585,6 @@ export function CreatorCriteriaScreen({ criteria }: { criteria: CreatorCriteria 
           <div className="mt-5 space-y-3">
             <InfoBox label="Usage rights" value={criteria.usageRights} />
             <InfoBox label="Agent action" value="Offer filter, counter, reject" />
-          </div>
-          <div className="mt-6">
-            <PrimaryLink href="/creator/result">Agent 협상 결과 보기</PrimaryLink>
           </div>
         </Panel>
       </div>
@@ -482,7 +703,7 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
       <PageTitle
         eyebrow="Dev admin"
         title="운영자용 상태 확인"
-        body="현재는 mock data source를 사용합니다. 같은 인터페이스에 Firestore/API data source를 붙이면 화면 코드는 유지됩니다."
+        body="mock/API data source가 같은 인터페이스를 사용합니다. API mode에서는 Product API projection을 읽고, A2A 메시지를 브라우저에서 직접 만들지 않습니다."
       />
       <div className="grid gap-5 md:grid-cols-3">
         <InfoPanel label="Data mode" value={overview.dataMode} />
@@ -792,12 +1013,23 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
-function ChoiceGroup({ label, options, defaultSelected = [] }: { label: string; options: string[]; defaultSelected?: string[] }) {
+function ChoiceGroup({
+  label,
+  name,
+  options,
+  defaultSelected = [],
+}: {
+  label: string;
+  name?: string;
+  options: string[];
+  defaultSelected?: string[];
+}) {
   const [selected, setSelected] = useState(defaultSelected);
   const selectedText = useMemo(() => selected.join(", "), [selected]);
   return (
     <div className="mt-5">
       <div className="text-sm font-semibold">{label}</div>
+      {name && <input type="hidden" name={name} value={selectedText} />}
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => {
           const active = selected.includes(option);
@@ -845,20 +1077,43 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
-function Input({ label, placeholder, type = "text" }: { label: string; placeholder: string; type?: string }) {
+function Input({
+  label,
+  name,
+  placeholder,
+  type = "text",
+  required = false,
+}: {
+  label: string;
+  name?: string;
+  placeholder: string;
+  type?: string;
+  required?: boolean;
+}) {
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
-      <input type={type} className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
+      <input
+        type={type}
+        name={name}
+        required={required}
+        className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+        placeholder={placeholder}
+      />
     </label>
   );
 }
 
-function TextArea({ label, placeholder }: { label: string; placeholder: string }) {
+function TextArea({ label, name, placeholder }: { label: string; name?: string; placeholder: string }) {
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
-      <textarea rows={4} className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
+      <textarea
+        rows={4}
+        name={name}
+        className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+        placeholder={placeholder}
+      />
     </label>
   );
 }
@@ -871,6 +1126,14 @@ function PrivacyNote({ children }: { children: ReactNode }) {
   return (
     <div className="mt-5 rounded border border-caution/40 bg-caution/10 p-3 text-sm text-muted">
       {children}
+    </div>
+  );
+}
+
+function FormError({ message }: { message: string }) {
+  return (
+    <div className="mt-4 rounded border border-negative/40 bg-negative/10 p-3 text-sm text-negative">
+      {message}
     </div>
   );
 }
@@ -916,4 +1179,49 @@ function PrimaryLink({ href, children }: { href: string; children: ReactNode }) 
 
 function SecondaryLink({ href, children }: { href: string; children: ReactNode }) {
   return <Link href={href} className="inline-flex rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised">{children}</Link>;
+}
+
+type LocalSession = {
+  userId?: string;
+  role?: Role;
+  brandId?: string;
+  brandAgentId?: string;
+  creatorId?: string;
+  creatorAgentId?: string;
+  promotionId?: string;
+};
+
+const LOCAL_SESSION_KEY = "knot.localSession";
+
+function readLocalSession(): LocalSession {
+  if (typeof window === "undefined") return {};
+  const raw = window.localStorage.getItem(LOCAL_SESSION_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as LocalSession;
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalSession(next: LocalSession) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ ...readLocalSession(), ...next }));
+}
+
+function splitList(value: string) {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function numberFromForm(formData: FormData, key: string, fallback: number) {
+  const value = Number(formData.get(key));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function errorMessage(caught: unknown) {
+  if (caught instanceof Error) return caught.message;
+  return String(caught);
 }

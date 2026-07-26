@@ -4,6 +4,8 @@ import { SquiggleFilters } from "@/components/SquiggleFilters";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 /** Body/UI hand. Gaegu carries Latin and Hangul, so Korean copy stays in-world. */
 const hand = Gaegu({
   variable: "--font-hand",

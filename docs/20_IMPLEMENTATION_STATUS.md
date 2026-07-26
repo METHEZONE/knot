@@ -4,18 +4,18 @@ Update this file at the end of every task.
 
 ## Current milestone
 
-`M4 complete + product MVP frontend flow in progress`
+`M4 complete + product MVP frontend/API/GCP baseline in progress`
 
 ## Service status
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | Product MVP flow | 2026-07-26 | Branch `frontend/gcp-migration`; route surface is now `/`, `/login`, `/signup`, separated Brand pages (`/brand/onboarding`, `/brand/products/new`, `/brand/negotiate`, `/brand/result`, `/brand/settlement`, `/brand/me`, `/brand/settings`), separated Creator pages (`/creator/onboarding`, `/creator/criteria`, `/creator/result`, `/creator/brands/{brandId}`, `/creator/me`, `/creator/settings`) and `/dev/admin`. Negotiation UX presents A2A agent progress with animation and sanitized result output. Mock data is behind a `KnotDataSource` boundary for later Firestore/API integration. |
-| knot-api | Escrow lock/release API added | 2026-07-25 | Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release wired to the repository boundary; escrow receipts are SIMULATED pending on-chain signing |
+| frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; mock mode remains default, and `NEXT_PUBLIC_KNOT_DATA_MODE=api` switches `KnotDataSource` to Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition. Login/signup/onboarding/Promotion creation forms now submit to Product API through a Next `/api/v1/[...path]` proxy. Frontend consumes Product API projections rather than direct browser A2A calls. |
+| knot-api | Account/onboarding + escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, and Promotion creation persistence through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
-| Terraform/GCP | project switch pending | 2026-07-25 | Target project is `knot-dev-503505`; Firestore/API/IAM/Cloud Run must be re-checked/created in this project (earlier `knot-dev-gcp` verification is obsolete) |
+| Terraform/GCP | minimal Cloud Run deploy complete | 2026-07-26 | Target project `knot-dev-503505`; Firestore Native `(default)` created in `us-central1`, Artifact Registry repo `knot` created, `knot-api` and `knot-web` deployed to Cloud Run. Terraform is still not authored/applied. |
 | end-to-end demo | settlement leg proven on devnet | 2026-07-25 | on-chain escrow settlement verified; full app→chain wiring, pay.sh flow, frontend↔live API and Cloud Run remain |
 
 ## Contract versions
@@ -44,10 +44,18 @@ anchor build: passed; target/idl/knot_escrow.json generated.
 anchor deploy (devnet): deployed program Aj63…; program account rent-exempt ~2.035 SOL (recoverable via `solana program close`).
 KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py: 1 passed — real on-chain milestone settlement (agent released 0.7 USDC to the creator within cap; Reputation.total_settled updated).
 cd frontend && npm run lint: passed.
-cd frontend && npm test: passed; 6 product flow/data-source tests.
-cd frontend && npm run build: passed; 27 app routes generated including login/signup, brand product/result/settlement, creator criteria/result/brand detail, role my/settings and dev admin.
+cd frontend && npm test: passed; 7 product flow/data-source tests.
+cd frontend && npm run build: passed; 27 dynamic app routes generated including login/signup, brand product/result/settlement, creator criteria/result/brand detail, role my/settings and dev admin.
 cd frontend && npm run typecheck: passed.
 cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/brands/glow-bar, /dev/admin, /brand/negotiate, /creator/result, /brand/me, /creator/settings.
+cd backend && ../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py: 25 passed, 1 Starlette/httpx deprecation warning.
+API mode smoke with local knot-api at http://127.0.0.1:18080 and frontend at http://127.0.0.1:3002: 200 for /brand/products/new, /brand/negotiate, /creator/result, /brand/settlement and /dev/admin. Backend logs confirmed Promotion→MatchRun→Negotiation→Evidence→Escrow lock→Milestone release calls.
+cd backend && ../.venv/bin/python -m pytest tests/test_api_onboarding.py tests/test_api_promotions.py tests/test_api_escrow.py: 20 passed, 1 Starlette/httpx deprecation warning.
+cd backend && ../.venv/bin/python -m ruff check apps/api libs/repositories tests/test_api_onboarding.py: passed.
+cd frontend && npm run typecheck / npm run lint / npm test / npm run build: passed after account/onboarding API integration; build includes dynamic `/api/v1/[...path]` proxy.
+GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
+Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
+Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.
 ```
 
 ## Decisions made during implementation
@@ -101,19 +109,55 @@ cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /log
   then continues into role onboarding/profile creation.
 - Added Creator result list and brand detail page with agreed-deal milestones
   and settlement status. Non-agreed deals show sanitized outcome only.
+- Added API mode for `frontend/src/product/dataSource.ts`. It reads the Product
+  API from `KNOT_API_BASE_URL`/`NEXT_PUBLIC_KNOT_API_BASE_URL`, composes the
+  implemented backend endpoints, maps backend Promotion/Agreement/Escrow data
+  into the current role UX, and preserves mock mode as the default.
+- Verified the A2A boundary for frontend integration: browser code does not
+  construct official A2A Message/Task/Artifact payloads; it reads Product API
+  projections created by backend orchestration. Creator A2A endpoints remain
+  service-side.
+- Added Product API account/onboarding persistence for the current site build:
+  `POST /users:bootstrap`, `POST /brands:onboard`,
+  `POST /creators:onboard`, and `POST /creators/{creatorId}/criteria`.
+  These write `users`, `brands`, `creatorProfiles`, `agents`, and
+  `agentPolicies` through the repository boundary and can run against memory or
+  Firestore. No password, token, private key, seed phrase, or payment authority
+  is stored.
+- Added a Next.js `/api/v1/[...path]` proxy so browser-side forms can call the
+  Product API without exposing server-only backend base URL config. Web3
+  payment execution is intentionally excluded from this pass.
+- Added minimal GCP deployment assets and performed a direct Cloud Run deploy:
+  `.gcloudignore`, `infra/cloudbuild/api.yaml`, and `infra/cloudbuild/web.yaml`.
+  Deployed services are public for the current demo baseline; production auth
+  tightening remains pending.
 
 ## Known blockers / open items
 
 - Escrow API receipts are SIMULATED — real Solana signing, RPC submission, Secret Manager access, and transaction persistence still to wire to the deployed program.
-- GCP project switch to `knot-dev-503505` is not verified yet; rerun gcloud auth, ADC quota project, API enablement, Firestore Native check/create, IAM/service accounts and seed/smoke.
-- Terraform, Artifact Registry, Cloud Run services, Cloud Build and runtime service accounts are not configured yet in `knot-dev-503505`.
-- pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow; sandbox resource not selected.
-- Frontend product MVP runs on mock data behind `KnotDataSource`; live API wiring, real upload analysis, A2A task streaming, real negotiation execution, real escrow settlement display and Cloud Run deploy remain.
+- Terraform is still not implemented/applied; current GCP deploy was direct
+  `gcloud` setup for the demo baseline.
+- Dedicated least-privilege runtime service accounts are not configured yet;
+  current Cloud Run services use the default runtime identity.
+- pay.sh flow-1 (agent-paid API verification) is not yet wired into the Brand Agent matching flow; sandbox resource not selected. This is still a hackathon proof gap because docs require a visible x402/pay.sh receipt beat.
+- Frontend product MVP has API-backed local-demo login/signup/onboarding and
+  Promotion creation. Firebase Auth and production session enforcement are
+  still pending.
+- API mode settlement displays Product API receipts, but those receipts are still `SIMULATED` until real web3 signing is wired.
 - `knot.escrow.client` (anchorpy) is broken against anchor 1.x IDL until anchorpy supports the new format or the client is ported to solders.
-- **Cloud Run frontend deploy is still outstanding and is a hard demo gate** (17 §2 requires a live Cloud Run URL; AGENTS.md requires GCP for all off-chain runtime). Blocked locally because `gcloud` needs re-authentication and cannot prompt in a non-interactive shell — run `gcloud auth login` in a real terminal, then deploy `frontend/` per docs/14.
-- Onboarding calls five API routes that do not exist server-side yet (PRD v2 §12 deltas, 예원's lane). The frontend runs entirely on fixtures behind the exact shapes in `src/lib/api/types.ts`; `POST /brands:ingest` is an addition beyond the PRD §12 list and needs adding to docs/07.
-- Wallet issuance/custody interface is still unresolved (architecture.md §4). Onboarding displays a fixture devnet pubkey and sends `walletAddress: null`; PRD v2 §14 marks this blocked if unresolved by 7/28.
+- Firebase Auth/session enforcement is still pending. Current login/signup is
+  `local-demo` account bootstrap through Product API and stores only account
+  context, not credentials.
+- Real Brand PDF/file analysis and live Creator SNS ingestion are still
+  pending. Current onboarding persists user-entered profile data and generated
+  summaries.
+- Wallet issuance/custody interface is still unresolved. Frontend displays only
+  public wallet references and never accepts private keys or seed phrases.
+- Frontend dependency audit remediation is pending; Cloud Build surfaced npm
+  high-severity findings that still need review.
 
 ## Next task
 
-Bootstrap Firestore/IAM/Cloud Run in `knot-dev-503505`, then wire the escrow API's SIMULATED receipts to the deployed devnet program (real signing — decide Python-direct vs TS gateway) and the frontend to the live API, then connect pay.sh flow-1.
+Wire the escrow API's SIMULATED receipts to the deployed devnet program through
+the web3 gateway, connect pay.sh flow-1, and replace local-demo auth with
+Firebase Auth/session enforcement.

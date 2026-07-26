@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
-import { knotDataSource } from "../src/product/dataSource";
+import { knotDataSource, resolveDataMode } from "../src/product/dataSource";
 
 test("product route surface exposes separated MVP role pages", () => {
   assert.deepEqual(appRoutes, [
@@ -49,6 +49,20 @@ test("account routes are kept out of role workspace menus", () => {
     "/creator/me",
     "/creator/settings",
   ]);
+});
+
+test("data source defaults to mock mode unless API mode is requested", () => {
+  const previous = process.env.NEXT_PUBLIC_KNOT_DATA_MODE;
+  delete process.env.NEXT_PUBLIC_KNOT_DATA_MODE;
+  delete process.env.KNOT_DATA_MODE;
+  assert.equal(resolveDataMode(), "mock");
+  process.env.NEXT_PUBLIC_KNOT_DATA_MODE = "api";
+  assert.equal(resolveDataMode(), "api");
+  if (previous === undefined) {
+    delete process.env.NEXT_PUBLIC_KNOT_DATA_MODE;
+  } else {
+    process.env.NEXT_PUBLIC_KNOT_DATA_MODE = previous;
+  }
 });
 
 test("role route helpers point to current MVP entry points", () => {

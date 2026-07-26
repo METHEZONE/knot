@@ -25,6 +25,7 @@
 | `21_REFERENCES.md` | Official and internal source list | Verification and research |
 | `22_FIRESTORE_RUNBOOK.md` | Firestore setup, seed, indexes, invariants and verification | DB/API persistence work |
 | `23_EXPERIENCE_PRD_v2.md` | Experience layer: onboarding, agent hatching, expedition map, replay sharing, dual dashboards | Frontend and onboarding work |
+| `24_PRODUCT_FLOW_AND_FEATURES.md` | Current implemented product flow, feature inventory, deployment baseline and remaining gaps | Product demo handoff and status review |
 
 ## Minimal context set per task
 

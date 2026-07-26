@@ -201,3 +201,118 @@ handoff notes.
   and each workspace page carries the current page title at the top. This
   better reflects that one Brand can manage many Promotions and one Creator can
   receive many agent-negotiated offers.
+
+---
+
+## Frontend-Backend API Integration Plan
+
+### Goal
+
+Connect the product MVP frontend to the existing `knot-api` without removing
+mock mode. The frontend must keep the same page components in mock and API mode,
+consume Product API projections instead of constructing A2A messages directly,
+and make the hackathon proof points visible: Promotion, matching, A2A
+negotiation, Agreement Artifact/termsHash, evidence verification and escrow
+receipt state.
+
+### Scope
+
+May change `frontend/src/product`, frontend route call sites if needed,
+frontend docs/tests, and status docs. Backend code changes are allowed only when
+the documented API contract and implemented routes clearly disagree. Web3
+program/gateway code is out of scope for this integration pass.
+
+### Current state
+
+Docs and backend agree on the core v1 transaction backbone:
+Promotion -> MatchRun -> Negotiation -> Agreement -> Evidence -> Escrow ->
+Settlement. Backend has concrete routes for those resources under `/api/v1`.
+The Creator A2A service exposes AgentCard, `message:send`, `message:stream`,
+tasks, subscribe and cancel. Frontend currently uses `KnotDataSource` with
+deterministic mock state only.
+
+Known contract gaps from the docs audit:
+
+- The MVP document pack includes broader onboarding/auth/deal routes that are
+  not implemented in backend yet. Current product MVP pages must remain mock for
+  those onboarding/account surfaces.
+- Product API does not expose a single deal aggregate route, so frontend API
+  mode must compose Promotion, MatchRun, Negotiation, Agreement, Evidence,
+  Escrow and Timeline responses.
+- Product API currently persists A2A state but starts negotiation synchronously
+  through the API orchestration route. Frontend should present it as agent work
+  and avoid direct browser-to-A2A calls.
+- Escrow receipts from Product API are `SIMULATED` until real web3 signing is
+  wired. UI must not fabricate explorer links.
+- pay.sh/x402 is documented as a required visible beat, but the Product API
+  does not yet emit a paid API receipt event in the matching flow.
+- 2026-07-26 follow-up scope: user asked to make login/signup/onboarding behave
+  like a real site while excluding web3 payment. Product API now owns account
+  bootstrap, brand onboarding, creator onboarding, creator criteria, and
+  Promotion creation writes; frontend browser requests go through the Next
+  `/api/v1/[...path]` proxy.
+
+### Milestones
+
+- [x] M1 — typed Product API client and `mock|api` data-source selector
+- [x] M2 — API-mode mapping for Promotion, matching/A2A negotiation, Agreement
+      terms, Creator deal list and settlement state
+- [x] M3 — docs/status update that records API coverage, A2A compliance and
+      remaining hackathon gaps
+- [x] M4 — frontend checks and backend route smoke tests
+- [x] M5 — API-backed login/signup/onboarding/Promotion creation without web3
+      payment execution
+- [x] M6 — minimal GCP setup and Cloud Run deployment for `knot-api` and
+      `knot-web` against Firestore Native in `knot-dev-503505`
+
+### Contracts
+
+- `NEXT_PUBLIC_KNOT_DATA_MODE=mock|api` selects data mode; default remains
+  `mock`.
+- `KNOT_API_BASE_URL` or `NEXT_PUBLIC_KNOT_API_BASE_URL` points Next server code
+  at `knot-api`; default local URL is `http://127.0.0.1:8080`.
+- Browser pages never write Firestore directly and never call private web3
+  services.
+- Frontend consumes `/api/v1` Product API projections. Direct A2A calls remain
+  backend/service responsibility.
+
+### Validation
+
+Run from `frontend/`:
+
+```text
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+Run backend route tests from `backend/` if backend files change, or at minimum:
+
+```text
+python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py
+```
+
+### Decisions and surprises
+
+- 2026-07-26: Started branch `integration/frontend-backend-api` from
+  `origin/main`.
+- 2026-07-26: Docs audit result: canonical v1 docs and backend implementation
+  align on the core Promotion transaction backbone, but the MVP pack's broader
+  auth/onboarding/deal aggregate routes are ahead of backend. Frontend API mode
+  therefore composes implemented Product API routes and keeps onboarding/account
+  surfaces on mock data.
+- 2026-07-26: API mode smoke used local `knot-api` on port 18080 and confirmed
+  `/brand/products/new`, `/brand/negotiate`, `/creator/result`,
+  `/brand/settlement`, and `/dev/admin` render against backend data.
+- 2026-07-26: Settlement page intentionally performs the current backend demo
+  sequence in API mode: submit evidence, verify evidence, lock escrow, release
+  the `content` milestone. Receipts remain `SIMULATED` and UI must not show
+  explorer links until real signatures exist.
+- 2026-07-26: Created GCP Firestore Native `(default)` in `us-central1`,
+  Artifact Registry repo `knot`, and direct Cloud Build configs. Deployed:
+  `knot-api` at `https://knot-api-260001601654.us-central1.run.app` and
+  `knot-web` at `https://knot-web-260001601654.us-central1.run.app`. Verified
+  real Firestore seed/smoke, backend `/readyz` and `/api/v1/promotions`,
+  frontend `/`, `/brand/negotiate`, `/dev/admin`, and frontend proxy
+  `/api/v1/promotions`.

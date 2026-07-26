@@ -14,6 +14,56 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Data Mode
+
+Mock mode remains the default:
+
+```bash
+NEXT_PUBLIC_KNOT_DATA_MODE=mock npm run dev
+```
+
+API mode keeps the same page components but reads the Product API from the Next
+server:
+
+```bash
+NEXT_PUBLIC_KNOT_DATA_MODE=api \
+KNOT_API_BASE_URL=http://127.0.0.1:8080 \
+npm run dev
+```
+
+API mode composes the currently implemented backend routes:
+
+```text
+GET  /api/v1/promotions
+POST /api/v1/promotions/{promotionId}/matches:run
+GET  /api/v1/match-runs/{matchRunId}/candidates
+POST /api/v1/match-runs/{matchRunId}:start-negotiation
+GET  /api/v1/promotions/{promotionId}/timeline
+POST /api/v1/agreements/{agreementId}/evidence
+POST /api/v1/evidence/{evidenceId}:verify
+POST /api/v1/agreements/{agreementId}/escrow:lock
+POST /api/v1/escrows/{escrowId}/milestones/{milestoneId}:release
+```
+
+Client-side login, signup, onboarding and Promotion creation forms also call the
+Product API. Browser requests go through the Next.js proxy route
+`/api/v1/[...path]`, so `KNOT_API_BASE_URL` can remain server-side.
+
+Additional form-backed routes:
+
+```text
+POST /api/v1/users:bootstrap
+POST /api/v1/brands:onboard
+POST /api/v1/creators:onboard
+POST /api/v1/creators/{creatorId}/criteria
+POST /api/v1/promotions
+```
+
+The browser does not construct A2A protocol messages. It consumes Product API
+projections of matching, negotiation, Agreement Artifact and settlement state.
+Escrow receipts remain visibly simulated until the backend returns real devnet
+signatures.
+
 Core product routes:
 
 ```text

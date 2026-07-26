@@ -14,6 +14,64 @@ from libs.domain.models import (
 )
 
 
+class UserBootstrapRequest(DomainModel):
+    email: str
+    display_name: str = Field(alias="displayName")
+    role: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        if "@" not in value:
+            raise ValueError("email must contain @")
+        return value.strip().lower()
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if value not in {"brand", "creator"}:
+            raise ValueError("role must be brand or creator")
+        return value
+
+
+class BrandOnboardingRequest(DomainModel):
+    user_id: str | None = Field(default=None, alias="userId")
+    brand_name: str = Field(alias="brandName")
+    website_url: str = Field(alias="websiteUrl")
+    category: str
+    target_audience: list[str] = Field(default_factory=list, alias="targetAudience")
+    restricted_claims: list[str] = Field(default_factory=list, alias="restrictedClaims")
+
+    @field_validator("website_url")
+    @classmethod
+    def validate_website_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("websiteUrl must use http or https")
+        return value
+
+
+class CreatorOnboardingRequest(DomainModel):
+    user_id: str | None = Field(default=None, alias="userId")
+    creator_name: str = Field(alias="creatorName")
+    sns_url: str = Field(alias="snsUrl")
+    primary_category: str = Field(default="lifestyle", alias="primaryCategory")
+
+    @field_validator("sns_url")
+    @classmethod
+    def validate_sns_url(cls, value: str) -> str:
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("snsUrl must use http or https")
+        return value
+
+
+class CreatorCriteriaRequest(DomainModel):
+    minimum_usdc: int = Field(alias="minimumUsdc", ge=1)
+    blocked_domains: list[str] = Field(default_factory=list, alias="blockedDomains")
+    preferred_content: list[str] = Field(default_factory=list, alias="preferredContent")
+    usage_rights: UsageRights = Field(default=UsageRights.PAID_BOOST_30D, alias="usageRights")
+    notes: str = ""
+
+
 class PromotionCreateRequest(DomainModel):
     promotion_id: str | None = Field(default=None, alias="promotionId")
     brand_id: str = Field(default="brand-001", alias="brandId")

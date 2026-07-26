@@ -26,6 +26,7 @@ def subcollection_document_path(
 
 @dataclass(frozen=True)
 class FirestoreCollection:
+    users: str = "users"
     brands: str = "brands"
     creator_profiles: str = "creatorProfiles"
     agents: str = "agents"
@@ -55,6 +56,10 @@ COLLECTIONS = FirestoreCollection()
 
 
 class FirestorePaths:
+    @staticmethod
+    def user(user_id: str) -> str:
+        return document_path(COLLECTIONS.users, user_id)
+
     @staticmethod
     def brand(brand_id: str) -> str:
         return document_path(COLLECTIONS.brands, brand_id)

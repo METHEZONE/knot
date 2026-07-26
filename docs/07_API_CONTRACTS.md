@@ -66,6 +66,28 @@ Promotion responses are wrapped as:
 }
 ```
 
+## 3.1 Account and onboarding endpoints
+
+These endpoints are additive for the product MVP site flow. Firebase Auth is
+still pending; the current local build uses `local-demo` account documents and
+does not store passwords.
+
+```text
+POST   /users:bootstrap
+GET    /users/{userId}
+POST   /brands:onboard
+POST   /creators:onboard
+POST   /creators/{creatorId}/criteria
+```
+
+`POST /users:bootstrap` creates or updates `users/{userId}` by email and role.
+`POST /brands:onboard` writes a Brand document and Brand Agent document, then
+attaches `brandId`/`brandAgentId` to the user when `userId` is supplied.
+`POST /creators:onboard` writes a Creator Profile, Creator Agent, and initial
+Creator Agent Policy. `POST /creators/{creatorId}/criteria` updates the private
+Creator policy fields used by the Creator Agent. The browser calls these routes
+through the Product API; it still does not write Firestore directly.
+
 ## 4. Matching endpoints
 
 ```text

@@ -47,6 +47,7 @@ Canonical collection paths are defined in `docs/06_DOMAIN_DATA_MODEL.md` and
 implemented by `FirestorePaths`.
 
 ```text
+users/{userId}
 brands/{brandId}
 creatorProfiles/{creatorId}
 agents/{agentId}
@@ -71,6 +72,11 @@ transactionReceipts/{receiptId}
 auditEvents/{eventId}
 idempotencyRecords/{key}
 ```
+
+The product MVP frontend now writes account and onboarding state through
+Product API routes into `users`, `brands`, `creatorProfiles`, `agents`, and
+`agentPolicies`. The browser must continue to use API routes only; direct
+Firestore client writes are not allowed for business data.
 
 All JSON and Firestore field names use `camelCase`. Python code may use snake
 case internally only through Pydantic aliases.

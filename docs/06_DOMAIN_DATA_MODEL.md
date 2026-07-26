@@ -50,6 +50,7 @@ or payment decisions must remain replayable.
 ## 2. Collections
 
 ```text
+users/{userId}
 brands/{brandId}
 creatorProfiles/{creatorId}
 agents/{agentId}
@@ -74,6 +75,12 @@ transactionReceipts/{receiptId}
 auditEvents/{eventId}
 idempotencyRecords/{key}
 ```
+
+`users/{userId}` is an application account context document for the current
+product build. It stores local-demo/Firebase identity projection fields such as
+`email`, `displayName`, `roles`, `activeRole`, and role context references
+(`brandId`, `brandAgentId`, `creatorId`, `creatorAgentId`). It does not store
+passwords, tokens, private keys, seed phrases, or payment authority.
 
 ## 3. Promotion
 
