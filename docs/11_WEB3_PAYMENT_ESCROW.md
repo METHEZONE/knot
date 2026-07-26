@@ -101,13 +101,13 @@ Current gateway modes:
   `@solana/spl-token` to submit the deployed Anchor program's
   `initialize_campaign`, `submit_milestone`, and `approve_and_release`
   instructions. This mode requires `SOLANA_RPC_URL` and a devnet-only brand
-  signer through `KNOT_BRAND_KEYPAIR_PATH`, `ANCHOR_WALLET`, or a Secret
-  Manager-mounted `KNOT_BRAND_KEYPAIR_JSON` value.
+  signer plus demo creator/agent signers through `KNOT_*_KEYPAIR_PATH`,
+  `ANCHOR_WALLET`, or Secret Manager-mounted `KNOT_*_KEYPAIR_JSON` values.
 
-The MVP gateway stores live lock context in-process so lock and release must run
-against the same gateway instance for the recorded demo. Before a Cloud Run demo,
-replace this with Firestore/Secret Manager-backed context persistence or keep
-minimum instances at one during the run.
+The gateway returns non-secret `liveContext` in the lock receipt. Product API
+stores it under `transactionReceipts.gatewayReceipt.liveContext` and sends it
+back on release, so Cloud Run does not rely on in-process memory for the
+lock→release transition. Keypair material is never returned in receipts.
 
 ## 8. pay.sh / x402
 

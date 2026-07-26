@@ -225,6 +225,18 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                 "idempotencyKey": idempotency_key,
                 "signature": None,
                 "explorerUrl": None,
+                "liveContext": {
+                    "escrowId": payload["escrowId"],
+                    "campaignId": "123",
+                    "campaign": "campaign-pda",
+                    "creator": "creator-wallet",
+                    "creatorToken": "creator-token",
+                    "agentAuthority": "agent-wallet",
+                    "treasuryToken": "treasury-token",
+                    "mint": payload["mint"],
+                    "milestoneIds": payload["milestoneIds"],
+                    "milestoneAmountsBaseUnits": payload["milestoneAmountsBaseUnits"],
+                },
             }
 
         def release_milestone(
@@ -238,6 +250,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
             FakeGatewayClient.release_payload = {"idempotencyKey": idempotency_key, **payload}
             assert payload["escrowId"] == escrow_id
             assert payload["milestoneId"] == milestone_id
+            assert payload["lockContext"]["campaign"] == "campaign-pda"
             return {
                 "status": "SIMULATED",
                 "agreementId": payload["agreementId"],

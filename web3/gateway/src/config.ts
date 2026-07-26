@@ -10,6 +10,10 @@ export type GatewayConfig = {
   signingMode: "simulated" | "devnet";
   brandKeypairPath?: string;
   brandKeypairJson?: string;
+  creatorKeypairPath?: string;
+  creatorKeypairJson?: string;
+  agentKeypairPath?: string;
+  agentKeypairJson?: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -26,6 +30,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj",
     signingMode: env.KNOT_WEB3_SIGNING_MODE === "devnet" ? "devnet" : "simulated",
     brandKeypairPath: env.KNOT_BRAND_KEYPAIR_PATH || env.ANCHOR_WALLET,
-    brandKeypairJson: env.KNOT_BRAND_KEYPAIR_JSON
+    brandKeypairJson: env.KNOT_BRAND_KEYPAIR_JSON,
+    creatorKeypairPath: env.KNOT_CREATOR_KEYPAIR_PATH,
+    creatorKeypairJson: env.KNOT_CREATOR_KEYPAIR_JSON,
+    agentKeypairPath: env.KNOT_AGENT_KEYPAIR_PATH,
+    agentKeypairJson: env.KNOT_AGENT_KEYPAIR_JSON
   };
 }

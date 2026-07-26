@@ -116,10 +116,13 @@ sandbox resources call the `pay` CLI and persist receiptId/correlationId/status
 without affecting candidate ranking, terms, escrow lock, or release. Verification:
 backend targeted pytest now passes with 35 tests; backend Ruff and mypy passed.
 web3 signing mode pass: gateway now has `KNOT_WEB3_SIGNING_MODE=devnet`, reads
-a devnet-only brand signer from keypair file/env/Secret Manager mount, submits
-Anchor `initialize_campaign`, then `submit_milestone` + `approve_and_release`,
-and returns devnet explorer URLs. Product API lock payload now sends milestone
-ids/amounts to keep Firestore and on-chain split aligned. Verification:
+a devnet-only brand signer plus demo creator/agent signers from keypair
+file/env/Secret Manager mount, submits Anchor `initialize_campaign`, then
+`submit_milestone` + `approve_and_release`, and returns devnet explorer URLs.
+Product API lock payload now sends milestone ids/amounts to keep Firestore and
+on-chain split aligned. Lock receipts include non-secret `liveContext`, and
+Product API sends that context back on release so Cloud Run does not depend on
+in-process gateway memory. Verification:
 `cd web3/gateway && npm run build / npm test / npm run lint` passed.
 `cd backend && ../.venv/bin/python -m pytest tests` passed with 70 passed and
 5 skipped. Frontend typecheck/lint/unit tests/build passed. Live
@@ -221,9 +224,8 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
 
 ## Known blockers / open items
 
-- Gateway devnet signing code exists, but live smoke/deployment still needs a
-  devnet signer mounted through Secret Manager and persistent lock context
-  rather than the current in-process MVP context map.
+- Gateway devnet signing code exists, but live smoke/deployment still needs
+  brand/creator/agent devnet signers mounted through Secret Manager.
 - web3 gateway npm audit reports transitive high advisories in Solana JS/Eslint
   dependency trees; resolving them needs dependency-major evaluation rather than
   automatic `npm audit fix --force`.

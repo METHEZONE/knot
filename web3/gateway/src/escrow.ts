@@ -6,6 +6,21 @@ import {
   submitMilestoneRelease
 } from "./solana.js";
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const liveLockContextSchema = z.object({
+  escrowId: z.string().min(1),
+  campaignId: z.string().regex(/^[0-9]+$/),
+  campaign: z.string().min(1),
+  creator: z.string().min(1),
+  creatorToken: z.string().min(1),
+  agentAuthority: z.string().min(1),
+  treasuryToken: z.string().min(1),
+  mint: z.string().min(1),
+  milestoneIds: z.array(z.string().min(1)).min(1).max(8),
+  milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
+});
+
 export const lockRequestSchema = z.object({
   agreementId: z.string().min(1),
   escrowId: z.string().min(1),
@@ -29,7 +44,8 @@ export const releaseRequestSchema = z.object({
   mint: z.string().min(1),
   programId: z.string().min(1),
   network: z.literal("solanaDevnet"),
-  creatorDestination: z.string().min(1)
+  creatorDestination: z.string().min(1),
+  lockContext: liveLockContextSchema.optional()
 });
 
 export type GatewayReceipt = {
@@ -49,6 +65,7 @@ export type GatewayReceipt = {
   slot?: number | null;
   campaignId?: string;
   campaignPda?: string;
+  liveContext?: Record<string, JsonValue>;
   };
 
 export type LockResult =
@@ -151,7 +168,8 @@ export class EscrowLockService {
           explorerUrl: live.receipt.explorerUrl,
           slot: live.receipt.slot,
           campaignId: live.context.campaignId.toString(),
-          campaignPda: live.context.campaign
+          campaignPda: live.context.campaign,
+          liveContext: serializeLiveContext(live.context)
         };
         this.receipts.set(idempotencyKey, receipt);
         this.liveLocks.set(result.data.escrowId, live.context);
@@ -250,7 +268,9 @@ export class EscrowLockService {
     }
 
     if (config.signingMode === "devnet") {
-      const context = this.liveLocks.get(escrowId);
+      const context = this.liveLocks.get(escrowId) ?? (
+        result.data.lockContext ? parseLiveContext(result.data.lockContext) : undefined
+      );
       if (!context) {
         return {
           statusCode: 409,
@@ -324,4 +344,34 @@ export class EscrowLockService {
       }
     };
   }
+}
+
+function serializeLiveContext(context: LiveLockContext): Record<string, JsonValue> {
+  return {
+    escrowId: context.escrowId,
+    campaignId: context.campaignId.toString(),
+    campaign: context.campaign,
+    creator: context.creator,
+    creatorToken: context.creatorToken,
+    agentAuthority: context.agentAuthority,
+    treasuryToken: context.treasuryToken,
+    mint: context.mint,
+    milestoneIds: context.milestoneIds,
+    milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
+  };
+}
+
+function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveLockContext {
+  return {
+    escrowId: context.escrowId,
+    campaignId: BigInt(context.campaignId),
+    campaign: context.campaign,
+    creator: context.creator,
+    creatorToken: context.creatorToken,
+    agentAuthority: context.agentAuthority,
+    treasuryToken: context.treasuryToken,
+    mint: context.mint,
+    milestoneIds: context.milestoneIds,
+    milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
+  };
 }

@@ -1115,6 +1115,7 @@ def build_api_router(
         new_released = released + amount
         gateway_receipt = _release_with_web3_gateway(
             settings=settings,
+            repository=repository,
             idempotency_key=key,
             escrow=escrow,
             agreement_id=agreement_id,
@@ -1759,6 +1760,7 @@ def _lock_with_web3_gateway(
 def _release_with_web3_gateway(
     *,
     settings: Settings,
+    repository: KnotRepository,
     idempotency_key: str,
     escrow: dict[str, object],
     agreement_id: str,
@@ -1767,22 +1769,26 @@ def _release_with_web3_gateway(
 ) -> dict[str, object] | None:
     if settings.web3_mode != "gateway":
         return None
+    lock_context = _lock_context_from_receipt(repository, escrow)
     try:
+        payload: dict[str, object] = {
+            "agreementId": agreement_id,
+            "escrowId": escrow["escrowId"],
+            "milestoneId": milestone_id,
+            "termsHash": escrow["termsHash"],
+            "expectedAmountBaseUnits": str(amount),
+            "mint": settings.usdc_mint,
+            "programId": settings.escrow_program_id,
+            "network": settings.escrow_network,
+            "creatorDestination": escrow["creatorAgentId"],
+        }
+        if lock_context:
+            payload["lockContext"] = lock_context
         return Web3GatewayClient(settings.web3_gateway_base_url).release_milestone(
             escrow_id=_require_document_str(escrow, "escrowId"),
             milestone_id=milestone_id,
             idempotency_key=idempotency_key,
-            payload={
-                "agreementId": agreement_id,
-                "escrowId": escrow["escrowId"],
-                "milestoneId": milestone_id,
-                "termsHash": escrow["termsHash"],
-                "expectedAmountBaseUnits": str(amount),
-                "mint": settings.usdc_mint,
-                "programId": settings.escrow_program_id,
-                "network": settings.escrow_network,
-                "creatorDestination": escrow["creatorAgentId"],
-            },
+            payload=payload,
         )
     except Web3GatewayError as exc:
         raise _problem(
@@ -1790,6 +1796,22 @@ def _release_with_web3_gateway(
             "WEB3_GATEWAY_UNAVAILABLE",
             f"Web3 gateway release failed: {exc}",
         ) from exc
+
+
+def _lock_context_from_receipt(
+    repository: KnotRepository,
+    escrow: dict[str, object],
+) -> dict[str, object] | None:
+    receipt = _receipt_by_id(repository, escrow.get("lockReceiptId"))
+    if not receipt:
+        return None
+    gateway_receipt = receipt.get("gatewayReceipt")
+    if not isinstance(gateway_receipt, dict):
+        return None
+    lock_context = gateway_receipt.get("liveContext")
+    if not isinstance(lock_context, dict):
+        return None
+    return cast(dict[str, object], lock_context)
 
 
 def _simulated_receipt(

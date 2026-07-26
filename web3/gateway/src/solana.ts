@@ -43,8 +43,6 @@ export type LiveLockContext = {
   mint: string;
   milestoneIds: string[];
   milestoneAmountsBaseUnits: string[];
-  creatorKeypair: number[];
-  agentKeypair: number[];
 };
 
 export type LiveTransactionReceipt = {
@@ -61,9 +59,9 @@ export async function submitEscrowLock(
   input: LockInput
 ): Promise<{ receipt: LiveTransactionReceipt; context: LiveLockContext }> {
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
-  const brand = loadBrandKeypair(config);
-  const creator = Keypair.generate();
-  const agent = Keypair.generate();
+  const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
+  const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
+  const agent = loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
   const programId = new PublicKey(config.allowedProgramId);
   const configPda = pda(["config"], programId);
   const allowedMint = new PublicKey(config.allowedMint);
@@ -140,9 +138,7 @@ export async function submitEscrowLock(
       treasuryToken: treasuryToken.toBase58(),
       mint: mint.toBase58(),
       milestoneIds: input.milestoneIds,
-      milestoneAmountsBaseUnits: input.milestoneAmountsBaseUnits,
-      creatorKeypair: Array.from(creator.secretKey),
-      agentKeypair: Array.from(agent.secretKey)
+      milestoneAmountsBaseUnits: input.milestoneAmountsBaseUnits
     }
   };
 }
@@ -157,9 +153,9 @@ export async function submitMilestoneRelease(
     throw new Error(`Unknown milestoneId for live escrow: ${input.milestoneId}`);
   }
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
-  const brand = loadBrandKeypair(config);
-  const creator = Keypair.fromSecretKey(Uint8Array.from(context.creatorKeypair));
-  const agent = Keypair.fromSecretKey(Uint8Array.from(context.agentKeypair));
+  const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
+  const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
+  const agent = loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
   const programId = new PublicKey(config.allowedProgramId);
   const campaign = new PublicKey(context.campaign);
   await sendIx(
@@ -200,8 +196,11 @@ export async function submitMilestoneRelease(
   return liveReceipt(config, signature);
 }
 
-function loadBrandKeypair(config: GatewayConfig): Keypair {
-  const raw = config.brandKeypairJson ?? readFileSync(config.brandKeypairPath ?? "", "utf8");
+function loadKeypair(jsonValue: string | undefined, filePath: string | undefined, label: string): Keypair {
+  if (!jsonValue && !filePath) {
+    throw new Error(`${label} keypair is not configured`);
+  }
+  const raw = jsonValue ?? readFileSync(filePath ?? "", "utf8");
   const secret = JSON.parse(raw) as number[];
   return Keypair.fromSecretKey(Uint8Array.from(secret));
 }

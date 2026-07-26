@@ -202,7 +202,7 @@ SNS/PDF analysis.
   `PAYSH_RESOURCE_ID` is configured; unconfigured environments record
   `SKIPPED`/`DISABLED` events.
 - Live devnet smoke/deployment of private web3 gateway signing with Secret
-  Manager-backed demo signer and persistent lock context.
+  Manager-backed brand/creator/agent demo signers.
 - Firebase Auth/session claims contract for Brand/Creator resource ownership.
 
 ### Milestones
@@ -213,7 +213,7 @@ SNS/PDF analysis.
       Task/Message/Artifact state.
 - [ ] M3 — Product API calls private web3 gateway for lock/release; gateway has
       devnet signing mode, but live smoke/deployment still needs a configured
-      demo signer.
+      demo signer set.
 - [x] M4 — pay.sh/x402 verification receipt/status appears in Promotion
       timeline through `API_PAYMENT` PromotionEvents.
 - [x] M5 — optional Vertex AI Gemini provider boundary for non-authoritative
