@@ -1350,7 +1350,10 @@ def _send_creator_a2a_task(
     context: CreatorNegotiationContext,
 ) -> A2ATask:
     if settings.creator_a2a_mode == "http":
-        return CreatorA2AClient(settings.creator_agent_base_url).send_message(
+        return CreatorA2AClient(
+            settings.creator_agent_base_url,
+            timeout_seconds=settings.creator_a2a_timeout_seconds,
+        ).send_message(
             tenant=creator_agent_id,
             message=message,
         )

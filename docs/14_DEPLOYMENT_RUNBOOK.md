@@ -112,6 +112,10 @@ This public setup is for hackathon demo iteration only. The target production
 topology still requires private IAM/OIDC invocation for `knot-creator-agent`
 and `knot-web3`.
 
+`knot-api` should set `CREATOR_A2A_TIMEOUT_SECONDS=60` on Cloud Run because a
+cold Creator Agent revision plus Vertex Gemini rationale generation can exceed
+the local 10-second HTTP client default.
+
 To switch the deployed gateway from simulated receipts to real devnet
 transactions, mount Secret Manager values for the brand, creator and agent
 devnet signer keypairs and set:

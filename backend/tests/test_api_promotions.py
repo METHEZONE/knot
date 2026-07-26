@@ -281,6 +281,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
 
     class FakeHttpClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
+            captured["timeout"] = kwargs.get("timeout")
             return None
 
         def __enter__(self) -> "FakeHttpClient":
@@ -361,6 +362,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         Settings(
             creator_a2a_mode="http",
             creator_agent_base_url="http://creator-agent.test/a2a/v1",
+            creator_a2a_timeout_seconds=60,
         )
     )
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
@@ -376,6 +378,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         "A2A-Version": "1.0",
         "Content-Type": "application/a2a+json",
     }
+    assert captured["timeout"] == 60
     assert captured["request"]["tenant"] == "creator-agent-003"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
     assert body["agreement"]["agreementId"] == "agreement-http-001"
