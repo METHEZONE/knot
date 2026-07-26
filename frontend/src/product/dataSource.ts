@@ -161,7 +161,7 @@ class ApiKnotDataSource implements KnotDataSource {
       { id: "api-db", type: "DB", label: "Product API repository boundary active", status: "ok" },
       { id: "api-a2a", type: "A2A", label: "Frontend consumes Product API A2A projection, not direct A2A messages", status: "ok" },
       { id: "api-policy", type: "POLICY", label: "Agreement, evidence and escrow checks are deterministic", status: "ok" },
-      { id: "api-web3", type: "WEB3", label: "Escrow receipts are API-backed but still SIMULATED", status: "warning" },
+      { id: "api-web3", type: "WEB3", label: "Escrow receipts come from Product API; live signatures require gateway devnet signing mode", status: "warning" },
     ];
 
     try {
@@ -336,14 +336,24 @@ function settlementFlowToCreatorDeal(
 
 function apiTasks(flow: ApiNegotiationBundle, completed: boolean): AgentTask[] {
   const hasMatch = hasTimeline(flow.timeline, "MATCH_RUN_COMPLETED");
+  const apiPayment = latestTimelineEvent(flow.timeline, "API_PAYMENT");
   const hasNegotiation = hasTimeline(flow.timeline, "NEGOTIATION_STARTED");
   const hasAgreement = Boolean(flow.agreement);
+  const apiPaymentStatus = typeof apiPayment?.data.status === "string" ? apiPayment.data.status : null;
   return [
     {
       id: "api-match",
       label: "Creator candidates ranked",
       status: hasMatch ? "done" : "running",
       visibleDetail: "Product API가 deterministic matching 결과와 후보 순위를 저장했습니다.",
+    },
+    {
+      id: "api-payment",
+      label: "Agent API payment recorded",
+      status: apiPayment ? "done" : hasMatch ? "running" : "queued",
+      visibleDetail: apiPaymentStatus
+        ? `pay.sh/x402 creator verification event: ${apiPaymentStatus}. Deal escrow와 별도 비용입니다.`
+        : "Brand Agent가 후보 검증용 paid API 호출을 준비합니다.",
     },
     {
       id: "api-a2a",
@@ -430,6 +440,13 @@ function emptySettlement(terms: ApiAgreementTerms): Settlement {
 
 function hasTimeline(events: ApiTimelineEvent[], type: string) {
   return events.some((event) => event.type === type);
+}
+
+function latestTimelineEvent(events: ApiTimelineEvent[], type: string): ApiTimelineEvent | null {
+  for (const event of [...events].reverse()) {
+    if (event.type === type) return event;
+  }
+  return null;
 }
 
 function latestTimelineString(

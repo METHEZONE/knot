@@ -1,0 +1,314 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SYSVAR_RENT_PUBKEY,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+  sendAndConfirmTransaction
+} from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
+  createAccount,
+  getAccount,
+  mintTo
+} from "@solana/spl-token";
+import type { GatewayConfig } from "./config.js";
+
+type LockInput = {
+  agreementId: string;
+  escrowId: string;
+  termsHash: string;
+  expectedAmountBaseUnits: string;
+  milestoneIds: string[];
+  milestoneAmountsBaseUnits: string[];
+};
+
+type ReleaseInput = {
+  escrowId: string;
+  milestoneId: string;
+};
+
+export type LiveLockContext = {
+  escrowId: string;
+  campaignId: bigint;
+  campaign: string;
+  creator: string;
+  creatorToken: string;
+  agentAuthority: string;
+  treasuryToken: string;
+  mint: string;
+  milestoneIds: string[];
+  milestoneAmountsBaseUnits: string[];
+  creatorKeypair: number[];
+  agentKeypair: number[];
+};
+
+export type LiveTransactionReceipt = {
+  status: "CONFIRMED";
+  signature: string;
+  explorerUrl: string;
+  slot: null;
+};
+
+const SYSTEM_PROGRAM_ID = new PublicKey("11111111111111111111111111111111");
+
+export async function submitEscrowLock(
+  config: GatewayConfig,
+  input: LockInput
+): Promise<{ receipt: LiveTransactionReceipt; context: LiveLockContext }> {
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const brand = loadBrandKeypair(config);
+  const creator = Keypair.generate();
+  const agent = Keypair.generate();
+  const programId = new PublicKey(config.allowedProgramId);
+  const configPda = pda(["config"], programId);
+  const allowedMint = new PublicKey(config.allowedMint);
+
+  let mint: PublicKey;
+  let treasuryToken: PublicKey;
+  let brandFeeBps = 0;
+  const configInfo = await connection.getAccountInfo(configPda);
+  if (!configInfo) {
+    throw new Error("Escrow config PDA is not initialized for this program");
+  }
+  treasuryToken = new PublicKey(configInfo.data.subarray(40, 72));
+  const treasury = await getAccount(connection, treasuryToken, "confirmed", TOKEN_PROGRAM_ID);
+  mint = treasury.mint;
+  if (!mint.equals(allowedMint)) {
+    throw new Error(`Escrow config mint ${mint.toBase58()} does not match allowed mint`);
+  }
+  brandFeeBps = configInfo.data.readUInt16LE(72);
+
+  const milestoneAmounts = input.milestoneAmountsBaseUnits.map((value) => BigInt(value));
+  const total = milestoneAmounts.reduce((sum, amount) => sum + amount, 0n);
+  const brandFeeTotal = milestoneAmounts.reduce(
+    (sum, amount) => sum + applyBps(amount, brandFeeBps),
+    0n
+  );
+  const deposit = total + brandFeeTotal;
+
+  const brandToken = await createAccount(connection, brand, mint, brand.publicKey);
+  await mintTo(connection, brand, mint, brandToken, brand, deposit);
+  await sendIx(
+    connection,
+    SystemProgram.transfer({
+      fromPubkey: brand.publicKey,
+      toPubkey: agent.publicKey,
+      lamports: 20_000_000
+    }),
+    [brand]
+  );
+
+  const campaignId = campaignIdFromEscrowId(input.escrowId);
+  const campaign = pda(["campaign", brand.publicKey.toBuffer(), u64(campaignId)], programId);
+  const vaultAuthority = pda(["vault-auth", campaign.toBuffer()], programId);
+  const vault = pda(["vault", campaign.toBuffer()], programId);
+  const signature = await sendIx(
+    connection,
+    initializeCampaignIx({
+      programId,
+      brand: brand.publicKey,
+      creator: creator.publicKey,
+      agentAuthority: agent.publicKey,
+      mint,
+      brandToken,
+      config: configPda,
+      campaign,
+      vaultAuthority,
+      vault,
+      campaignId,
+      milestoneAmounts,
+      autoApproveCap: BigInt(input.expectedAmountBaseUnits),
+      termsHash: input.termsHash
+    }),
+    [brand]
+  );
+
+  return {
+    receipt: liveReceipt(config, signature),
+    context: {
+      escrowId: input.escrowId,
+      campaignId,
+      campaign: campaign.toBase58(),
+      creator: creator.publicKey.toBase58(),
+      creatorToken: (await createAccount(connection, brand, mint, creator.publicKey)).toBase58(),
+      agentAuthority: agent.publicKey.toBase58(),
+      treasuryToken: treasuryToken.toBase58(),
+      mint: mint.toBase58(),
+      milestoneIds: input.milestoneIds,
+      milestoneAmountsBaseUnits: input.milestoneAmountsBaseUnits,
+      creatorKeypair: Array.from(creator.secretKey),
+      agentKeypair: Array.from(agent.secretKey)
+    }
+  };
+}
+
+export async function submitMilestoneRelease(
+  config: GatewayConfig,
+  context: LiveLockContext,
+  input: ReleaseInput
+): Promise<LiveTransactionReceipt> {
+  const index = context.milestoneIds.indexOf(input.milestoneId);
+  if (index < 0) {
+    throw new Error(`Unknown milestoneId for live escrow: ${input.milestoneId}`);
+  }
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const brand = loadBrandKeypair(config);
+  const creator = Keypair.fromSecretKey(Uint8Array.from(context.creatorKeypair));
+  const agent = Keypair.fromSecretKey(Uint8Array.from(context.agentKeypair));
+  const programId = new PublicKey(config.allowedProgramId);
+  const campaign = new PublicKey(context.campaign);
+  await sendIx(
+    connection,
+    new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: creator.publicKey, isSigner: true, isWritable: false },
+        { pubkey: campaign, isSigner: false, isWritable: true }
+      ],
+      data: Buffer.concat([disc("submit_milestone"), Buffer.from([index])])
+    }),
+    [brand, creator]
+  );
+
+  const vaultAuthority = pda(["vault-auth", campaign.toBuffer()], programId);
+  const vault = pda(["vault", campaign.toBuffer()], programId);
+  const reputation = pda(["rep", creator.publicKey.toBuffer()], programId);
+  const signature = await sendIx(
+    connection,
+    new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: agent.publicKey, isSigner: true, isWritable: true },
+        { pubkey: campaign, isSigner: false, isWritable: true },
+        { pubkey: vaultAuthority, isSigner: false, isWritable: false },
+        { pubkey: vault, isSigner: false, isWritable: true },
+        { pubkey: new PublicKey(context.creatorToken), isSigner: false, isWritable: true },
+        { pubkey: new PublicKey(context.treasuryToken), isSigner: false, isWritable: true },
+        { pubkey: reputation, isSigner: false, isWritable: true },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false }
+      ],
+      data: Buffer.concat([disc("approve_and_release"), Buffer.from([index])])
+    }),
+    [brand, agent]
+  );
+  return liveReceipt(config, signature);
+}
+
+function loadBrandKeypair(config: GatewayConfig): Keypair {
+  const raw = config.brandKeypairJson ?? readFileSync(config.brandKeypairPath ?? "", "utf8");
+  const secret = JSON.parse(raw) as number[];
+  return Keypair.fromSecretKey(Uint8Array.from(secret));
+}
+
+async function sendIx(
+  connection: Connection,
+  instruction: TransactionInstruction,
+  signers: Keypair[]
+): Promise<string> {
+  const transaction = new Transaction().add(instruction);
+  return sendAndConfirmTransaction(connection, transaction, signers, { commitment: "confirmed" });
+}
+
+function initializeCampaignIx(input: {
+  programId: PublicKey;
+  brand: PublicKey;
+  creator: PublicKey;
+  agentAuthority: PublicKey;
+  mint: PublicKey;
+  brandToken: PublicKey;
+  config: PublicKey;
+  campaign: PublicKey;
+  vaultAuthority: PublicKey;
+  vault: PublicKey;
+  campaignId: bigint;
+  milestoneAmounts: bigint[];
+  autoApproveCap: bigint;
+  termsHash: string;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: input.programId,
+    keys: [
+      { pubkey: input.brand, isSigner: true, isWritable: true },
+      { pubkey: input.creator, isSigner: false, isWritable: false },
+      { pubkey: input.agentAuthority, isSigner: false, isWritable: false },
+      { pubkey: input.mint, isSigner: false, isWritable: false },
+      { pubkey: input.brandToken, isSigner: false, isWritable: true },
+      { pubkey: input.config, isSigner: false, isWritable: false },
+      { pubkey: input.campaign, isSigner: false, isWritable: true },
+      { pubkey: input.vaultAuthority, isSigner: false, isWritable: false },
+      { pubkey: input.vault, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false }
+    ],
+    data: Buffer.concat([
+      disc("initialize_campaign"),
+      u64(input.campaignId),
+      vecU64(input.milestoneAmounts),
+      u64(input.autoApproveCap),
+      termsHashBytes(input.termsHash),
+      i64(3600n)
+    ])
+  });
+}
+
+function pda(seeds: Array<string | Buffer>, programId: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    seeds.map((seed) => (typeof seed === "string" ? Buffer.from(seed) : seed)),
+    programId
+  )[0];
+}
+
+function campaignIdFromEscrowId(escrowId: string): bigint {
+  return createHash("sha256").update(escrowId).digest().readBigUInt64LE(0);
+}
+
+function disc(name: string): Buffer {
+  return createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
+}
+
+function u64(value: bigint): Buffer {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64LE(value);
+  return buffer;
+}
+
+function i64(value: bigint): Buffer {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigInt64LE(value);
+  return buffer;
+}
+
+function vecU64(values: bigint[]): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32LE(values.length);
+  return Buffer.concat([length, ...values.map(u64)]);
+}
+
+function termsHashBytes(value: string): Buffer {
+  const hex = value.startsWith("sha256:") ? value.slice("sha256:".length) : value;
+  const bytes = Buffer.from(hex, "hex");
+  if (bytes.length !== 32) {
+    throw new Error("termsHash must be a sha256-prefixed 32-byte hex digest");
+  }
+  return bytes;
+}
+
+function applyBps(amount: bigint, bps: number): bigint {
+  return (amount * BigInt(bps)) / 10_000n;
+}
+
+function liveReceipt(config: GatewayConfig, signature: string): LiveTransactionReceipt {
+  return {
+    status: "CONFIRMED",
+    signature,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${config.solanaCluster}`,
+    slot: null
+  };
+}

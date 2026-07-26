@@ -93,6 +93,22 @@ RECEIVED
 
 Persist RPC endpoint alias, recent blockhash context, signature, slot, confirmation status, error, request ID and idempotency key. Do not persist signed raw transactions unless required for debugging and protected.
 
+Current gateway modes:
+
+- `KNOT_WEB3_SIGNING_MODE=simulated`: validate request and return
+  `SIMULATED` receipts.
+- `KNOT_WEB3_SIGNING_MODE=devnet`: use `@solana/web3.js` and
+  `@solana/spl-token` to submit the deployed Anchor program's
+  `initialize_campaign`, `submit_milestone`, and `approve_and_release`
+  instructions. This mode requires `SOLANA_RPC_URL` and a devnet-only brand
+  signer through `KNOT_BRAND_KEYPAIR_PATH`, `ANCHOR_WALLET`, or a Secret
+  Manager-mounted `KNOT_BRAND_KEYPAIR_JSON` value.
+
+The MVP gateway stores live lock context in-process so lock and release must run
+against the same gateway instance for the recorded demo. Before a Cloud Run demo,
+replace this with Firestore/Secret Manager-backed context persistence or keep
+minimum instances at one during the run.
+
 ## 8. pay.sh / x402
 
 Use one paid API call in the Brand Agent flow, preferably after candidate ranking and before final selection:
@@ -112,6 +128,10 @@ Requirements:
 - do not hardcode a catalog provider that may disappear; configure resource identifier
 - a failed paid check does not authorize a creator; retry or escalate
 - pay.sh payment is distinct from KNOT escrow settlement
+- current Product API implementation records `API_PAYMENT` PromotionEvents with
+  `SETTLED`, `FAILED`, `SKIPPED` or `DISABLED`; a real sandbox receipt requires
+  `PAYSH_MODE=sandbox`, a configured `PAYSH_RESOURCE_ID`, and the `pay` CLI on
+  the backend runtime path
 
 ## 9. Explorer links
 

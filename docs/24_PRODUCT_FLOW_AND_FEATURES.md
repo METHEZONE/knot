@@ -341,9 +341,17 @@ POST /api/v1/match-runs/{matchRunId}:start-negotiation
 GET  /api/v1/promotions/{promotionId}/timeline
 ```
 
+`matches:run`은 후보 ranking과 별도로 `API_PAYMENT` timeline event를
+남긴다. `PAYSH_RESOURCE_ID`가 실제 pay.sh sandbox resource로 설정되어
+있으면 `pay` CLI를 통해 x402 paid verification call을 수행하고 receipt를
+저장한다. 미설정/CLI 없음/비활성화 상태에서는 `SKIPPED` 또는 `DISABLED`
+상태로 기록한다. 이 이벤트는 Agent API expense 증명용이며, Creator 보수
+escrow lock/release 권한과는 분리된다.
+
 브랜드 화면에 보이는 정보:
 
 - 크리에이터 후보 ranking 완료
+- pay.sh/x402 Agent API payment 상태
 - A2A offer/counter/accept 진행 상태
 - 에이전트가 협상 중이라는 애니메이션/로딩 상태
 - 공개 가능한 합의 조건
@@ -422,11 +430,12 @@ Deal Escrow
   = 브랜드가 크리에이터 보수로 잠그고 release하는 금액
 ```
 
-현재 이 화면의 escrow/release receipt는 API-backed이지만 실제 온체인
-서명이 아니라 `SIMULATED` 상태다. `KNOT_WEB3_MODE=gateway`를 사용하면
-Product API가 private web3 gateway의 lock/release endpoint를 호출하고,
-해당 gateway receipt를 `transactionReceipts.gatewayReceipt`에 저장한다.
-현재 gateway도 서명 전 단계라 실제 Solana signature는 아직 만들지 않는다.
+기본 로컬 설정의 escrow/release receipt는 API-backed `SIMULATED` 상태다.
+`KNOT_WEB3_MODE=gateway`를 사용하면 Product API가 private web3 gateway의
+lock/release endpoint를 호출하고, 해당 gateway receipt를
+`transactionReceipts.gatewayReceipt`에 저장한다. gateway에서
+`KNOT_WEB3_SIGNING_MODE=devnet`와 devnet brand signer를 설정하면 gateway가
+Solana devnet transaction signature와 explorer URL을 반환할 수 있다.
 
 ## 8. 크리에이터 유저 플로우
 
@@ -758,7 +767,7 @@ repository boundary를 통해 처리한다.
 - 실제 PDF/제품 문서 업로드 및 분석
 - Cloud Run private OIDC/IAM 기반 Creator A2A 호출 설정
 - pay.sh/x402 유료 API 호출 receipt 표시
-- Product API에서 web3 gateway를 통한 실제 Solana devnet signing
+- Product API에서 web3 gateway를 통한 실제 Solana devnet signing smoke
 - Terraform 기반 GCP 재현 가능 배포
 - Cloud Run runtime service account 최소 권한 설정
 - frontend npm dependency audit remediation
@@ -781,10 +790,10 @@ repository boundary를 통해 처리한다.
 11. Creator criteria 설정
 12. /creator/result에서 브랜드별 협상 결과 확인
 13. /creator/agreements/{agreementId}에서 마일스톤/정산 상태 확인
-14. /dev/admin에서 API mode, repository boundary, policy check, simulated web3 상태 확인
+14. /dev/admin에서 API mode, repository boundary, policy check, web3 receipt 상태 확인
 ```
 
 해커톤 평가 관점에서 아직 가장 큰 proof gap은 다음 두 가지다.
 
-- private web3 gateway에서 실제 on-chain escrow lock/release signature 생성
+- private web3 gateway devnet signing mode를 실제 signer로 smoke/deploy
 - Brand Agent matching 흐름 안에서 pay.sh/x402 paid verification call 표시

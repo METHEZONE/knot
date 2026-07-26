@@ -1,5 +1,7 @@
+import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from subprocess import TimeoutExpired
 from typing import cast
 from uuid import uuid4
 
@@ -37,6 +39,8 @@ from libs.domain.hashing import (
     terms_hash,
 )
 from libs.domain.models import AgreementTerms, CreatorProfile, Promotion, RateCard, UsageRights
+from libs.payments.paysh import PayCliNotFound
+from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
     PLATFORM_FEE_BPS,
     lock_amount_base_units,
@@ -352,7 +356,7 @@ def build_api_router(
         )
         match_run_id = f"match-{uuid4()}"
         now = _now()
-        match_run = {
+        match_run: dict[str, object] = {
             "matchRunId": match_run_id,
             "promotionId": promotion.promotion_id,
             "brandAgentId": promotion.brand_agent_id,
@@ -363,7 +367,8 @@ def build_api_router(
             "createdAt": now,
             "completedAt": now,
         }
-        repository.save_raw_document(FirestorePaths.match_run(match_run_id), match_run)
+        match_run_path = FirestorePaths.match_run(match_run_id)
+        repository.save_raw_document(match_run_path, match_run)
         for candidate in ranked:
             creator = _creator_by_agent_id(creators, candidate.creator_agent_id)
             document = candidate.model_dump(by_alias=True, mode="json")
@@ -384,6 +389,20 @@ def build_api_router(
                 FirestorePaths.match_candidate(match_run_id, creator.creator_id),
                 document,
             )
+        paid_verification = _run_paid_verification(
+            settings=settings,
+            match_run_id=match_run_id,
+            promotion_id=promotion_id,
+            selected_creator_agent_id=selected.creator_agent_id if selected else None,
+        )
+        match_run = {**match_run, "paidVerification": paid_verification}
+        repository.save_raw_document(match_run_path, match_run)
+        _append_promotion_event(
+            repository,
+            promotion_id=promotion_id,
+            event_type="API_PAYMENT",
+            data=paid_verification,
+        )
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
@@ -942,6 +961,7 @@ def build_api_router(
             agreement=agreement,
             escrow_id=escrow_id,
             locked_amount=locked_amount,
+            milestone_amounts=milestone_amounts,
         )
         escrow = {
             "escrowId": escrow_id,
@@ -1547,6 +1567,105 @@ def _candidate_explanation(
     )
 
 
+def _run_paid_verification(
+    *,
+    settings: Settings,
+    match_run_id: str,
+    promotion_id: str,
+    selected_creator_agent_id: str | None,
+) -> dict[str, object]:
+    mode = settings.paysh_mode.lower()
+    resource_id = settings.paysh_resource_id
+    correlation_id = f"paysh-{uuid4()}"
+    base: dict[str, object] = {
+        "provider": "pay.sh",
+        "protocol": "x402",
+        "purpose": "creator_verification",
+        "mode": mode,
+        "resourceId": resource_id,
+        "promotionId": promotion_id,
+        "matchRunId": match_run_id,
+        "selectedCreatorAgentId": selected_creator_agent_id,
+        "correlationId": correlation_id,
+        "nonAuthoritative": True,
+    }
+    if mode in {"off", "disabled", "local", "none"}:
+        return {
+            **base,
+            "status": "DISABLED",
+            "detail": "pay.sh verification is disabled for this environment.",
+        }
+    if selected_creator_agent_id is None:
+        return {
+            **base,
+            "status": "SKIPPED",
+            "detail": "No eligible creator candidate was selected for paid verification.",
+        }
+    if not resource_id or resource_id == "replace-me":
+        return {
+            **base,
+            "status": "SKIPPED",
+            "detail": "PAYSH_RESOURCE_ID is not configured.",
+        }
+    if mode not in {"sandbox", "live", "production"}:
+        return {
+            **base,
+            "status": "SKIPPED",
+            "detail": f"Unsupported PAYSH_MODE: {settings.paysh_mode}.",
+        }
+
+    try:
+        result = fetch_paysh(
+            resource_id,
+            sandbox=mode == "sandbox",
+            timeout_seconds=settings.paysh_timeout_seconds,
+        )
+    except PayCliNotFound as exc:
+        return {**base, "status": "SKIPPED", "detail": str(exc)}
+    except TimeoutExpired:
+        return {**base, "status": "FAILED", "detail": "pay.sh request timed out."}
+    except (OSError, RuntimeError) as exc:
+        return {**base, "status": "FAILED", "detail": _preview_text(str(exc), 240)}
+
+    receipt_id = _extract_paysh_receipt_id(result.body) or correlation_id
+    return {
+        **base,
+        "status": "SETTLED" if result.ok else "FAILED",
+        "receiptId": receipt_id,
+        "returnCode": result.returncode,
+        "responsePreview": _preview_text(result.body, 500),
+        "errorPreview": _preview_text(result.stderr, 300) if result.stderr else None,
+    }
+
+
+def _extract_paysh_receipt_id(body: str) -> str | None:
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return _find_receipt_value(parsed)
+    return None
+
+
+def _find_receipt_value(payload: dict[str, object]) -> str | None:
+    for key in ("receiptId", "receipt_id", "receipt", "id", "paymentId"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    for value in payload.values():
+        if isinstance(value, dict):
+            nested = _find_receipt_value(value)
+            if nested:
+                return nested
+    return None
+
+
+def _preview_text(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    return compact[:limit]
+
+
 def _find_escrow_by_agreement(
     repository: KnotRepository,
     agreement_id: str,
@@ -1606,6 +1725,7 @@ def _lock_with_web3_gateway(
     agreement: dict[str, object],
     escrow_id: str,
     locked_amount: int,
+    milestone_amounts: dict[str, int],
 ) -> dict[str, object] | None:
     if settings.web3_mode != "gateway":
         return None
@@ -1617,6 +1737,10 @@ def _lock_with_web3_gateway(
                 "escrowId": escrow_id,
                 "termsHash": agreement["termsHash"],
                 "expectedAmountBaseUnits": str(locked_amount),
+                "milestoneIds": list(milestone_amounts.keys()),
+                "milestoneAmountsBaseUnits": [
+                    str(amount) for amount in milestone_amounts.values()
+                ],
                 "mint": settings.usdc_mint,
                 "programId": settings.escrow_program_id,
                 "network": settings.escrow_network,

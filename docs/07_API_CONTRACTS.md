@@ -51,6 +51,15 @@ Promotion create request accepts the same camelCase domain fields as the Firesto
 may be omitted; the API defaults brand fields to seeded demo IDs and generates a
 Promotion ID.
 
+`POST /promotions/{promotionId}/matches:run` persists ranked candidates and a
+non-authoritative Agent API payment record. When `PAYSH_MODE=sandbox` and
+`PAYSH_RESOURCE_ID` points to a real priced resource, Product API invokes pay.sh
+through the `pay` CLI and records an `API_PAYMENT` PromotionEvent with provider,
+protocol, mode, receiptId, correlationId and status. If the resource is not
+configured, the CLI is missing, or payment is disabled, the same event is
+recorded as `SKIPPED` or `DISABLED`. This event is display/audit data only; it
+does not authorize candidate selection, escrow lock, or release.
+
 Promotion responses are wrapped as:
 
 ```json

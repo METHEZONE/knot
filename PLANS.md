@@ -54,7 +54,7 @@ Summarize changed files, test results, deployment state, and remaining follow-up
 - [x] Firestore emulator smoke and gated integration tests
 - [x] Escrow lock/release API (fee 0, termsHash re-check, evidence-gated, idempotent; receipts SIMULATED)
 - [x] Anchor program deployed to devnet (`Aj63…`) and on-chain milestone settlement verified
-- [ ] Wire escrow API SIMULATED receipts to real on-chain signing
+- [ ] Smoke and deploy gateway devnet signing with a real demo signer
 - [ ] pay.sh flow-1 (agent-paid verification) wired into Brand Agent flow
 - [ ] Frontend Agent Workflow and Promotion Timeline
 - [ ] Cloud Run deployment, logging, and end-to-end demo
@@ -163,9 +163,9 @@ SNS/PDF analysis.
 | Gemini analysis | candidate/rationale metadata boundary | optional Vertex mode | provider metadata persisted on candidates | `KNOT_GEMINI_MODE=vertex` calls Vertex AI Gemini for non-authoritative text | partial |
 | A2A negotiation | projection only | Product API can call Creator A2A HTTP when configured | messages/tasks/artifacts persisted | HTTP `message:send` supported; Cloud Run OIDC not wired yet | partial |
 | Agreement | yes | yes | yes | A2A Artifact relation persisted | partial |
-| Escrow lock | yes | yes | yes | Product API can call private web3 gateway in `KNOT_WEB3_MODE=gateway`; gateway receipt still SIMULATED | partial |
+| Escrow lock | yes | yes | yes | Product API can call private web3 gateway; gateway supports `simulated` and `devnet` signing modes | partial |
 | Evidence verification | yes | yes | yes | deterministic URL/disclosure check, no live content fetch | partial |
-| Escrow release | yes | yes | yes | Product API can call private web3 gateway in `KNOT_WEB3_MODE=gateway`; gateway receipt still SIMULATED | partial |
+| Escrow release | yes | yes | yes | Product API can call private web3 gateway; gateway supports `simulated` and `devnet` signing modes | partial |
 
 ### Mock dependency locations
 
@@ -188,7 +188,9 @@ SNS/PDF analysis.
   task store for deterministic seeds.
 - Escrow API guards idempotency and deterministic policy checks. In local mode
   it records `SIMULATED` receipts directly; in gateway mode it calls the private
-  web3 gateway and stores the returned gateway receipt.
+  web3 gateway and stores the returned gateway receipt. The gateway can submit
+  live devnet transactions only when `KNOT_WEB3_SIGNING_MODE=devnet` and a
+  devnet brand signer are configured.
 
 ### Missing Golden Path contracts
 
@@ -196,9 +198,11 @@ SNS/PDF analysis.
   persisted task state reconciliation.
 - Vertex/Gemini profile analysis and evidence-observation contract that cannot
   authorize payments.
-- pay.sh/x402 paid verification receipt schema in Promotion timeline.
-- Private web3 gateway signing implementation for real devnet lock/release
-  signatures.
+- pay.sh/x402 paid verification receipt appears in Promotion timeline when
+  `PAYSH_RESOURCE_ID` is configured; unconfigured environments record
+  `SKIPPED`/`DISABLED` events.
+- Live devnet smoke/deployment of private web3 gateway signing with Secret
+  Manager-backed demo signer and persistent lock context.
 - Firebase Auth/session claims contract for Brand/Creator resource ownership.
 
 ### Milestones
@@ -207,9 +211,11 @@ SNS/PDF analysis.
       fallback, resource ID routing, and visible loading/empty/error states.
 - [x] M2 — Product API calls Creator A2A service over HTTP and persists returned
       Task/Message/Artifact state.
-- [ ] M3 — Product API calls private web3 gateway for lock/release; gateway
-      signing still needs real devnet signatures.
-- [ ] M4 — pay.sh/x402 verification receipt appears in Promotion timeline.
+- [ ] M3 — Product API calls private web3 gateway for lock/release; gateway has
+      devnet signing mode, but live smoke/deployment still needs a configured
+      demo signer.
+- [x] M4 — pay.sh/x402 verification receipt/status appears in Promotion
+      timeline through `API_PAYMENT` PromotionEvents.
 - [x] M5 — optional Vertex AI Gemini provider boundary for non-authoritative
       candidate explanations and Creator Agent rationale.
 

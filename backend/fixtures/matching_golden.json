@@ -21,7 +21,7 @@
       "eligible": false,
       "score": 0.0,
       "rank": null,
-      "hardFilterReasons": ["CATEGORY_MISMATCH", "USAGE_RIGHTS_UNSUPPORTED"]
+      "hardFilterReasons": ["CATEGORY_MISMATCH"]
     }
   ]
 }

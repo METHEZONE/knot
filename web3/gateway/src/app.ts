@@ -4,7 +4,7 @@ import { EscrowLockService } from "./escrow.js";
 
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 
-function handleRelease(
+async function handleRelease(
   config: GatewayConfig,
   escrowLockService: EscrowLockService,
   request: Request,
@@ -12,7 +12,7 @@ function handleRelease(
   escrowId: string,
   milestoneId: string
 ) {
-  const result = escrowLockService.release(
+  const result = await escrowLockService.release(
     config,
     request.header("Idempotency-Key"),
     escrowId,
@@ -50,25 +50,29 @@ export function createApp(
     });
   });
 
-  app.post("/internal/v1/escrows:lock", (request: Request, response: Response) => {
-    const result = escrowLockService.lock(config, request.header("Idempotency-Key"), request.body);
+  app.post("/internal/v1/escrows:lock", async (request: Request, response: Response) => {
+    const result = await escrowLockService.lock(
+      config,
+      request.header("Idempotency-Key"),
+      request.body
+    );
     response.status(result.statusCode).json(result.body);
   });
 
-  app.post(releaseRoute, (request: Request, response: Response) => {
+  app.post(releaseRoute, async (request: Request, response: Response) => {
     const match = releaseRoute.exec(request.path);
     if (!match) {
       response.status(404).json({ code: "NOT_FOUND", detail: "Route not found" });
       return;
     }
     const [, escrowId, milestoneId] = match;
-    handleRelease(config, escrowLockService, request, response, escrowId, milestoneId);
+    await handleRelease(config, escrowLockService, request, response, escrowId, milestoneId);
   });
 
   app.post(
     "/internal/v1/escrows/:escrowId/milestones/:milestoneId/release",
-    (request: Request, response: Response) => {
-      handleRelease(
+    async (request: Request, response: Response) => {
+      await handleRelease(
         config,
         escrowLockService,
         request,

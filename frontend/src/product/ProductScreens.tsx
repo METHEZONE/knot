@@ -1116,8 +1116,8 @@ function SettlementActionPanel({
     <Panel>
       <SectionTitle eyebrow="Action" title="Escrow 실행" />
       <p className="text-sm text-muted">
-        현재는 실제 on-chain signing 전 단계라 Product API의 idempotent SIMULATED receipt를 생성합니다.
-        페이지 진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
+        기본 로컬 설정은 SIMULATED receipt를 생성하고, gateway devnet signing mode에서는 Solana signature를
+        반환합니다. 페이지 진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
       </p>
       {error && <FormError message={error} />}
       <button

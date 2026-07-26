@@ -1,11 +1,18 @@
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
+import {
+  type LiveLockContext,
+  submitEscrowLock,
+  submitMilestoneRelease
+} from "./solana.js";
 
 export const lockRequestSchema = z.object({
   agreementId: z.string().min(1),
   escrowId: z.string().min(1),
   termsHash: z.string().startsWith("sha256:"),
   expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/),
+  milestoneIds: z.array(z.string().min(1)).min(1).max(8).optional(),
+  milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8).optional(),
   mint: z.string().min(1),
   programId: z.string().min(1),
   network: z.literal("solanaDevnet"),
@@ -26,7 +33,7 @@ export const releaseRequestSchema = z.object({
 });
 
 export type GatewayReceipt = {
-  status: "SIMULATED";
+  status: "SIMULATED" | "CONFIRMED" | "FAILED";
   agreementId: string;
   escrowId: string;
   milestoneId?: string;
@@ -37,9 +44,12 @@ export type GatewayReceipt = {
   programId: string;
   network: "solanaDevnet";
   idempotencyKey: string;
-  signature: null;
-  explorerUrl: null;
-};
+  signature: string | null;
+  explorerUrl: string | null;
+  slot?: number | null;
+  campaignId?: string;
+  campaignPda?: string;
+  };
 
 export type LockResult =
   | { statusCode: 202; body: { data: GatewayReceipt; detail: string } }
@@ -51,8 +61,13 @@ export type ReleaseResult = LockResult;
 
 export class EscrowLockService {
   private readonly receipts = new Map<string, GatewayReceipt>();
+  private readonly liveLocks = new Map<string, LiveLockContext>();
 
-  lock(config: GatewayConfig, idempotencyKey: string | undefined, body: unknown): LockResult {
+  async lock(
+    config: GatewayConfig,
+    idempotencyKey: string | undefined,
+    body: unknown
+  ): Promise<LockResult> {
     if (!idempotencyKey) {
       return {
         statusCode: 400,
@@ -98,6 +113,65 @@ export class EscrowLockService {
         }
       };
     }
+    const milestoneIds = result.data.milestoneIds ?? ["content"];
+    const milestoneAmounts = result.data.milestoneAmountsBaseUnits ?? [
+      result.data.expectedAmountBaseUnits
+    ];
+    if (milestoneIds.length !== milestoneAmounts.length) {
+      return {
+        statusCode: 400,
+        body: {
+          code: "VALIDATION_ERROR",
+          detail: "milestoneIds and milestoneAmountsBaseUnits must have the same length"
+        }
+      };
+    }
+
+    if (config.signingMode === "devnet") {
+      try {
+        const live = await submitEscrowLock(config, {
+          agreementId: result.data.agreementId,
+          escrowId: result.data.escrowId,
+          termsHash: result.data.termsHash,
+          expectedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+          milestoneIds,
+          milestoneAmountsBaseUnits: milestoneAmounts
+        });
+        const receipt: GatewayReceipt = {
+          status: live.receipt.status,
+          agreementId: result.data.agreementId,
+          escrowId: result.data.escrowId,
+          termsHash: result.data.termsHash,
+          lockedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+          mint: live.context.mint,
+          programId: result.data.programId,
+          network: result.data.network,
+          idempotencyKey,
+          signature: live.receipt.signature,
+          explorerUrl: live.receipt.explorerUrl,
+          slot: live.receipt.slot,
+          campaignId: live.context.campaignId.toString(),
+          campaignPda: live.context.campaign
+        };
+        this.receipts.set(idempotencyKey, receipt);
+        this.liveLocks.set(result.data.escrowId, live.context);
+        return {
+          statusCode: 202,
+          body: {
+            data: receipt,
+            detail: "Escrow lock submitted and confirmed on Solana devnet"
+          }
+        };
+      } catch (error) {
+        return {
+          statusCode: 409,
+          body: {
+            code: "POLICY_VIOLATION",
+            detail: `Live escrow lock failed: ${error instanceof Error ? error.message : String(error)}`
+          }
+        };
+      }
+    }
 
     const receipt: GatewayReceipt = {
       status: "SIMULATED",
@@ -122,13 +196,13 @@ export class EscrowLockService {
     };
   }
 
-  release(
+  async release(
     config: GatewayConfig,
     idempotencyKey: string | undefined,
     escrowId: string,
     milestoneId: string,
     body: unknown
-  ): ReleaseResult {
+  ): Promise<ReleaseResult> {
     if (!idempotencyKey) {
       return {
         statusCode: 400,
@@ -173,6 +247,58 @@ export class EscrowLockService {
           detail: "Release amount must be positive"
         }
       };
+    }
+
+    if (config.signingMode === "devnet") {
+      const context = this.liveLocks.get(escrowId);
+      if (!context) {
+        return {
+          statusCode: 409,
+          body: {
+            code: "POLICY_VIOLATION",
+            detail: "Live escrow context is not available for this escrowId"
+          }
+        };
+      }
+      try {
+        const live = await submitMilestoneRelease(config, context, {
+          escrowId,
+          milestoneId
+        });
+        const receipt: GatewayReceipt = {
+          status: live.status,
+          agreementId: result.data.agreementId,
+          escrowId: result.data.escrowId,
+          milestoneId: result.data.milestoneId,
+          termsHash: result.data.termsHash,
+          releasedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+          mint: result.data.mint,
+          programId: result.data.programId,
+          network: result.data.network,
+          idempotencyKey,
+          signature: live.signature,
+          explorerUrl: live.explorerUrl,
+          slot: live.slot,
+          campaignId: context.campaignId.toString(),
+          campaignPda: context.campaign
+        };
+        this.receipts.set(idempotencyKey, receipt);
+        return {
+          statusCode: 202,
+          body: {
+            data: receipt,
+            detail: "Milestone release submitted and confirmed on Solana devnet"
+          }
+        };
+      } catch (error) {
+        return {
+          statusCode: 409,
+          body: {
+            code: "POLICY_VIOLATION",
+            detail: `Live milestone release failed: ${error instanceof Error ? error.message : String(error)}`
+          }
+        };
+      }
     }
 
     const receipt: GatewayReceipt = {

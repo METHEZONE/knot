@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
+from libs.payments.paysh import PayResult
 from libs.repositories.firestore_paths import COLLECTIONS
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
@@ -112,7 +113,57 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
 
     timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
+    assert "API_PAYMENT" in event_types
     assert "MATCH_RUN_COMPLETED" in event_types
+
+
+def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -> None:
+    client = client_with_seed(Settings(paysh_mode="sandbox", paysh_resource_id="replace-me"))
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["paidVerification"]["provider"] == "pay.sh"
+    assert match_run["paidVerification"]["protocol"] == "x402"
+    assert match_run["paidVerification"]["status"] == "SKIPPED"
+    assert match_run["paidVerification"]["nonAuthoritative"] is True
+
+    timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
+    api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
+    assert api_payment["data"]["status"] == "SKIPPED"
+
+
+def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        assert resource_id == "https://debugger.pay.sh/mpp/quote/AAPL"
+        assert sandbox is True
+        assert timeout_seconds == 7
+        return PayResult(
+            ok=True,
+            returncode=0,
+            body='{"receiptId": "receipt-pay-001", "result": {"ok": true}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client = client_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+            paysh_timeout_seconds=7,
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["paidVerification"]["status"] == "SETTLED"
+    assert match_run["paidVerification"]["receiptId"] == "receipt-pay-001"
+
+    timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
+    api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
+    assert api_payment["data"]["receiptId"] == "receipt-pay-001"
+    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-003"
 
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
