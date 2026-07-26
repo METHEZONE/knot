@@ -137,6 +137,15 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert agreement_response.status_code == 200
     assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]
 
+    negotiation_agreement_response = client.get(
+        f"/api/v1/negotiations/{negotiation_id}/agreement"
+    )
+    assert negotiation_agreement_response.status_code == 200
+    assert (
+        negotiation_agreement_response.json()["data"]["agreement"]["agreementId"]
+        == agreement["agreementId"]
+    )
+
 
 def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:
     client = client_with_seed()

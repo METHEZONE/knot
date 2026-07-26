@@ -99,6 +99,9 @@ const settlement: Settlement = {
 export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
   brand: {
     role: "brand",
+    promotionId: brandProduct.productId,
+    negotiationId: "negotiation-demo-glow",
+    agreementId: "agreement-demo-glow",
     title: brandProduct.title,
     counterpartyLabel: "Mina Studio",
     counterpartyAgentLabel: "Mina Agent",
@@ -107,6 +110,38 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     taskId: "a2a-task-20260725-001",
     taskState: "TASK_STATE_WORKING",
     progressPercent: 68,
+    candidates: [
+      {
+        creatorId: "creator-mina",
+        creatorAgentId: "creator-agent-mina",
+        displayName: "Mina Studio",
+        rank: 1,
+        score: 94,
+        eligible: true,
+        reason: "웰니스 뷰티 루틴 적합도 높음",
+        selected: true,
+      },
+      {
+        creatorId: "creator-nari",
+        creatorAgentId: "creator-agent-nari",
+        displayName: "Nari Daily",
+        rank: 2,
+        score: 87,
+        eligible: true,
+        reason: "UGC 전환 데이터 양호",
+        selected: false,
+      },
+      {
+        creatorId: "creator-sol",
+        creatorAgentId: "creator-agent-sol",
+        displayName: "Studio Sol",
+        rank: 3,
+        score: 73,
+        eligible: false,
+        reason: "일정 충돌 가능성",
+        selected: false,
+      },
+    ],
     tasks: [
       {
         id: "brand-1",
@@ -143,6 +178,9 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
   },
   creator: {
     role: "creator",
+    promotionId: brandProduct.productId,
+    negotiationId: "negotiation-demo-glow",
+    agreementId: "agreement-demo-glow",
     title: brandProduct.title,
     counterpartyLabel: "Glow Bar Labs",
     counterpartyAgentLabel: "Glow Agent",
@@ -151,6 +189,18 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     taskId: "a2a-task-20260725-001",
     taskState: "TASK_STATE_WORKING",
     progressPercent: 74,
+    candidates: [
+      {
+        creatorId: "creator-mina",
+        creatorAgentId: "creator-agent-mina",
+        displayName: "Mina Studio",
+        rank: 1,
+        score: 94,
+        eligible: true,
+        reason: "Creator Agent가 공개 조건만 수신했습니다.",
+        selected: true,
+      },
+    ],
     tasks: [
       {
         id: "creator-1",
@@ -189,8 +239,10 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
 
 export const creatorDeals: CreatorDeal[] = [
   {
+    agreementId: "agreement-demo-glow",
     brandId: "glow-bar",
     brandName: "Glow Bar Labs",
+    creatorAgentId: "creator-agent-mina",
     productTitle: "Glow Bar Summer Kit",
     status: "AGREED",
     visibleResult: "950 USDC, Reel 1개 + Story 2개로 합의됐습니다.",
@@ -200,8 +252,10 @@ export const creatorDeals: CreatorDeal[] = [
     settlement,
   },
   {
+    agreementId: null,
     brandId: "terra-tea",
     brandName: "Terra Tea",
+    creatorAgentId: "creator-agent-mina",
     productTitle: "Cold Brew Tea Pack",
     status: "COUNTERED",
     visibleResult: "Creator Agent가 일정 조정을 counter했습니다.",
@@ -218,8 +272,10 @@ export const creatorDeals: CreatorDeal[] = [
     },
   },
   {
+    agreementId: null,
     brandId: "smoke-zero",
     brandName: "Smoke Zero",
+    creatorAgentId: "creator-agent-mina",
     productTitle: "Nicotine Alternative Kit",
     status: "REJECTED",
     visibleResult: "피할 도메인 기준에 따라 Creator Agent가 거절했습니다.",

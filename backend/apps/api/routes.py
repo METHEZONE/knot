@@ -629,6 +629,14 @@ def build_api_router(
             }
         )
 
+    @router.get("/negotiations/{negotiation_id}/agreement")
+    def get_negotiation_agreement(negotiation_id: str) -> dict[str, object]:
+        _require_negotiation(repository, negotiation_id)
+        agreement = _find_agreement_by_negotiation(repository, negotiation_id)
+        if agreement is None:
+            raise _not_found("agreement", negotiation_id)
+        return _ok({"agreement": agreement})
+
     @router.post("/negotiations/{negotiation_id}:cancel")
     def cancel_negotiation(negotiation_id: str) -> dict[str, object]:
         path = FirestorePaths.negotiation(negotiation_id)
@@ -652,6 +660,20 @@ def build_api_router(
         if agreement is None:
             raise _not_found("agreement", agreement_id)
         return _ok({"agreement": agreement})
+
+    @router.get("/agreements/{agreement_id}/escrow")
+    def get_agreement_escrow(agreement_id: str) -> dict[str, object]:
+        _get_agreement_document(repository, agreement_id)
+        escrow = _find_escrow_by_agreement(repository, agreement_id)
+        settlements: list[dict[str, object]] = []
+        if escrow is not None:
+            settlements = [
+                document
+                for document in repository.list_raw_documents(COLLECTIONS.settlements)
+                if document.get("escrowId") == escrow.get("escrowId")
+            ]
+            settlements.sort(key=lambda item: str(item.get("createdAt", "")))
+        return _ok({"escrow": escrow, "settlements": settlements})
 
     @router.post("/agreements/{agreement_id}/evidence", status_code=status.HTTP_201_CREATED)
     def submit_evidence(
@@ -1365,6 +1387,16 @@ def _find_escrow_by_agreement(
 ) -> dict[str, object] | None:
     for document in repository.list_raw_documents(COLLECTIONS.escrows):
         if document.get("agreementId") == agreement_id:
+            return document
+    return None
+
+
+def _find_agreement_by_negotiation(
+    repository: KnotRepository,
+    negotiation_id: str,
+) -> dict[str, object] | None:
+    for document in repository.list_raw_documents(COLLECTIONS.agreements):
+        if document.get("negotiationId") == negotiation_id:
             return document
     return None
 

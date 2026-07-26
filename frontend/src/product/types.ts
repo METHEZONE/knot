@@ -64,6 +64,9 @@ export type CreatorCriteria = {
 
 export type NegotiationView = {
   role: Role;
+  promotionId: string;
+  negotiationId: string | null;
+  agreementId: string | null;
   title: string;
   counterpartyLabel: string;
   counterpartyAgentLabel: string;
@@ -73,14 +76,28 @@ export type NegotiationView = {
   taskState: "TASK_STATE_WORKING" | "TASK_STATE_COMPLETED";
   progressPercent: number;
   tasks: AgentTask[];
+  candidates: CandidateSummary[];
   publicSummary: string[];
   terms: NegotiatedTerm[];
   termsHash: string;
 };
 
+export type CandidateSummary = {
+  creatorId: string;
+  creatorAgentId: string;
+  displayName: string;
+  rank: number | null;
+  score: number | null;
+  eligible: boolean;
+  reason: string;
+  selected: boolean;
+};
+
 export type CreatorDeal = {
+  agreementId: string | null;
   brandId: string;
   brandName: string;
+  creatorAgentId: string;
   productTitle: string;
   status: "AGREED" | "COUNTERED" | "REJECTED" | "IN_PROGRESS";
   visibleResult: string;

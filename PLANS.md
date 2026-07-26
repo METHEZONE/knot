@@ -138,6 +138,112 @@ Validation passed: `npm run typecheck`, `npm run lint`, `npm test`, and
 
 ---
 
+## Real A2A & Escrow MVP Plan
+
+### Goal
+
+Move the current Product MVP from fixture-led demo behavior toward a real
+Golden Path where Promotion creation persists in Firestore, agent negotiation
+resources are created only by explicit user actions, and escrow screens do not
+pretend simulated receipts are real on-chain transactions.
+
+### Scope
+
+Phase 1 may change Product API read contracts, frontend data-source routing,
+frontend tests, docs, and follow-up prompts. It does not wire the web3 gateway,
+real Solana signing, pay.sh, Gemini structured output, Firebase Auth, or live
+SNS/PDF analysis.
+
+### Current state audit
+
+| Capability | UI | API | Firestore | External/A2A/On-chain | E2E |
+|---|---|---|---|---|---|
+| Promotion | yes | yes | yes | n/a | partial |
+| Matching | partial | yes | yes | no pay.sh/Gemini verification | partial |
+| Gemini decisioning | no, deterministic copy only | no | no | no Vertex/Gemini call | no |
+| A2A negotiation | projection only | internal orchestration | messages/tasks/artifacts persisted | no service-to-service Creator A2A HTTP call yet | partial |
+| Agreement | yes | yes | yes | A2A Artifact relation persisted | partial |
+| Escrow lock | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
+| Evidence verification | yes | yes | yes | deterministic URL/disclosure check, no live content fetch | partial |
+| Escrow release | yes | yes | yes | SIMULATED receipt, no Product API web3 gateway call | no real API path |
+
+### Mock dependency locations
+
+- `frontend/src/product/mockData.ts`: deterministic UI fixtures kept for
+  explicit mock mode only.
+- `frontend/src/product/dataSource.ts`: `mock|api` boundary; API mode must not
+  fabricate successful writes.
+- `backend/libs/repositories/seed.py`: Firestore/in-memory demo seed.
+- `backend/apps/api/routes.py`: current escrow receipts are explicitly
+  `SIMULATED`.
+- `web3/gateway/src`: gateway validation exists, but Product API is not wired to
+  it for real signing.
+
+### Boundaries
+
+- Product API owns browser-facing reads/writes. Browser code must not create
+  official A2A `Message`, `Task`, or `Artifact` payloads directly.
+- Creator A2A service owns the external A2A HTTP surface, but the current Golden
+  Path still starts negotiation through Product API internal orchestration.
+- Escrow API currently guards idempotency and deterministic policy checks, then
+  records `SIMULATED` receipts. Real lock/release must go through the private
+  web3 gateway before being shown as devnet transactions.
+
+### Missing Golden Path contracts
+
+- Service-to-service Product API -> Creator A2A `message:send` contract with
+  persisted task state reconciliation.
+- Vertex/Gemini profile and negotiation summary contract that cannot authorize
+  payments.
+- pay.sh/x402 paid verification receipt schema in Promotion timeline.
+- Product API -> web3 gateway lock/release request and response schema for real
+  devnet signatures.
+- Firebase Auth/session claims contract for Brand/Creator resource ownership.
+
+### Milestones
+
+- [x] M1 — default frontend API mode, explicit mock mode, no page-load write
+      fallback, resource ID routing, and visible loading/empty/error states.
+- [ ] M2 — Product API calls Creator A2A service over HTTP and persists returned
+      Task/Message/Artifact state.
+- [ ] M3 — Product API calls private web3 gateway for real devnet lock/release
+      signatures.
+- [ ] M4 — pay.sh/x402 verification receipt appears in Promotion timeline.
+
+### Contracts
+
+- `NEXT_PUBLIC_KNOT_DATA_MODE=api` is now the default. Use
+  `NEXT_PUBLIC_KNOT_DATA_MODE=mock` only for fixture-only UI work.
+- `GET /api/v1/negotiations/{negotiationId}/agreement` returns the Agreement
+  produced by a negotiation.
+- `GET /api/v1/agreements/{agreementId}/escrow` returns the current escrow and
+  settlement list for a deal without executing lock/release writes.
+- Creator deal detail routes use `/creator/agreements/{agreementId}`. Legacy
+  brand slug routes redirect back to the Creator result list.
+
+### Validation
+
+```text
+cd backend && ../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py
+cd backend && ../.venv/bin/python -m ruff check apps/api libs/repositories tests/test_api_promotions.py tests/test_api_escrow.py
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm test
+cd frontend && KNOT_API_BASE_URL=http://127.0.0.1:18080 NEXT_PUBLIC_KNOT_DATA_MODE=api npm run build
+```
+
+### Decisions and surprises
+
+- 2026-07-26: The Real A2A/Escrow prompt explicitly scopes the first pass to
+  audit + Phase 1 cleanup, not full real A2A/web3 implementation.
+- 2026-07-26: Product API had useful read/write primitives, but frontend API
+  mode was creating match/negotiation/settlement side effects during page
+  render. Phase 1 separates reads from explicit button-triggered writes.
+- 2026-07-26: No fixed `glow-bar` creator detail dependency remains in the
+  active route map; creator deal detail is keyed by `agreementId`.
+
+---
+
 ## Product MVP Frontend Plan
 
 ### Goal
@@ -161,7 +267,7 @@ handoff notes.
 /brand/onboarding -> /brand/products/new -> /brand/negotiate -> /brand/result -> /brand/settlement
 /brand/me
 /brand/settings
-/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/brands/{brandId}
+/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/agreements/{agreementId}
 /creator/me
 /creator/settings
 /dev/admin
@@ -267,8 +373,8 @@ Known contract gaps from the docs audit:
 
 ### Contracts
 
-- `NEXT_PUBLIC_KNOT_DATA_MODE=mock|api` selects data mode; default remains
-  `mock`.
+- `NEXT_PUBLIC_KNOT_DATA_MODE=mock|api` selects data mode; default is now
+  `api`. Use `mock` explicitly for fixture-only UI work.
 - `KNOT_API_BASE_URL` or `NEXT_PUBLIC_KNOT_API_BASE_URL` points Next server code
   at `knot-api`; default local URL is `http://127.0.0.1:8080`.
 - Browser pages never write Firestore directly and never call private web3

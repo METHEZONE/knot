@@ -82,7 +82,7 @@ Core product routes:
 /creator/onboarding
 /creator/criteria
 /creator/result
-/creator/brands/glow-bar
+/creator/agreements/{agreementId}
 /creator/me
 /creator/settings
 /dev/admin
@@ -94,7 +94,7 @@ Compatibility redirects:
 /brand/matching -> /brand/negotiate
 /creator/negotiate -> /creator/result
 /creator/offers -> /creator/result
-/creator/milestones -> /creator/brands/glow-bar
+/creator/milestones -> /creator/result
 ```
 
 The workspace navigation is intentionally not a numbered stepper. Role pages do

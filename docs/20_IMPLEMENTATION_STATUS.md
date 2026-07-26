@@ -10,8 +10,8 @@ Update this file at the end of every task.
 
 | Area | Status | Last verified | Notes |
 |---|---|---|---|
-| frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; mock mode remains default, and `NEXT_PUBLIC_KNOT_DATA_MODE=api` switches `KnotDataSource` to Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition. Login/signup/onboarding/Promotion creation forms now submit to Product API through a Next `/api/v1/[...path]` proxy. Frontend consumes Product API projections rather than direct browser A2A calls. |
-| knot-api | Account/onboarding + escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, and Promotion creation persistence through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
+| frontend | Product MVP API integration expanded | 2026-07-26 | Branch `integration/frontend-backend-api`; API mode is now the default, and `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is an explicit fixture-only override. `KnotDataSource` reads Product API-backed Promotion→MatchRun→Negotiation→Agreement→Evidence→Escrow composition without page-load write fallbacks. Login/signup/onboarding/Promotion creation forms submit to Product API through a Next `/api/v1/[...path]` proxy. |
+| knot-api | Account/onboarding + escrow API | 2026-07-26 | Added `users:bootstrap`, Brand onboarding, Creator onboarding, Creator criteria, Promotion creation, negotiation Agreement lookup, and Agreement escrow-state lookup through the repository boundary. Full flow Promotion→match→negotiate→agreement→evidence→escrow lock/release remains wired; escrow receipts are SIMULATED pending on-chain signing. |
 | creator A2A service | M2 negotiation baseline | 2026-07-24 | A2A send/stream/tasks/cancel endpoints backed by in-memory task store |
 | web3 gateway | Lock validation (SIMULATED) | 2026-07-25 | Validates lock requests, idempotent simulated receipts; config defaults point at the deployed program id and devnet USDC mint |
 | Anchor program | Deployed to devnet | 2026-07-25 | `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`; on-chain milestone settlement verified — agent releases USDC within cap with no human. Duplicate no-op `web3/program` stub removed; only `programs/knot-escrow` remains |
@@ -47,12 +47,17 @@ cd frontend && npm run lint: passed.
 cd frontend && npm test: passed; 7 product flow/data-source tests.
 cd frontend && npm run build: passed; 27 dynamic app routes generated including login/signup, brand product/result/settlement, creator criteria/result/brand detail, role my/settings and dev admin.
 cd frontend && npm run typecheck: passed.
-cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/brands/glow-bar, /dev/admin, /brand/negotiate, /creator/result, /brand/me, /creator/settings.
+cd frontend && npm run dev: running at http://localhost:3000; smoke 200 for /login, /signup, /brand/products/new, /brand/settlement, /creator/result, /dev/admin, /brand/negotiate, /brand/me, /creator/settings.
 cd backend && ../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py: 25 passed, 1 Starlette/httpx deprecation warning.
 API mode smoke with local knot-api at http://127.0.0.1:18080 and frontend at http://127.0.0.1:3002: 200 for /brand/products/new, /brand/negotiate, /creator/result, /brand/settlement and /dev/admin. Backend logs confirmed Promotion→MatchRun→Negotiation→Evidence→Escrow lock→Milestone release calls.
 cd backend && ../.venv/bin/python -m pytest tests/test_api_onboarding.py tests/test_api_promotions.py tests/test_api_escrow.py: 20 passed, 1 Starlette/httpx deprecation warning.
 cd backend && ../.venv/bin/python -m ruff check apps/api libs/repositories tests/test_api_onboarding.py: passed.
 cd frontend && npm run typecheck / npm run lint / npm test / npm run build: passed after account/onboarding API integration; build includes dynamic `/api/v1/[...path]` proxy.
+cd backend && ../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py: 25 passed, 1 Starlette/httpx deprecation warning after Phase 1 read-contract cleanup.
+cd backend && ../.venv/bin/python -m ruff check apps/api libs/repositories tests/test_api_promotions.py tests/test_api_escrow.py: passed.
+cd frontend && npm run typecheck / npm run lint / npm test: passed; product flow tests now cover API default mode and no page-load negotiation writes.
+cd frontend && KNOT_API_BASE_URL=http://127.0.0.1:18080 NEXT_PUBLIC_KNOT_DATA_MODE=api npm run build: passed with network access for Google Fonts.
+Local smoke after backend restart: `GET /readyz` on :18080 passed; frontend :3000 returned 200 for `/login`, `/dev/admin`, `/creator/result`, and `/brand/negotiate`.
 GCP `knot-dev-503505`: enabled Firestore + Cloud Build, created Artifact Registry repo `us-central1/knot`, created Firestore Native `(default)` in `us-central1`, seeded demo docs, and smoke passed against real Firestore.
 Cloud Run: deployed `knot-api` at https://knot-api-260001601654.us-central1.run.app and `knot-web` at https://knot-web-260001601654.us-central1.run.app.
 Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on knot-api passed; `GET /`, `/brand/negotiate`, `/dev/admin` on knot-web passed; `GET /api/v1/promotions` through knot-web proxy passed.
@@ -131,6 +136,13 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
   `.gcloudignore`, `infra/cloudbuild/api.yaml`, and `infra/cloudbuild/web.yaml`.
   Deployed services are public for the current demo baseline; production auth
   tightening remains pending.
+- Rewrote `docs/24_PRODUCT_FLOW_AND_FEATURES.md` in Korean for product/user-flow
+  handoff and explicitly documented that SNS/PDF analysis is not live yet.
+- Read `KNOT_MVP_REAL_A2A_ESCROW_DEVELOPMENT_PROMPT` and implemented the scoped
+  Phase 1 cleanup: API mode is the frontend default, mock mode is explicit,
+  API reads no longer run match/negotiation/settlement writes on page load,
+  creator detail routing uses `agreementId`, and Product API gained read-only
+  Agreement/escrow lookup endpoints for frontend composition.
 
 ## Known blockers / open items
 
@@ -155,6 +167,9 @@ Cloud Run smoke: `GET /readyz` on knot-api passed; `GET /api/v1/promotions` on k
   public wallet references and never accepts private keys or seed phrases.
 - Frontend dependency audit remediation is pending; Cloud Build surfaced npm
   high-severity findings that still need review.
+- Product API still starts negotiation through internal orchestration rather
+  than service-to-service Creator A2A HTTP. This is the next real-A2A contract
+  gap.
 
 ## Next task
 

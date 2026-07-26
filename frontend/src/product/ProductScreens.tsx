@@ -153,7 +153,7 @@ export function SignupScreen() {
         <RoleChoiceCard
           role="creator"
           title="크리에이터로 시작"
-          body="SNS URL을 분석하고 협상 기준을 정하면, Creator Agent가 제안을 선별합니다."
+          body="SNS URL reference를 저장하고 협상 기준을 정하면, Creator Agent가 제안을 선별합니다."
           href="/signup/creator"
         />
       </div>
@@ -269,12 +269,12 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 및 분석 중..." : "Agent에게 분석 맡기기"}
+              {status === "saving" ? "저장 중..." : "Demo profile 저장"}
             </button>
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Profile draft" title={analyzed ? "분석 결과" : "분석 대기"} />
+          <SectionTitle eyebrow="Profile draft" title={analyzed ? "저장된 demo profile" : "입력 대기"} />
           {analyzed ? (
             <div className="space-y-3">
               <InfoBox label="Brand summary" value={summary} />
@@ -282,7 +282,7 @@ export function BrandOnboardingScreen({ session }: { session: RoleSession }) {
               <InfoBox label="Restricted claims" value="의료 효능 과장, 무검수 게시, 무기한 사용권 제외" />
             </div>
           ) : (
-            <EmptyState text="URL과 기본 정보를 입력하면 공개 정보 기반 draft를 생성합니다." />
+            <EmptyState text="현재는 실제 웹 분석 없이 입력한 정보를 profile reference로 저장합니다." />
           )}
           {analyzed && (
             <div className="mt-6">
@@ -328,7 +328,7 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
         autonomy: { maxNegotiationRounds: 5, autoEscrow: false, autoRelease: false },
       });
       saveLocalSession({ ...session, role: "brand", promotionId: promotion.promotionId });
-      router.push("/brand/negotiate");
+      router.push(`/brand/negotiate?promotionId=${promotion.promotionId}`);
     } catch (caught) {
       setError(errorMessage(caught));
       setStatus("idle");
@@ -359,7 +359,7 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
               disabled={status === "saving"}
               className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "크리에이터 매칭 및 협상 시작"}
+              {status === "saving" ? "저장 중..." : "Promotion 저장하고 Agent 실행 화면으로 이동"}
             </button>
           </form>
         </Panel>
@@ -384,14 +384,25 @@ export function BrandNegotiationScreen({ view, product }: { view: NegotiationVie
     <WorkspaceShell role="brand" active="negotiation" title="크리에이터 매칭 · 협상" session={null}>
       <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <Panel>
-          <SectionTitle eyebrow="Matching" title="Agent가 후보를 찾고 있습니다" />
+          <SectionTitle eyebrow="Matching" title="Creator 후보" />
           <div className="mt-4 grid gap-3">
-            <CandidateCard name="Mina Studio" score="94" reason="웰니스 뷰티 루틴 적합도 높음" selected />
-            <CandidateCard name="Nari Daily" score="87" reason="UGC 전환 데이터 양호" />
-            <CandidateCard name="Studio Sol" score="73" reason="일정 충돌 가능성" />
+            {view.candidates.length ? (
+              view.candidates.map((candidate) => (
+                <CandidateCard
+                  key={candidate.creatorAgentId}
+                  name={candidate.displayName}
+                  score={candidate.score === null ? "-" : String(candidate.score)}
+                  reason={candidate.reason}
+                  selected={candidate.selected}
+                  eligible={candidate.eligible}
+                />
+              ))
+            ) : (
+              <EmptyState text="아직 matchRun이 없습니다. Run Agent를 누르면 Product API가 후보를 계산하고 저장합니다." />
+            )}
           </div>
         </Panel>
-        <AgentNegotiationPanel view={view} nextHref="/brand/result" />
+        <AgentNegotiationPanel view={view} promotionId={product.productId} />
       </div>
       <Panel>
         <SectionTitle eyebrow="Promotion" title={product.title} />
@@ -412,9 +423,11 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
       <AgreementPanel view={view} />
       <div className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
         <Panel>
-          <SectionTitle eyebrow="Result" title="Mina Studio와 합의됐습니다" />
+          <SectionTitle eyebrow="Result" title={view.agreementId ? `${view.counterpartyLabel}와 합의됐습니다` : "아직 Agreement가 없습니다"} />
           <p className="text-muted">
-            Brand Agent와 Creator Agent가 A2A Task를 완료했고, Agreement Artifact에 공개 가능한 합의 조건과 termsHash만 저장했습니다.
+            {view.agreementId
+              ? "Brand Agent와 Creator Agent가 A2A Task를 완료했고, Agreement Artifact에 공개 가능한 합의 조건과 termsHash만 저장했습니다."
+              : "먼저 협상 화면에서 Run Agent를 실행해야 Agreement Artifact가 생성됩니다."}
           </p>
         </Panel>
         <Panel>
@@ -423,7 +436,11 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
             실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Devnet escrow로 진행됩니다.
           </p>
           <div className="mt-5">
-            <PrimaryLink href="/brand/settlement">정산 페이지로 이동</PrimaryLink>
+            {view.agreementId ? (
+              <PrimaryLink href={`/brand/settlement?agreementId=${view.agreementId}`}>정산 페이지로 이동</PrimaryLink>
+            ) : (
+              <SecondaryLink href={`/brand/negotiate?promotionId=${view.promotionId}`}>협상 화면으로 돌아가기</SecondaryLink>
+            )}
           </div>
         </Panel>
       </div>
@@ -431,13 +448,45 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
   );
 }
 
-export function BrandSettlementScreen({ settlement, milestones }: { settlement: Settlement; milestones: Milestone[] }) {
+export function BrandSettlementScreen({
+  settlement,
+  milestones,
+  agreementId,
+  creatorAgentId,
+}: {
+  settlement: Settlement;
+  milestones: Milestone[];
+  agreementId: string;
+  creatorAgentId: string;
+}) {
   return (
     <WorkspaceShell role="brand" active="settlement" title="정산" session={null}>
       <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <SettlementPanel settlement={settlement} />
-        <MilestonePanel milestones={milestones} mode="brand" />
+        <div className="grid gap-5">
+          <MilestonePanel milestones={milestones} mode="brand" />
+          <SettlementActionPanel
+            agreementId={agreementId}
+            creatorAgentId={creatorAgentId}
+            milestoneId={milestones.find((milestone) => milestone.id === "content")?.id ?? milestones[0]?.id}
+            alreadyReleased={Boolean(settlement.releaseTx) || settlement.escrowStatus === "RELEASED"}
+          />
+        </div>
       </div>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandSettlementEmptyScreen({ message }: { message: string }) {
+  return (
+    <WorkspaceShell role="brand" active="settlement" title="정산" session={null}>
+      <Panel>
+        <SectionTitle eyebrow="Settlement" title="아직 정산할 Agreement가 없습니다" />
+        <p className="text-muted">{message}</p>
+        <div className="mt-5">
+          <SecondaryLink href="/brand/negotiate">협상 화면으로 이동</SecondaryLink>
+        </div>
+      </Panel>
     </WorkspaceShell>
   );
 }
@@ -478,7 +527,7 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="SNS source" title="내 SNS를 분석합니다" />
+            <SectionTitle eyebrow="SNS source" title="내 SNS reference를 저장합니다" />
             <Input label="Creator name" name="creatorName" placeholder="Mina Studio" required />
             <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/mina.studio" required />
             <Input label="Primary category" name="primaryCategory" placeholder="beauty" required />
@@ -488,12 +537,12 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 및 분석 중..." : "Creator Agent에게 분석 맡기기"}
+              {status === "saving" ? "저장 중..." : "Creator Agent profile 저장"}
             </button>
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Public profile" title={analyzed ? "분석 결과" : "분석 대기"} />
+          <SectionTitle eyebrow="Public profile" title={analyzed ? "저장된 demo profile" : "입력 대기"} />
           {analyzed ? (
             <div className="space-y-3">
               <InfoBox label="Creator summary" value={summary} />
@@ -501,7 +550,7 @@ export function CreatorOnboardingScreen({ session }: { session: RoleSession }) {
               <InfoBox label="Past performance" value="스토리 링크 전환과 저장률이 높은 편" />
             </div>
           ) : (
-            <EmptyState text="SNS URL을 입력하면 공개 프로필 draft를 생성합니다." />
+            <EmptyState text="현재는 실제 SNS ingestion 없이 URL reference와 입력값으로 profile draft를 저장합니다." />
           )}
           {analyzed && (
             <div className="mt-6">
@@ -549,7 +598,7 @@ export function CreatorCriteriaScreen({ criteria }: { criteria: CreatorCriteria 
             <ChoiceGroup
               name="blockedDomains"
               label="받지 않을 주제"
-              options={["담배", "도박", "고위험 금융", "의료 효능 과장", "정치 캠페인", "성인 콘텐츠", "환경오염 논란"]}
+              options={["담배", "도박", "고위험 금융", "의료 효능 과장", "정치 광고", "성인 콘텐츠", "환경오염 논란"]}
               defaultSelected={criteria.blockedDomains}
             />
             <ChoiceGroup
@@ -608,9 +657,18 @@ export function CreatorResultScreen({ deals }: { deals: CreatorDeal[] }) {
           </div>
         </Panel>
         <div className="grid gap-4">
-          {deals.map((deal) => (
-            <CreatorDealCard key={deal.brandId} deal={deal} />
-          ))}
+          {deals.length ? (
+            deals.map((deal) => (
+              <CreatorDealCard key={deal.brandId} deal={deal} />
+            ))
+          ) : (
+            <Panel>
+              <SectionTitle eyebrow="Empty" title="아직 처리된 제안이 없습니다" />
+              <p className="text-muted">
+                Brand Agent가 Promotion을 만들고 Run Agent를 실행하면 Creator Agent가 처리한 결과가 여기에 표시됩니다.
+              </p>
+            </Panel>
+          )}
         </div>
       </div>
     </WorkspaceShell>
@@ -840,15 +898,43 @@ function AgentRelayScene() {
   );
 }
 
-function AgentNegotiationPanel({ view, nextHref }: { view: NegotiationView; nextHref: string }) {
-  const [revealed, setRevealed] = useState(false);
-  const progress = revealed ? 100 : view.progressPercent;
+function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; promotionId: string }) {
+  const router = useRouter();
+  const [status, setStatus] = useState<"idle" | "running">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const progress = status === "running" ? 48 : view.progressPercent;
+
+  async function runAgent() {
+    setStatus("running");
+    setError(null);
+    try {
+      const flow = await new ProductApiClient().runAgentForPromotion(promotionId);
+      const agreementId = flow.agreement?.agreementId;
+      const params = new URLSearchParams({
+        promotionId,
+        negotiationId: flow.negotiation.negotiationId,
+      });
+      if (agreementId) {
+        params.set("agreementId", agreementId);
+      }
+      router.push(`/brand/result?${params.toString()}`);
+      router.refresh();
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <Panel>
       <AgentProgressCard
         role={view.role}
-        title={revealed ? "협상이 완료됐습니다" : "진행중이에요!"}
-        body={`${view.counterpartyAgentLabel}와 A2A Task로 조건을 맞추고 있습니다.`}
+        title={view.agreementId ? "협상이 완료됐습니다" : status === "running" ? "진행중이에요!" : "Agent 실행 대기"}
+        body={
+          view.agreementId
+            ? `${view.counterpartyAgentLabel}와 A2A Task 결과를 불러왔습니다.`
+            : "Run Agent를 누르면 Product API가 matchRun과 negotiation resource를 생성합니다."
+        }
         progress={progress}
       />
       <div className="mt-6">
@@ -856,21 +942,23 @@ function AgentNegotiationPanel({ view, nextHref }: { view: NegotiationView; next
       </div>
       <div className="mt-5 grid gap-3">
         {view.tasks.map((task) => (
-          <TaskRow key={task.id} task={task} forceDone={revealed} />
+          <TaskRow key={task.id} task={task} forceDone={Boolean(view.agreementId)} />
         ))}
       </div>
       <PrivacyNote>
         사용자에게는 진행 상태와 최종 결과만 보여줍니다. private policy, 상대의 hard cap, 내부 scoring, A2A 메시지 전문은 숨깁니다.
       </PrivacyNote>
+      {error && <FormError message={error} />}
       <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={() => setRevealed(true)}
+          onClick={runAgent}
+          disabled={status === "running" || Boolean(view.agreementId)}
           className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
         >
-          협상 완료 상태 보기
+          {status === "running" ? "Agent 실행 중..." : view.agreementId ? "Agreement 생성됨" : "Run Agent"}
         </button>
-        {revealed && <PrimaryLink href={nextHref}>결과 확인</PrimaryLink>}
+        {view.agreementId && <PrimaryLink href={`/brand/result?promotionId=${promotionId}&negotiationId=${view.negotiationId}&agreementId=${view.agreementId}`}>결과 확인</PrimaryLink>}
       </div>
     </Panel>
   );
@@ -938,7 +1026,19 @@ function MilestonePanel({ milestones, mode }: { milestones: Milestone[]; mode: "
   );
 }
 
-function CandidateCard({ name, score, reason, selected = false }: { name: string; score: string; reason: string; selected?: boolean }) {
+function CandidateCard({
+  name,
+  score,
+  reason,
+  selected = false,
+  eligible = true,
+}: {
+  name: string;
+  score: string;
+  reason: string;
+  selected?: boolean;
+  eligible?: boolean;
+}) {
   return (
     <div className={`rounded border p-4 ${selected ? "border-positive bg-positive/10" : "border-border-subtle bg-background"}`}>
       <div className="flex items-center justify-between gap-3">
@@ -946,13 +1046,14 @@ function CandidateCard({ name, score, reason, selected = false }: { name: string
         <span className="font-mono text-sm">score {score}</span>
       </div>
       <p className="mt-2 text-sm text-muted">{reason}</p>
+      {!eligible && <div className="mt-3 text-sm font-semibold text-negative">Ineligible</div>}
       {selected && <div className="mt-3 text-sm font-semibold text-positive">A2A negotiation opened</div>}
     </div>
   );
 }
 
 function CreatorDealCard({ deal }: { deal: CreatorDeal }) {
-  const href = `/creator/brands/${deal.brandId}`;
+  const href = deal.agreementId ? `/creator/agreements/${deal.agreementId}` : `/creator/result`;
   return (
     <Link href={href} className="sketch ink block border border-border-subtle bg-surface p-5 hover:bg-surface-raised">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -965,6 +1066,58 @@ function CreatorDealCard({ deal }: { deal: CreatorDeal }) {
       </div>
       <p className="mt-4 text-sm text-muted">{deal.visibleResult}</p>
     </Link>
+  );
+}
+
+function SettlementActionPanel({
+  agreementId,
+  creatorAgentId,
+  milestoneId,
+  alreadyReleased,
+}: {
+  agreementId: string;
+  creatorAgentId: string;
+  milestoneId?: string;
+  alreadyReleased: boolean;
+}) {
+  const router = useRouter();
+  const [status, setStatus] = useState<"idle" | "running">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function runSettlement() {
+    if (!milestoneId) return;
+    setStatus("running");
+    setError(null);
+    try {
+      const client = new ProductApiClient();
+      const locked = await client.lockEscrow(agreementId);
+      const evidence = await client.submitEvidence({ agreementId, creatorAgentId }, milestoneId);
+      await client.verifyEvidence(evidence.evidenceId);
+      await client.releaseMilestone(locked.escrow.escrowId, milestoneId);
+      router.refresh();
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <Panel>
+      <SectionTitle eyebrow="Action" title="Escrow 실행" />
+      <p className="text-sm text-muted">
+        현재는 실제 on-chain signing 전 단계라 Product API의 idempotent SIMULATED receipt를 생성합니다.
+        페이지 진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
+      </p>
+      {error && <FormError message={error} />}
+      <button
+        type="button"
+        onClick={runSettlement}
+        disabled={status === "running" || alreadyReleased || !milestoneId}
+        className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+      >
+        {alreadyReleased ? "Release 완료" : status === "running" ? "Escrow 처리 중..." : "Fund + verify + release"}
+      </button>
+    </Panel>
   );
 }
 
@@ -1024,7 +1177,8 @@ function ChoiceGroup({
   options: string[];
   defaultSelected?: string[];
 }) {
-  const [selected, setSelected] = useState(defaultSelected);
+  const initialSelected = Array.isArray(defaultSelected) ? defaultSelected : [];
+  const [selected, setSelected] = useState(initialSelected);
   const selectedText = useMemo(() => selected.join(", "), [selected]);
   return (
     <div className="mt-5">

@@ -1,75 +1,111 @@
-# KNOT Product Flow and Feature Summary
+# KNOT 제품 플로우 및 기능 정리
 
-**Status date:** 2026-07-26  
-**Scope:** Current KNOT v1 product MVP baseline  
-**Branch context:** `integration/frontend-backend-api`
+**기준일:** 2026-07-26  
+**범위:** 현재 KNOT v1 Product MVP 기준  
+**작업 브랜치:** `integration/frontend-backend-api`
 
-This document summarizes the product flow and implemented capabilities that are
-currently available in the repository. It reflects the latest product reset:
-KNOT is focused on a simple Brand/Creator workflow where agents handle matching,
-negotiation, agreement creation, evidence verification, and settlement-state
-presentation. The Society Map is out of MVP scope.
+이 문서는 현재 저장소에 구현되어 있고 로컬/Cloud Run에서 확인 가능한
+프로덕트 플로우와 기능을 정리한다. 현재 MVP는 복잡한 전체 문서팩 구조가
+아니라, 브랜드와 크리에이터가 각자의 에이전트를 통해 제안, 매칭, 협상,
+합의, 마일스톤/정산 상태를 확인하는 간단한 흐름에 집중한다.
 
-## 1. Product Position
+Society Map은 MVP 범위에서 제외했다.
 
-KNOT is a Brand x Creator agentic Promotion platform.
+## 1. 제품 한 줄 설명
 
-The user-facing promise is:
+KNOT은 브랜드와 크리에이터가 직접 DM, 엑셀, 계좌이체로 협업을 관리하지
+않고, 각자의 에이전트가 조건을 확인하고 협상한 뒤 합의와 정산 상태까지
+이어주는 Agentic Promotion 플랫폼이다.
 
-> 크리에이터랑 브랜드, 에이전트끼리 만나서 매듭 짓는 곳
+루트 페이지에서 유지해야 하는 핵심 문구:
 
-The root landing explains the existing workflow problem:
+```text
+크리에이터랑 브랜드, 에이전트끼리 만나서 매듭 짓는 곳
 
-- Brands send many DMs and receive few replies.
-- Creators miss proposals and negotiate rates manually.
-- Settlement often ends in spreadsheets and bank transfers.
+당신이 자는 동안, 당신의 에이전트가 딜을 협상하고,
+계약하고, 정산합니다.
+```
 
-KNOT replaces that fragmented workflow with role-specific agents that can
-match, negotiate, produce a structured agreement, and drive settlement state
-within deterministic policy limits.
+루트 페이지에 포함된 문제 정의:
 
-## 2. Current Deployment Baseline
+```text
+브랜드는 DM을 50개 보내고, 답장은 3개 받아요.
+크리에이터는 제안을 놓치고, 단가는 눈치게임,
+정산은 엑셀과 계좌이체로 끝나죠.
+```
 
-The current off-chain runtime is configured for Google Cloud.
+## 2. 현재 전체 흐름
 
-| Service | Current state |
+현재 제품은 세 가지 큰 흐름으로 나뉜다.
+
+```text
+Public / Entry
+  -> 로그인 또는 회원가입
+
+Brand
+  -> 브랜드 온보딩
+  -> 제품/Promotion 생성
+  -> 크리에이터 매칭 및 에이전트 협상
+  -> 협상 결과
+  -> 정산 상태
+
+Creator
+  -> 크리에이터 온보딩
+  -> 협상 기준 설정
+  -> 에이전트가 처리한 제안 결과
+  -> 브랜드별 상세 페이지
+  -> 마일스톤 및 정산 상태
+```
+
+핵심 UX 원칙:
+
+- 사용자가 모든 제안과 counter를 직접 작성하는 구조가 아니다.
+- 브랜드 에이전트와 크리에이터 에이전트가 A2A 구조로 협상하는 것처럼
+  보이도록 설계되어 있다.
+- 사용자는 협상 진행 상태와 결과를 볼 수 있다.
+- 상대방에게 공개되면 안 되는 내부 기준은 화면에 노출하지 않는다.
+- 최종 결과에는 공개 가능한 합의 조건과 `termsHash`를 보여준다.
+
+## 3. 현재 배포 및 실행 상태
+
+현재 오프체인 런타임은 Google Cloud 기준으로 구성되어 있다.
+
+| 영역 | 현재 상태 |
 |---|---|
-| Frontend | Next.js + TypeScript app deployed to Cloud Run |
-| Product API | FastAPI service deployed to Cloud Run |
-| Database | Firestore Native database created and seeded in `knot-dev-503505` |
-| Web3 payment | Excluded from this frontend/backend completion pass; Product API receipts remain `SIMULATED` |
-| Authentication | Local-demo account bootstrap through Product API; Firebase Auth is not production-wired yet |
+| Frontend | Next.js + TypeScript, Cloud Run 배포 가능 |
+| Product API | Python FastAPI, Cloud Run 배포 가능 |
+| Database | Google Cloud Firestore Native 모드 |
+| Auth | 현재는 `local-demo` 계정 bootstrap. Firebase Auth는 아직 미연동 |
+| SNS 분석 | 실제 SNS 분석 미연동. 현재는 사용자가 입력한 SNS URL 기반으로 프로필/요약을 생성하는 수준 |
+| PDF/문서 분석 | 실제 PDF 업로드/분석 미연동. 현재는 제품 문서 입력 영역만 존재 |
+| Web3 결제 | 이번 프론트/백엔드 연동 범위에서는 제외. Product API 영수증은 `SIMULATED` |
 
-Current Cloud Run URLs:
+현재 Cloud Run URL:
 
 ```text
 Frontend: https://knot-web-260001601654.us-central1.run.app
 Backend:  https://knot-api-260001601654.us-central1.run.app
 ```
 
-The backend readiness endpoint is:
+로컬 테스트 기준:
+
+```text
+Frontend: http://localhost:3000
+Backend:  http://127.0.0.1:18080
+```
+
+백엔드 readiness 확인:
 
 ```text
 GET /readyz
 ```
 
-`healthz` and `readyz` are operational health-check names. The trailing `z` is
-a common convention to avoid colliding with business routes named `health` or
-`ready`.
+`healthz`, `readyz`의 `z`는 운영용 health check에서 자주 쓰는 관례다.
+비즈니스 API가 아니라 서비스 상태 확인용 엔드포인트다.
 
-## 3. Navigation Model
+## 4. 라우트 구조
 
-The frontend no longer presents the app as a single numbered stepper.
-
-After onboarding, a Brand can create many Promotions and a Creator can receive
-many agent-negotiated offers. For that reason:
-
-- The global header only carries broad navigation.
-- Page-specific titles live at the top of each page.
-- `My` and `Settings` are account actions, not steps in the transaction flow.
-- Role workspaces are separate pages, not an internal sidebar funnel.
-
-Core routes:
+현재 주요 라우트는 아래와 같다.
 
 ```text
 /
@@ -89,67 +125,87 @@ Core routes:
 /creator/onboarding
 /creator/criteria
 /creator/result
-/creator/brands/glow-bar
+/creator/agreements/{agreementId}
 /creator/me
 /creator/settings
 
 /dev/admin
 ```
 
-Compatibility redirects:
+호환용 redirect:
 
 ```text
 /brand/matching -> /brand/negotiate
 /creator/negotiate -> /creator/result
 /creator/offers -> /creator/result
-/creator/milestones -> /creator/brands/glow-bar
+/creator/milestones -> /creator/result
 ```
 
-## 4. Public Entry Flow
+현재 화면 구조는 numbered stepper가 아니다. 온보딩 이후에는 브랜드가 여러
+Promotion을 만들 수 있고, 크리에이터도 여러 브랜드 제안을 받을 수 있기
+때문이다.
+
+현재 네비게이션 원칙:
+
+- 헤더에는 큰 범주의 이동만 둔다.
+- 각 페이지의 제목은 페이지 상단에 둔다.
+- `My`, `Settings`는 거래 플로우의 단계가 아니라 계정 관련 페이지다.
+- 내부 사이드바나 01/02/03 단계처럼 보이는 구조는 제거했다.
+
+## 5. Public / Entry 플로우
 
 ### `/`
 
-Purpose: public service introduction and demo entry.
+목적:
 
-Current content includes the long-form landing copy:
+- KNOT 서비스 소개
+- 브랜드/크리에이터 데모 진입
+- 로그인/회원가입 진입
 
-- "브랜드는 DM을 50개 보내고, 답장은 3개 받아요."
-- "크리에이터는 제안을 놓치고, 단가는 눈치게임,"
-- "정산은 엑셀과 계좌이체로 끝나죠."
-- "당신이 자는 동안, 당신의 에이전트가 딜을 협상하고, 계약하고, 정산합니다."
+주요 CTA:
 
-Primary actions:
+- Brand로 시작
+- Creator로 시작
+- Login
+- Sign up
 
-- Try Brand flow
-- Try Creator flow
-- Login / Signup
+루트 페이지는 waitlist만 남긴 페이지가 아니라, 초기에 있었던 긴 설명형
+랜딩 페이지를 유지하는 방향이다.
 
-## 5. Account Flow
+## 6. 로그인 / 회원가입 플로우
 
 ### `/login`
 
-Purpose: enter the product as Brand or Creator.
+목적:
 
-Implemented behavior:
+- 기존 사용자가 브랜드 또는 크리에이터 역할로 진입
 
-- User enters email, display name, and role.
-- Frontend calls `POST /api/v1/users:bootstrap` through the Next proxy.
-- The Product API creates or updates `users/{userId}`.
-- The frontend stores a local role session in browser storage and routes the
-  user to the selected role onboarding page.
+현재 동작:
 
-Current limitation:
+- 이메일, 표시 이름, 역할을 입력한다.
+- 프론트는 Next proxy를 통해 Product API에 요청한다.
+- API는 `users/{userId}` 문서를 생성하거나 갱신한다.
+- 브라우저에는 local role session만 저장한다.
+- 선택한 역할에 따라 온보딩 페이지로 이동한다.
 
-- This is `local-demo` auth state. Firebase Auth/session enforcement is still
-  pending.
-- Passwords, tokens, private keys, seed phrases, and payment authority are not
-  stored.
+API:
+
+```text
+POST /api/v1/users:bootstrap
+```
+
+현재 제한:
+
+- 실제 Firebase Auth 로그인은 아직 아니다.
+- 비밀번호, 토큰, private key, seed phrase, 결제 권한은 저장하지 않는다.
 
 ### `/signup`
 
-Purpose: choose account type before profile creation.
+목적:
 
-Flow:
+- 신규 사용자가 브랜드/크리에이터 중 하나를 선택
+
+흐름:
 
 ```text
 /signup
@@ -161,23 +217,23 @@ Flow:
   -> /creator/onboarding
 ```
 
-Signup creates the account context first, then onboarding creates the Brand or
-Creator profile and agent references.
+회원가입은 계정 context를 만든 뒤, 역할별 온보딩을 통해 실제 브랜드 또는
+크리에이터 프로필을 생성하는 구조다.
 
-## 6. Brand Flow
+## 7. 브랜드 유저 플로우
 
-The Brand flow is:
+브랜드 기준 전체 흐름:
 
 ```text
-Login / Signup
-  -> Brand onboarding
-  -> Product / Promotion creation
-  -> Agent matching and A2A negotiation
-  -> Negotiation result
-  -> Settlement page
+로그인 / 회원가입
+  -> 브랜드 온보딩
+  -> 제품/Promotion 생성
+  -> 크리에이터 매칭 및 에이전트 협상
+  -> 협상 결과
+  -> 정산 상태
 ```
 
-### 6.1 Brand onboarding
+### 7.1 브랜드 온보딩
 
 Route:
 
@@ -185,9 +241,12 @@ Route:
 /brand/onboarding
 ```
 
-Purpose: create the Brand profile and Brand Agent context.
+목적:
 
-Current inputs:
+- 브랜드 기본 정보 생성
+- Brand Agent context 생성
+
+현재 입력값:
 
 - Brand website URL
 - Brand name
@@ -195,21 +254,22 @@ Current inputs:
 - Target audience
 - Restricted claims
 
-Implemented API behavior:
+API:
 
 ```text
 POST /api/v1/brands:onboard
 ```
 
-The backend writes:
+저장되는 데이터:
 
 - `brands/{brandId}`
 - `agents/{brandAgentId}`
-- role references back to `users/{userId}` when available
+- `users/{userId}`의 brand role context
 
-The UI presents a generated Brand summary after submission.
+현재는 website URL을 넣으면 실제 웹사이트를 크롤링하거나 LLM으로 분석하는
+것은 아니다. 입력값 기반으로 브랜드 요약과 에이전트 context를 생성한다.
 
-### 6.2 Product / Promotion creation
+### 7.2 제품 / Promotion 생성
 
 Route:
 
@@ -217,34 +277,47 @@ Route:
 /brand/products/new
 ```
 
-Purpose: define the product and public Promotion terms that the Brand Agent can
-use.
+목적:
 
-Current inputs:
+- 협찬을 구할 제품과 Promotion 조건을 생성
+- Brand Agent가 협상에 사용할 공개 가능한 조건을 정의
 
-- Product document hint, currently a placeholder for future PDF/file upload
+현재 입력값:
+
+- Product document hint
 - Promotion title
 - Category
 - Target audience
 - Budget
 - Maximum offer per creator
 - Deliverables
-- Excluded conditions / prohibited claims
+- 제외 조건 / prohibited claims
 
-Implemented API behavior:
+API:
 
 ```text
 POST /api/v1/promotions
 ```
 
-The backend persists a `promotions/{promotionId}` document. Newly created
-Promotions are sorted newest-first by `GET /api/v1/promotions`, so API mode can
-pick up the latest Promotion.
+저장되는 데이터:
 
-Private Brand policy details such as hard caps and internal approval thresholds
-are not exposed to Creator views.
+- `promotions/{promotionId}`
 
-### 6.3 Creator matching and negotiation
+현재 상태:
+
+- PDF/파일 업로드 UI는 실제 업로드/분석까지 연결되어 있지 않다.
+- Product document 입력 영역은 향후 PDF/제품 문서 분석을 붙이기 위한
+  자리다.
+- 새로 만든 Promotion은 API mode에서 최신 Promotion으로 우선 조회된다.
+
+상대방에게 숨겨야 하는 정보:
+
+- 브랜드 내부 hard maximum
+- 내부 승인 기준
+- 내부 평가 점수
+- 결제 권한/지갑 관련 민감 정보
+
+### 7.3 크리에이터 매칭 및 협상
 
 Route:
 
@@ -252,10 +325,13 @@ Route:
 /brand/negotiate
 ```
 
-Purpose: show the Brand Agent doing the work instead of making the human run
-each step manually.
+목적:
 
-API-mode flow:
+- Brand Agent가 크리에이터 후보를 찾고 협상을 진행하는 상태를 보여준다.
+- 사용자가 직접 하나하나 메시지를 보내는 느낌이 아니라, 에이전트가
+  처리 중이라는 UX를 제공한다.
+
+API mode에서 호출되는 흐름:
 
 ```text
 GET  /api/v1/promotions
@@ -265,22 +341,22 @@ POST /api/v1/match-runs/{matchRunId}:start-negotiation
 GET  /api/v1/promotions/{promotionId}/timeline
 ```
 
-What the Brand sees:
+브랜드 화면에 보이는 정보:
 
-- Matching is in progress.
-- Candidate ranking has completed.
-- A2A offer/counter/accept work is in progress.
-- Agreement Artifact is created when negotiation succeeds.
-- Sanitized progress and final public terms.
+- 크리에이터 후보 ranking 완료
+- A2A offer/counter/accept 진행 상태
+- 에이전트가 협상 중이라는 애니메이션/로딩 상태
+- 공개 가능한 합의 조건
+- Agreement Artifact 생성 상태
 
-What the Brand does not see:
+브랜드 화면에 보이지 않는 정보:
 
-- Creator private minimum amount.
-- Creator blocked domains.
-- Creator private pricing preferences.
-- Full raw A2A payloads unless surfaced through dev tools.
+- 크리에이터의 private minimum
+- 크리에이터가 피하고 싶은 도메인
+- 크리에이터의 private pricing preference
+- 전체 raw A2A payload
 
-### 6.4 Brand result
+### 7.4 브랜드 협상 결과
 
 Route:
 
@@ -288,22 +364,24 @@ Route:
 /brand/result
 ```
 
-Purpose: show the negotiation result after agents finish.
+목적:
 
-Displayed result:
+- 에이전트 협상이 끝난 뒤 결과를 확인한다.
 
-- Counterparty Creator
-- Public negotiated terms
-- Deliverables
-- Deadline
-- Usage rights
+표시 정보:
+
+- 협상 상대 크리에이터
+- 합의된 금액
+- deliverables
+- usage rights
+- deadline
 - `termsHash`
-- A2A Task completion status
+- A2A Task 완료 상태
 
-The page frames the result as an Agreement Artifact produced by agent
-negotiation, not as a manual chat transcript.
+이 화면은 사람이 직접 작성한 계약서가 아니라, 에이전트 협상 결과로 생성된
+Agreement Artifact를 보여주는 역할이다.
 
-### 6.5 Brand settlement
+### 7.5 브랜드 정산
 
 Route:
 
@@ -311,9 +389,11 @@ Route:
 /brand/settlement
 ```
 
-Purpose: show compensation settlement state for the agreed Promotion.
+목적:
 
-API-mode flow:
+- 합의된 Promotion의 evidence, escrow, release 상태를 확인한다.
+
+API mode에서 호출되는 흐름:
 
 ```text
 POST /api/v1/agreements/{agreementId}/evidence
@@ -323,38 +403,42 @@ POST /api/v1/escrows/{escrowId}/milestones/{milestoneId}:release
 GET  /api/v1/promotions/{promotionId}/timeline
 ```
 
-Displayed state:
+표시 정보:
 
-- Escrow amount
-- Released amount
-- Pending amount
-- Milestone list
-- Evidence verification status
-- Receipt state
+- escrow amount
+- released amount
+- pending amount
+- milestone list
+- evidence verification status
+- receipt status
 
-Important separation:
-
-- `Agent API Spend` is the agent's external API/x402 cost.
-- `Deal Escrow` is the Creator compensation locked and released for a
-  Promotion.
-
-The current settlement UI uses Product API receipts, but receipts are still
-`SIMULATED` until real web3 signing is wired into the API/gateway path.
-
-## 7. Creator Flow
-
-The Creator flow is:
+중요한 분리:
 
 ```text
-Login / Signup
-  -> Creator onboarding
-  -> Negotiation criteria
-  -> Agent-negotiated offer results
-  -> Brand deal detail
-  -> Milestones and settlement status
+Agent API Spend
+  = 에이전트가 외부 API/pay.sh/x402 호출에 쓰는 비용
+
+Deal Escrow
+  = 브랜드가 크리에이터 보수로 잠그고 release하는 금액
 ```
 
-### 7.1 Creator onboarding
+현재 이 화면의 escrow/release receipt는 API-backed이지만 실제 온체인
+서명이 아니라 `SIMULATED` 상태다.
+
+## 8. 크리에이터 유저 플로우
+
+크리에이터 기준 전체 흐름:
+
+```text
+로그인 / 회원가입
+  -> 크리에이터 온보딩
+  -> 협상 기준 설정
+  -> 에이전트가 처리한 제안 결과
+  -> 브랜드별 상세 페이지
+  -> 마일스톤 및 정산 상태
+```
+
+### 8.1 크리에이터 온보딩
 
 Route:
 
@@ -362,31 +446,39 @@ Route:
 /creator/onboarding
 ```
 
-Purpose: create the Creator profile and Creator Agent context from a public SNS
-URL.
+목적:
 
-Current inputs:
+- 크리에이터 기본 프로필 생성
+- Creator Agent context 생성
+
+현재 입력값:
 
 - Creator name
 - Instagram / TikTok / YouTube URL
 - Primary category
 
-Implemented API behavior:
+API:
 
 ```text
 POST /api/v1/creators:onboard
 ```
 
-The backend writes:
+저장되는 데이터:
 
 - `creatorProfiles/{creatorId}`
 - `agents/{creatorAgentId}`
-- initial `agentPolicies/{creatorAgentId}`
-- role references back to `users/{userId}` when available
+- `agentPolicies/{creatorAgentId}` 초기값
+- `users/{userId}`의 creator role context
 
-The UI presents a generated Creator summary after submission.
+현재 SNS 분석 상태:
 
-### 7.2 Negotiation criteria
+- 실제 Instagram/TikTok/YouTube 데이터를 가져와 분석하지 않는다.
+- SNS URL 유효성 확인과 입력값 기반 프로필 생성까지만 되어 있다.
+- 화면의 분석/요약은 현재 demo-level summary다.
+- 실제 SNS ingestion, engagement 분석, 카테고리 추정, rate band 추천은
+  후속 작업이다.
+
+### 8.2 협상 기준 설정
 
 Route:
 
@@ -394,9 +486,11 @@ Route:
 /creator/criteria
 ```
 
-Purpose: define private criteria used by the Creator Agent.
+목적:
 
-Current inputs:
+- Creator Agent가 제안을 판단할 때 사용할 private 기준을 설정한다.
+
+현재 입력값:
 
 - Minimum amount in USDC
 - Blocked domains
@@ -404,7 +498,7 @@ Current inputs:
 - Usage rights preference
 - Notes
 
-Example blocked domains:
+피하고 싶은 도메인 예시:
 
 - 담배
 - 도박
@@ -412,24 +506,31 @@ Example blocked domains:
 - 의료 효능 과장
 - 정치 광고
 
-Example preferred content:
+선호 콘텐츠 예시:
 
 - Instagram Reels
 - 제품 리뷰
 - 스토리 링크
 - UGC 컷다운
 
-Implemented API behavior:
+API:
 
 ```text
 POST /api/v1/creators/{creatorId}/criteria
 ```
 
-The backend updates the Creator Agent policy. These fields are private to the
-Creator side. Brand screens only see sanitized outcomes such as accepted,
-countered, rejected, or review-needed.
+저장되는 데이터:
 
-### 7.3 Creator result
+- `agentPolicies/{creatorAgentId}`의 creator policy 영역
+
+중요:
+
+- minimum amount, blocked domains, private notes는 Creator Agent 내부 판단용이다.
+- 브랜드 화면에는 이 값들이 직접 노출되지 않는다.
+- 브랜드는 `수락됨`, `counter됨`, `거절됨`, `검토 필요` 같은 결과와 공개 가능한
+  이유만 볼 수 있다.
+
+### 8.3 크리에이터 결과 페이지
 
 Route:
 
@@ -437,71 +538,75 @@ Route:
 /creator/result
 ```
 
-Purpose: show all Brand proposals that the Creator Agent has processed.
+목적:
 
-Displayed state:
+- Creator Agent가 여러 브랜드 제안을 어떻게 처리했는지 보여준다.
 
-- Brand name
-- Product title
-- Negotiation status
-- Public result summary
-- Amount if agreed
-- `termsHash` if agreed
+표시 정보:
 
-The page intentionally does not expose:
+- 브랜드명
+- 제품명
+- 협상 상태
+- 공개 가능한 결과 요약
+- 합의 금액
+- `termsHash`
 
-- Brand hard maximum price.
-- Brand internal candidate score.
-- Full A2A messages.
-- Internal policy snapshots.
+숨기는 정보:
 
-### 7.4 Creator brand detail
+- 브랜드의 hard maximum
+- 브랜드 내부 candidate score
+- 전체 A2A 메시지 전문
+- 내부 policy snapshot
+
+### 8.4 Agreement 상세 / 마일스톤
 
 Route:
 
 ```text
-/creator/brands/glow-bar
+/creator/agreements/{agreementId}
 ```
 
-Purpose: show one agreed Brand deal in detail.
+목적:
 
-Displayed state for an agreed deal:
+- 특정 Agreement의 합의 결과, 수행해야 하는 작업, 정산 상태를 확인한다.
+
+합의된 deal에서 표시되는 정보:
 
 - Agreement terms
 - Milestones
-- Creator actions per milestone
-- Milestone progress
+- Creator action per milestone
+- Progress percent
 - Escrow status
-- Released and pending amounts
+- Released amount
+- Pending amount
 
-For non-agreed deals, the Creator only sees sanitized outcome text and no
-milestone/settlement workflow.
+합의되지 않은 deal에서는:
 
-## 8. Agent and A2A UX
+- 공개 가능한 결과 요약만 보여준다.
+- 마일스톤/정산 플로우는 노출하지 않는다.
 
-The user experience is designed to make agent autonomy visible without leaking
-private negotiation data.
+## 9. Agent / A2A UX 설계
 
-Current UX rules:
+현재 UX는 “사람이 모든 단계를 직접 수행하는 화면”이 아니라 “에이전트가
+협상 중이고 사용자는 진행 상황과 결과만 확인하는 화면”을 목표로 한다.
 
-- The human does not manually send every offer/counter.
-- The UI shows animated "진행중이에요!" agent work states.
-- The UI displays sanitized task progress rather than full raw reasoning.
-- Final results show public terms and `termsHash`.
-- Private limits, blocked domains, hard caps, scoring details, and policy
-  internals stay hidden from the counterparty.
+UX 원칙:
 
-Current technical boundary:
+- 사용자는 제안/반박/수락 메시지를 직접 하나씩 보내지 않는다.
+- 화면에는 `진행중이에요!` 같은 에이전트 진행 상태와 애니메이션을 보여준다.
+- 내부 판단 전체가 아니라 sanitized progress를 보여준다.
+- 최종 결과에는 공개 가능한 terms와 `termsHash`를 보여준다.
+- 양측 private policy는 상대방에게 숨긴다.
 
-- Browser code does not construct official A2A `Message`, `Task`, or
-  `Artifact` payloads.
-- Frontend consumes Product API projections.
-- Backend persists Negotiation messages/events, A2A Task, A2A Artifact, and
-  Agreement documents.
-- External service-to-service A2A orchestration remains a later integration
-  step, but persisted shapes are kept aligned with `docs/09_A2A_PROTOCOL_v1.md`.
+기술적 경계:
 
-## 9. Developer Admin
+- 브라우저는 official A2A `Message`, `Task`, `Artifact` payload를 직접 만들지 않는다.
+- 프론트는 Product API가 만든 projection을 소비한다.
+- 백엔드는 Negotiation messages/events, A2A Task, A2A Artifact, Agreement를
+  repository boundary를 통해 저장한다.
+- 실제 외부 Creator A2A 서비스와의 service-to-service orchestration은 후속 작업이다.
+
+## 10. Dev 관리자 페이지
 
 Route:
 
@@ -509,59 +614,60 @@ Route:
 /dev/admin
 ```
 
-Purpose: inspect whether the product is running in mock mode or API mode and
-show integration status.
+목적:
 
-Displayed checks:
+- 현재 앱이 mock mode인지 API mode인지 확인
+- Product API 연결 상태 확인
+- 주요 integration boundary 확인
+
+표시 항목:
 
 - Auth/session projection
 - Product API repository boundary
 - A2A projection boundary
-- Deterministic policy checks
-- Escrow receipt state
+- deterministic policy checks
+- escrow receipt state
 
-In API mode, the page checks Product API readiness through `/readyz`.
+API mode에서는 `/readyz`로 Product API readiness를 확인한다.
 
-## 10. Frontend Data Modes
+## 11. 데이터 모드
 
-The frontend supports two data modes behind the same page components.
+프론트는 같은 페이지 컴포넌트에서 mock mode와 API mode를 모두 지원한다.
 
 ### Mock mode
-
-Default mode:
 
 ```text
 NEXT_PUBLIC_KNOT_DATA_MODE=mock
 ```
 
-Purpose:
+목적:
 
-- Keep the UI runnable without backend services.
-- Preserve deterministic fixture data for design and demo fallback.
+- 백엔드 없이 UI 확인 가능
+- deterministic fixture 기반 데모 fallback 유지
 
 ### API mode
-
-API mode:
 
 ```text
 NEXT_PUBLIC_KNOT_DATA_MODE=api
 KNOT_API_BASE_URL=<Product API URL>
 ```
 
-Purpose:
+목적:
 
-- Use the same screens with Product API-backed data.
-- Route browser calls through Next.js `/api/v1/[...path]`.
-- Keep `KNOT_API_BASE_URL` server-side.
+- 같은 화면을 실제 Product API 데이터로 동작시킨다.
+- 브라우저 요청은 Next proxy `/api/v1/[...path]`를 통해 백엔드로 전달한다.
+- `KNOT_API_BASE_URL`은 서버 환경변수로 유지한다.
 
-The current Cloud Run frontend is configured to use API mode against the
-deployed Product API.
+현재 로컬/Cloud Run 테스트는 API mode로 확인했다.
 
-## 11. Product API Feature Coverage
+현재 기본값은 API mode다. 백엔드 없이 fixture만 확인할 때만
+`NEXT_PUBLIC_KNOT_DATA_MODE=mock`을 명시한다.
 
-Implemented Product API groups:
+## 12. Product API 기능 목록
 
-| Area | Endpoints |
+현재 구현된 API:
+
+| 영역 | Endpoint |
 |---|---|
 | API metadata | `GET /api/v1`, `GET /readyz`, `GET /version` |
 | Account | `POST /api/v1/users:bootstrap`, `GET /api/v1/users/{userId}` |
@@ -570,15 +676,15 @@ Implemented Product API groups:
 | Creator criteria | `POST /api/v1/creators/{creatorId}/criteria` |
 | Promotion | `POST /api/v1/promotions`, `GET /api/v1/promotions`, `GET /api/v1/promotions/{promotionId}`, `POST /api/v1/promotions/{promotionId}:activate` |
 | Matching | `POST /api/v1/promotions/{promotionId}/matches:run`, `GET /api/v1/match-runs/{matchRunId}`, `GET /api/v1/match-runs/{matchRunId}/candidates`, `POST /api/v1/match-runs/{matchRunId}/candidates/{creatorAgentId}:select` |
-| Negotiation | `POST /api/v1/match-runs/{matchRunId}:start-negotiation`, `GET /api/v1/negotiations/{negotiationId}`, `GET /api/v1/negotiations/{negotiationId}/messages`, `GET /api/v1/negotiations/{negotiationId}/events`, `POST /api/v1/negotiations/{negotiationId}:cancel` |
-| Agreement | `GET /api/v1/agreements/{agreementId}` |
+| Negotiation | `POST /api/v1/match-runs/{matchRunId}:start-negotiation`, `GET /api/v1/negotiations/{negotiationId}`, `GET /api/v1/negotiations/{negotiationId}/agreement`, `GET /api/v1/negotiations/{negotiationId}/messages`, `GET /api/v1/negotiations/{negotiationId}/events`, `POST /api/v1/negotiations/{negotiationId}:cancel` |
+| Agreement | `GET /api/v1/agreements/{agreementId}`, `GET /api/v1/agreements/{agreementId}/escrow` |
 | Evidence | `POST /api/v1/agreements/{agreementId}/evidence`, `GET /api/v1/evidence/{evidenceId}`, `POST /api/v1/evidence/{evidenceId}:verify` |
-| Escrow and settlement state | `POST /api/v1/agreements/{agreementId}/escrow:lock`, `GET /api/v1/escrows/{escrowId}`, `POST /api/v1/escrows/{escrowId}/milestones/{milestoneId}:release`, `GET /api/v1/transaction-receipts/{receiptId}` |
+| Escrow / Settlement state | `POST /api/v1/agreements/{agreementId}/escrow:lock`, `GET /api/v1/escrows/{escrowId}`, `POST /api/v1/escrows/{escrowId}/milestones/{milestoneId}:release`, `GET /api/v1/transaction-receipts/{receiptId}` |
 | Timeline | `GET /api/v1/promotions/{promotionId}/timeline` |
 
-## 12. Firestore Data Model Coverage
+## 13. Firestore 데이터 모델
 
-Current collections:
+현재 사용하는 Firestore collection:
 
 ```text
 users/{userId}
@@ -607,84 +713,69 @@ auditEvents/{eventId}
 idempotencyRecords/{key}
 ```
 
-The browser does not write Firestore directly. All business writes go through
-the Product API repository boundary, which can run against memory, emulator, or
-real Firestore depending on environment settings.
+브라우저는 Firestore에 직접 쓰지 않는다. 모든 비즈니스 write는 Product API
+repository boundary를 통해 처리한다.
 
-## 13. Security and Privacy Decisions
+## 14. 현재 완료된 기능
 
-Implemented guardrails:
+현재 완료된 MVP baseline:
 
-- No private key, seed phrase, service-account JSON, API token, or secret is
-  stored in source, fixtures, docs, or frontend public env vars.
-- Local-demo auth stores account context only, not credentials.
-- Creator private criteria are not shown to Brands.
-- Brand hard caps and internal scoring details are not shown to Creators.
-- LLM output is not used to authorize payments.
-- Escrow lock/release endpoints require deterministic policy checks and
-  idempotency keys.
-- Simulated receipts are labeled by their state; the UI must not fabricate real
-  explorer links.
+- 루트 랜딩 페이지 복원
+- 로그인/회원가입 화면
+- 브랜드/크리에이터 역할 선택
+- Brand onboarding API 연동
+- Creator onboarding API 연동
+- Creator criteria API 연동
+- Brand Product/Promotion creation API 연동
+- mock/API data mode 분리
+- API mode 기본값 전환
+- 페이지 진입 시 mock success fallback/write 실행 제거
+- Next.js API proxy `/api/v1/[...path]`
+- Brand matching/negotiation/result/settlement 화면
+- Creator criteria/result/brand-detail/milestone/settlement 화면
+- Role별 `My`, `Settings` 페이지
+- Dev admin 페이지
+- Firestore Native DB setup 및 seed
+- Cloud Run 배포 baseline
+- Product API onboarding, Promotion, negotiation, evidence, escrow-state 테스트
 
-## 14. What Is Completed Now
+## 15. 아직 안 된 것
 
-Completed for the current MVP baseline:
+남은 작업:
 
-- Public root landing restored with the original long-form positioning copy.
-- Product-like login and signup surfaces.
-- Role selection before onboarding.
-- Brand onboarding to Product API.
-- Creator onboarding to Product API.
-- Creator private negotiation criteria to Product API.
-- Brand Product/Promotion creation to Product API.
-- Mock and API data modes behind one frontend data-source interface.
-- Next.js Product API proxy at `/api/v1/[...path]`.
-- Brand matching/negotiation/result/settlement screens.
-- Creator criteria/result/brand-detail/milestone/settlement screens.
-- Role `My` and `Settings` pages.
-- Dev admin integration status page.
-- Firestore Native setup and seeded demo data in `knot-dev-503505`.
-- Cloud Run deployment assets and direct demo deployment for frontend/backend.
-- Backend tests for onboarding/account, Promotion, negotiation, evidence, and
-  escrow-state APIs.
+- Firebase Auth 실제 연동
+- 로그인 세션/권한 검증
+- 실제 SNS ingestion 및 SNS 분석
+- 실제 PDF/제품 문서 업로드 및 분석
+- 외부 Creator A2A service-to-service orchestration
+- pay.sh/x402 유료 API 호출 receipt 표시
+- Product API에서 web3 gateway를 통한 실제 Solana devnet signing
+- Terraform 기반 GCP 재현 가능 배포
+- Cloud Run runtime service account 최소 권한 설정
+- frontend npm dependency audit remediation
 
-## 15. Not Completed / Remaining Risks
+## 16. 현재 데모 추천 경로
 
-Still pending:
-
-- Firebase Auth and production session enforcement.
-- Real PDF/file upload and real document analysis for Brand onboarding.
-- Live SNS ingestion and real platform profile analysis for Creator onboarding.
-- Service-to-service external A2A HTTP orchestration in the live negotiation
-  path.
-- pay.sh/x402 paid API verification beat in the Brand Agent matching flow.
-- Real web3 gateway signing from Product API; settlement receipts currently
-  remain `SIMULATED`.
-- Terraform/IaC for repeatable GCP provisioning.
-- Dedicated least-privilege Cloud Run runtime service accounts.
-- npm dependency audit remediation for frontend high-severity findings observed
-  during Cloud Build.
-
-## 16. Demo Script
-
-Recommended current demo path:
+현재 구현 기준으로 가장 안정적인 데모 경로:
 
 ```text
-1. Open /
-2. Show the KNOT problem statement and agentic settlement promise.
-3. Go to /signup and choose Brand.
-4. Complete Brand onboarding.
-5. Create a Product/Promotion.
-6. Open /brand/negotiate and show agent-led matching/A2A progress.
-7. Open /brand/result and show the public Agreement Artifact result.
-8. Open /brand/settlement and show evidence, escrow and release state.
-9. Switch to Creator flow.
-10. Complete Creator onboarding and negotiation criteria.
-11. Open /creator/result and show all agent-negotiated Brand outcomes.
-12. Open /creator/brands/glow-bar and show agreed milestones and settlement.
-13. Open /dev/admin to show API mode, repository boundary, policy checks and
-    simulated web3 receipt status.
+1. / 접속
+2. KNOT 문제 정의와 agentic settlement promise 설명
+3. /signup에서 Brand 선택
+4. Brand onboarding 완료
+5. Product/Promotion 생성
+6. /brand/negotiate에서 agent-led matching/A2A 진행 표시
+7. /brand/result에서 Agreement Artifact 결과 확인
+8. /brand/settlement에서 evidence, escrow, release 상태 확인
+9. Creator flow로 전환
+10. Creator onboarding 완료
+11. Creator criteria 설정
+12. /creator/result에서 브랜드별 협상 결과 확인
+13. /creator/agreements/{agreementId}에서 마일스톤/정산 상태 확인
+14. /dev/admin에서 API mode, repository boundary, policy check, simulated web3 상태 확인
 ```
 
-For judging, the strongest remaining proof gap is real on-chain signing from
-the Product API/gateway path and the pay.sh/x402 paid verification call.
+해커톤 평가 관점에서 아직 가장 큰 proof gap은 다음 두 가지다.
+
+- Product API/gateway 경로에서 실제 on-chain escrow lock/release signature 생성
+- Brand Agent matching 흐름 안에서 pay.sh/x402 paid verification call 표시

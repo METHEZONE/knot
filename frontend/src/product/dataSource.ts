@@ -10,13 +10,14 @@ import {
   ProductApiClient,
   ProductApiError,
   apiBaseUrl,
+  type ApiAgreement,
   type ApiAgreementTerms,
   type ApiCandidate,
   type ApiEscrow,
+  type ApiMatchRun,
   type ApiNegotiationBundle,
   type ApiPromotion,
   type ApiSettlement,
-  type ApiSettlementBundle,
   type ApiTimelineEvent,
 } from "./apiClient";
 import type {
@@ -35,16 +36,21 @@ import type {
 } from "./types";
 
 const USDC_BASE_UNIT = 1_000_000;
-const API_CREATOR_DEAL_ID = "glow-bar";
+
+type NegotiationQuery = {
+  promotionId?: string;
+  negotiationId?: string;
+  agreementId?: string;
+};
 
 export interface KnotDataSource {
   getRoleSession(role: Role): Promise<RoleSession>;
-  getBrandProduct(): Promise<BrandProduct>;
+  getBrandProduct(promotionId?: string): Promise<BrandProduct>;
   getCreatorCriteria(): Promise<CreatorCriteria>;
-  getNegotiation(role: Role): Promise<NegotiationView>;
+  getNegotiation(role: Role, query?: NegotiationQuery): Promise<NegotiationView>;
   getCreatorDeals(): Promise<CreatorDeal[]>;
-  getCreatorDeal(brandId: string): Promise<CreatorDeal | null>;
-  getBrandSettlementDeal(): Promise<CreatorDeal>;
+  getCreatorDeal(agreementId: string): Promise<CreatorDeal | null>;
+  getBrandSettlementDeal(agreementId?: string): Promise<CreatorDeal>;
   getDevOverview(): Promise<DevOverview>;
 }
 
@@ -69,8 +75,8 @@ class MockKnotDataSource implements KnotDataSource {
     return creatorDeals;
   }
 
-  async getCreatorDeal(brandId: string) {
-    return creatorDeals.find((deal) => deal.brandId === brandId) ?? null;
+  async getCreatorDeal(agreementId: string) {
+    return creatorDeals.find((deal) => deal.agreementId === agreementId) ?? null;
   }
 
   async getBrandSettlementDeal() {
@@ -84,15 +90,13 @@ class MockKnotDataSource implements KnotDataSource {
 
 class ApiKnotDataSource implements KnotDataSource {
   private client = new ProductApiClient();
-  private negotiationFlow: Promise<ApiNegotiationBundle> | null = null;
-  private settlementFlow: Promise<ApiSettlementBundle> | null = null;
 
   async getRoleSession(role: Role) {
     return roleSessions[role];
   }
 
-  async getBrandProduct() {
-    const promotion = await this.primaryPromotion();
+  async getBrandProduct(promotionId?: string) {
+    const promotion = await this.resolvePromotion(promotionId);
     return promotionToBrandProduct(promotion);
   }
 
@@ -100,27 +104,55 @@ class ApiKnotDataSource implements KnotDataSource {
     return creatorCriteria;
   }
 
-  async getNegotiation(role: Role) {
-    const flow = await this.ensureNegotiationFlow();
+  async getNegotiation(role: Role, query: NegotiationQuery = {}) {
+    const flow = await this.resolveNegotiationFlow(query);
     return negotiationFlowToView(flow, role);
   }
 
   async getCreatorDeals() {
-    const flow = await this.ensureNegotiationFlow();
-    return [negotiationFlowToCreatorDeal(flow)];
+    const promotions = await this.client.listPromotions();
+    const deals = await Promise.all(
+      promotions.map(async (promotion) => {
+        const timeline = await this.client.getTimeline(promotion.promotionId);
+        const negotiationId = latestTimelineString(timeline, "NEGOTIATION_STARTED", "negotiationId");
+        if (!negotiationId) return null;
+        const flow = await this.resolveNegotiationFlow({
+          promotionId: promotion.promotionId,
+          negotiationId,
+        });
+        return negotiationFlowToCreatorDeal(flow);
+      }),
+    );
+    return deals.filter((deal): deal is CreatorDeal => deal !== null);
   }
 
-  async getCreatorDeal(brandId: string) {
-    if (brandId !== API_CREATOR_DEAL_ID) {
-      return null;
-    }
-    const flow = await this.ensureNegotiationFlow();
+  async getCreatorDeal(agreementId: string) {
+    const agreement = await this.client.getAgreement(agreementId).catch(() => null);
+    if (!agreement) return null;
+    const flow = await this.resolveNegotiationFlow({
+      promotionId: agreement.promotionId,
+      negotiationId: agreement.negotiationId,
+      agreementId,
+    });
     return negotiationFlowToCreatorDeal(flow);
   }
 
-  async getBrandSettlementDeal() {
-    const flow = await this.ensureSettlementFlow();
-    return settlementFlowToCreatorDeal(flow);
+  async getBrandSettlementDeal(agreementId?: string) {
+    const flow = await this.resolveNegotiationFlow({ agreementId });
+    if (!flow.agreement) {
+      throw new ProductApiError(
+        "Settlement requires an accepted Agreement. Run the agent negotiation first.",
+        409,
+        "AGREEMENT_REQUIRED",
+        null,
+      );
+    }
+    const escrowState = await this.client.getAgreementEscrow(flow.agreement.agreementId);
+    return settlementFlowToCreatorDeal(
+      { ...flow, agreement: flow.agreement },
+      escrowState.escrow,
+      escrowState.settlements[escrowState.settlements.length - 1] ?? null,
+    );
   }
 
   async getDevOverview(): Promise<DevOverview> {
@@ -151,16 +183,22 @@ class ApiKnotDataSource implements KnotDataSource {
       };
     }
 
-    const flow = await this.ensureNegotiationFlow().catch(() => null);
+    const promotions = await this.client.listPromotions().catch(() => []);
+    const eventCounts = await Promise.all(
+      promotions.map((promotion) => this.client.getTimeline(promotion.promotionId).catch(() => [])),
+    );
     return {
       dataMode: "api-ready",
-      activeTaskCount: flow ? 1 : 0,
+      activeTaskCount: eventCounts.flat().filter((event) => event.type === "NEGOTIATION_STARTED").length,
       mockCollectionCount: 0,
       events,
     };
   }
 
-  private async primaryPromotion() {
+  private async resolvePromotion(promotionId?: string) {
+    if (promotionId) {
+      return this.client.getPromotion(promotionId);
+    }
     const promotions = await this.client.listPromotions();
     const promotion = promotions[0];
     if (!promotion) {
@@ -169,63 +207,38 @@ class ApiKnotDataSource implements KnotDataSource {
     return promotion;
   }
 
-  private ensureNegotiationFlow() {
-    if (!this.negotiationFlow) {
-      this.negotiationFlow = this.createNegotiationFlow();
-    }
-    return this.negotiationFlow;
-  }
-
-  private ensureSettlementFlow() {
-    if (!this.settlementFlow) {
-      this.settlementFlow = this.createSettlementFlow();
-    }
-    return this.settlementFlow;
-  }
-
-  private async createNegotiationFlow(): Promise<ApiNegotiationBundle> {
-    const promotion = await this.primaryPromotion();
-    const matchRun = await this.client.runMatches(promotion.promotionId);
-    const candidates = await this.client.listCandidates(matchRun.matchRunId);
-    const { negotiation, agreement } = await this.client.startNegotiation(matchRun.matchRunId);
+  private async resolveNegotiationFlow(query: NegotiationQuery): Promise<ApiNegotiationBundle> {
+    let promotion = await this.resolvePromotion(query.promotionId);
     const timeline = await this.client.getTimeline(promotion.promotionId);
-    return { promotion, matchRun, candidates, negotiation, agreement, timeline };
-  }
+    const negotiationId =
+      query.negotiationId ?? latestTimelineString(timeline, "NEGOTIATION_STARTED", "negotiationId");
 
-  private async createSettlementFlow(): Promise<ApiSettlementBundle> {
-    const flow = await this.ensureNegotiationFlow();
-    if (!flow.agreement) {
-      throw new ProductApiError(
-        "Settlement requires an accepted Agreement",
-        409,
-        "AGREEMENT_REQUIRED",
-        flow.negotiation,
-      );
+    if (!negotiationId) {
+      return pendingNegotiationFlow(promotion, timeline);
     }
 
-    const milestoneId = preferredReleaseMilestone(flow.agreement.terms);
-    const evidence = await this.client.submitEvidence(flow.agreement, milestoneId);
-    await this.client.verifyEvidence(evidence.evidenceId);
-    const locked = await this.client.lockEscrow(flow.agreement.agreementId);
-    const released = await this.client.releaseMilestone(locked.escrow.escrowId, milestoneId);
-    const timeline = await this.client.getTimeline(flow.promotion.promotionId);
-    return {
-      ...flow,
-      agreement: flow.agreement,
-      evidence,
-      escrow: released.escrow,
-      settlement: released.settlement,
-      receipt: released.receipt,
-      timeline,
-    };
+    const negotiation = await this.client.getNegotiation(negotiationId);
+    if (negotiation.promotionId !== promotion.promotionId) {
+      promotion = await this.client.getPromotion(negotiation.promotionId);
+    }
+    const agreement =
+      query.agreementId
+        ? await this.client.getAgreement(query.agreementId)
+        : await this.client.getNegotiationAgreement(negotiationId).catch(() => null);
+    const matchRun = await this.client.getMatchRun(negotiation.matchRunId);
+    const candidates = await this.client.listCandidates(matchRun.matchRunId);
+    return { promotion, matchRun, candidates, negotiation, agreement, timeline };
   }
 }
 
-export const knotDataSource: KnotDataSource =
-  resolveDataMode() === "api" ? new ApiKnotDataSource() : new MockKnotDataSource();
+export function createKnotDataSource(mode = resolveDataMode()): KnotDataSource {
+  return mode === "api" ? new ApiKnotDataSource() : new MockKnotDataSource();
+}
+
+export const knotDataSource: KnotDataSource = createKnotDataSource();
 
 export function resolveDataMode() {
-  return process.env.KNOT_DATA_MODE ?? process.env.NEXT_PUBLIC_KNOT_DATA_MODE ?? "mock";
+  return process.env.KNOT_DATA_MODE ?? process.env.NEXT_PUBLIC_KNOT_DATA_MODE ?? "api";
 }
 
 function promotionToBrandProduct(promotion: ApiPromotion): BrandProduct {
@@ -255,6 +268,9 @@ function negotiationFlowToView(flow: ApiNegotiationBundle, role: Role): Negotiat
   const completed = flow.negotiation.status === "AGREED" || flow.negotiation.status === "REJECTED";
   return {
     role,
+    promotionId: flow.promotion.promotionId,
+    negotiationId: isPendingNegotiation(flow.negotiation) ? null : flow.negotiation.negotiationId,
+    agreementId: agreement?.agreementId ?? null,
     title: flow.promotion.title,
     counterpartyLabel: role === "brand" ? creatorLabel : brandDisplayName(),
     counterpartyAgentLabel:
@@ -266,6 +282,7 @@ function negotiationFlowToView(flow: ApiNegotiationBundle, role: Role): Negotiat
     taskState: completed ? "TASK_STATE_COMPLETED" : "TASK_STATE_WORKING",
     progressPercent: completed ? 100 : 72,
     tasks: apiTasks(flow, completed),
+    candidates: flow.candidates.map((item) => candidateSummary(item, flow.matchRun)),
     publicSummary:
       role === "brand"
         ? [
@@ -287,8 +304,10 @@ function negotiationFlowToCreatorDeal(flow: ApiNegotiationBundle): CreatorDeal {
   const agreement = flow.agreement;
   const terms = agreement?.terms ?? flow.negotiation.currentTerms;
   return {
-    brandId: API_CREATOR_DEAL_ID,
+    agreementId: agreement?.agreementId ?? null,
+    brandId: agreement?.agreementId ?? flow.negotiation.negotiationId,
     brandName: brandDisplayName(),
+    creatorAgentId: flow.negotiation.creatorAgentId,
     productTitle: flow.promotion.title,
     status: creatorDealStatus(flow.negotiation.status),
     visibleResult:
@@ -302,12 +321,16 @@ function negotiationFlowToCreatorDeal(flow: ApiNegotiationBundle): CreatorDeal {
   };
 }
 
-function settlementFlowToCreatorDeal(flow: ApiSettlementBundle): CreatorDeal {
+function settlementFlowToCreatorDeal(
+  flow: ApiNegotiationBundle & { agreement: ApiAgreement },
+  escrow: ApiEscrow | null,
+  settlement: ApiSettlement | null,
+): CreatorDeal {
   const terms = flow.agreement.terms;
   return {
     ...negotiationFlowToCreatorDeal(flow),
-    milestones: milestonesFromTerms(terms, flow.settlement),
-    settlement: settlementFromEscrow(flow.escrow, flow.settlement),
+    milestones: milestonesFromTerms(terms, settlement ?? undefined),
+    settlement: escrow ? settlementFromEscrow(escrow, settlement) : emptySettlement(terms),
   };
 }
 
@@ -376,7 +399,7 @@ function milestonesFromTerms(terms: ApiAgreementTerms, settlement?: ApiSettlemen
   });
 }
 
-function settlementFromEscrow(escrow: ApiEscrow, settlement: ApiSettlement): Settlement {
+function settlementFromEscrow(escrow: ApiEscrow, settlement: ApiSettlement | null): Settlement {
   const locked = baseUnitsToUsdc(escrow.lockedAmountBaseUnits);
   const released = baseUnitsToUsdc(escrow.releasedAmountBaseUnits);
   return {
@@ -390,7 +413,7 @@ function settlementFromEscrow(escrow: ApiEscrow, settlement: ApiSettlement): Set
           ? "PARTIALLY_RELEASED"
           : "LOCKED",
     lockTx: escrow.lockSignature,
-    releaseTx: settlement.signature,
+    releaseTx: settlement?.signature ?? null,
   };
 }
 
@@ -405,12 +428,79 @@ function emptySettlement(terms: ApiAgreementTerms): Settlement {
   };
 }
 
-function preferredReleaseMilestone(terms: ApiAgreementTerms) {
-  return terms.milestones.find((milestone) => milestone.id === "content")?.id ?? terms.milestones[0].id;
-}
-
 function hasTimeline(events: ApiTimelineEvent[], type: string) {
   return events.some((event) => event.type === type);
+}
+
+function latestTimelineString(
+  events: ApiTimelineEvent[],
+  type: string,
+  fieldName: string,
+): string | null {
+  for (const event of [...events].reverse()) {
+    if (event.type !== type) continue;
+    const value = event.data[fieldName];
+    if (typeof value === "string" && value) return value;
+  }
+  return null;
+}
+
+function pendingNegotiationFlow(
+  promotion: ApiPromotion,
+  timeline: ApiTimelineEvent[],
+): ApiNegotiationBundle {
+  const terms: ApiAgreementTerms = {
+    compensation: {
+      structure: "flat",
+      baseAmountUsdc: Math.min(promotion.budget.maxPerCreatorUsdc, 500),
+      performancePct: 0,
+    },
+    deliverables: promotion.deliverables.map((deliverable) => ({
+      format: deliverable.format,
+      count: deliverable.count,
+      postWindow: promotion.postingWindow,
+      revisionRounds: 1,
+    })),
+    usageRights: promotion.usageRights,
+    milestones: [{ id: "content", trigger: "contentLiveVerified", releasePct: 100 }],
+    constraints: {
+      requiredDisclosures: promotion.constraints?.requiredDisclosures ?? [],
+      prohibitedClaims: promotion.constraints?.prohibitedClaims ?? [],
+      exclusivityDays: 0,
+    },
+  };
+  return {
+    promotion,
+    timeline,
+    candidates: [],
+    matchRun: {
+      matchRunId: "not-run",
+      promotionId: promotion.promotionId,
+      brandAgentId: promotion.brandAgentId,
+      status: "NOT_RUN",
+      selectedCreatorId: null,
+      selectedCreatorAgentId: null,
+    },
+    negotiation: {
+      negotiationId: "not-started",
+      matchRunId: "not-run",
+      matchCandidateId: "",
+      promotionId: promotion.promotionId,
+      brandAgentId: promotion.brandAgentId,
+      creatorAgentId: "",
+      contextId: "",
+      taskId: "",
+      status: "CREATED" as ApiNegotiationBundle["negotiation"]["status"],
+      currentRound: 0,
+      maxRounds: promotion.autonomy?.maxNegotiationRounds ?? 5,
+      currentTerms: terms,
+    },
+    agreement: null,
+  };
+}
+
+function isPendingNegotiation(negotiation: ApiNegotiationBundle["negotiation"]) {
+  return negotiation.negotiationId === "not-started";
 }
 
 function selectedCandidate(flow: ApiNegotiationBundle) {
@@ -418,6 +508,22 @@ function selectedCandidate(flow: ApiNegotiationBundle) {
     flow.candidates.find((candidate) => candidate.creatorAgentId === flow.matchRun.selectedCreatorAgentId) ??
     flow.candidates[0]
   );
+}
+
+function candidateSummary(candidate: ApiCandidate, matchRun: ApiMatchRun) {
+  return {
+    creatorId: candidate.creatorId,
+    creatorAgentId: candidate.creatorAgentId,
+    displayName: creatorDisplayName(candidate),
+    rank: candidate.rank ?? null,
+    score: candidate.overallScore ? Math.round(candidate.overallScore * 100) : null,
+    eligible: candidate.eligible,
+    reason:
+      candidate.explanation ??
+      candidate.hardFilterReasons?.join(", ") ??
+      "Product API candidate snapshot",
+    selected: candidate.creatorAgentId === matchRun.selectedCreatorAgentId,
+  };
 }
 
 function creatorDealStatus(status: ApiNegotiationBundle["negotiation"]["status"]): CreatorDeal["status"] {

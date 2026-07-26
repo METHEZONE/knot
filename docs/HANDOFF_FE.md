@@ -1,7 +1,7 @@
 # knot 프론트엔드/UX 세션 인계 (2026-07-25, 민성 라인)
 
 새 세션(knot 터미널의 Claude 포함)이 이 문서 하나로 이어받을 수 있게 쓴다.
-아키텍처·계약은 `docs/23_EXPERIENCE_PRD_v2.md`(경험 스펙)와 `docs/07_API_CONTRACTS.md`(API)가 원본. 2026-07-25 MVP scope update: 현재 프론트는 제품형 MVP로 리셋했다. `/login`과 `/signup`은 실제 계정 표면처럼 분리했고, 회원가입은 Brand/Creator 선택 후 각 역할 온보딩으로 이어진다. Brand는 `/brand/onboarding -> /brand/products/new -> /brand/negotiate -> /brand/result -> /brand/settlement`, Creator는 `/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/brands/{brandId}`를 기본 흐름으로 둔다. 각 역할에는 `/me`, `/settings`가 있고 `/dev/admin`은 개발자/관리자 상태 확인용이다. 제안, 매칭, 협상은 A2A agent work로 보여주고 사용자는 진행 상태와 최종 결과만 본다.
+아키텍처·계약은 `docs/23_EXPERIENCE_PRD_v2.md`(경험 스펙)와 `docs/07_API_CONTRACTS.md`(API)가 원본. 2026-07-25 MVP scope update: 현재 프론트는 제품형 MVP로 리셋했다. `/login`과 `/signup`은 실제 계정 표면처럼 분리했고, 회원가입은 Brand/Creator 선택 후 각 역할 온보딩으로 이어진다. Brand는 `/brand/onboarding -> /brand/products/new -> /brand/negotiate -> /brand/result -> /brand/settlement`, Creator는 `/creator/onboarding -> /creator/criteria -> /creator/result -> /creator/agreements/{agreementId}`를 기본 흐름으로 둔다. 각 역할에는 `/me`, `/settings`가 있고 `/dev/admin`은 개발자/관리자 상태 확인용이다. 제안, 매칭, 협상은 A2A agent work로 보여주고 사용자는 진행 상태와 최종 결과만 본다.
 
 ## 무엇을 했나 (2026-07-25 완료분)
 

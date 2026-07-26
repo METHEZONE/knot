@@ -157,7 +157,15 @@ export type ApiNegotiation = {
   creatorAgentId: string;
   contextId: string;
   taskId: string;
-  status: "AGREED" | "REJECTED" | "COUNTERED" | "ESCALATED" | "CANCELED";
+  status:
+    | "CREATED"
+    | "OFFERED"
+    | "AGREED"
+    | "REJECTED"
+    | "COUNTERED"
+    | "ESCALATED"
+    | "CANCELED"
+    | "FAILED";
   currentRound: number;
   maxRounds: number;
   currentTerms: ApiAgreementTerms;
@@ -232,6 +240,11 @@ export type ApiNegotiationBundle = {
   negotiation: ApiNegotiation;
   agreement: ApiAgreement | null;
   timeline: ApiTimelineEvent[];
+};
+
+export type ApiAgreementEscrowBundle = {
+  escrow: ApiEscrow | null;
+  settlements: ApiSettlement[];
 };
 
 export type ApiSettlementBundle = ApiNegotiationBundle & {
@@ -335,11 +348,59 @@ export class ProductApiClient {
     return response.candidates;
   }
 
+  async getMatchRun(matchRunId: string) {
+    const response = await this.request<{ matchRun: ApiMatchRun }>(
+      `/api/v1/match-runs/${matchRunId}`,
+    );
+    return response.matchRun;
+  }
+
+  async getNegotiation(negotiationId: string) {
+    const response = await this.request<{ negotiation: ApiNegotiation }>(
+      `/api/v1/negotiations/${negotiationId}`,
+    );
+    return response.negotiation;
+  }
+
   async startNegotiation(matchRunId: string) {
     return this.request<{ negotiation: ApiNegotiation; agreement: ApiAgreement | null }>(
       `/api/v1/match-runs/${matchRunId}:start-negotiation`,
       { method: "POST" },
     );
+  }
+
+  async getNegotiationAgreement(negotiationId: string) {
+    const response = await this.request<{ agreement: ApiAgreement }>(
+      `/api/v1/negotiations/${negotiationId}/agreement`,
+    );
+    return response.agreement;
+  }
+
+  async getAgreement(agreementId: string) {
+    const response = await this.request<{ agreement: ApiAgreement }>(
+      `/api/v1/agreements/${agreementId}`,
+    );
+    return response.agreement;
+  }
+
+  async getAgreementEscrow(agreementId: string) {
+    return this.request<ApiAgreementEscrowBundle>(`/api/v1/agreements/${agreementId}/escrow`);
+  }
+
+  async runAgentForPromotion(promotionId: string) {
+    const promotion = await this.getPromotion(promotionId);
+    const matchRun = await this.runMatches(promotionId);
+    const candidates = await this.listCandidates(matchRun.matchRunId);
+    const { negotiation, agreement } = await this.startNegotiation(matchRun.matchRunId);
+    const timeline = await this.getTimeline(promotionId);
+    return { promotion, matchRun, candidates, negotiation, agreement, timeline };
+  }
+
+  async getPromotion(promotionId: string) {
+    const response = await this.request<{ promotion: ApiPromotion }>(
+      `/api/v1/promotions/${promotionId}`,
+    );
+    return response.promotion;
   }
 
   async getTimeline(promotionId: string) {
@@ -349,7 +410,12 @@ export class ProductApiClient {
     return response.events;
   }
 
-  async submitEvidence(agreement: ApiAgreement, milestoneId: string) {
+  async submitEvidence(
+    agreement:
+      | ApiAgreement
+      | { agreementId: string; creatorAgentId: string },
+    milestoneId: string,
+  ) {
     const response = await this.request<{ evidence: ApiEvidence }>(
       `/api/v1/agreements/${agreement.agreementId}/evidence`,
       {

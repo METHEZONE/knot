@@ -16,7 +16,7 @@ export const appRoutes = [
   "/creator/onboarding",
   "/creator/criteria",
   "/creator/result",
-  "/creator/brands/glow-bar",
+  "/creator/agreements/[agreementId]",
   "/creator/me",
   "/creator/settings",
   "/dev/admin",
@@ -45,7 +45,7 @@ export const creatorWorkspaceRoutes = [
   { href: "/creator/onboarding", label: "Profile" },
   { href: "/creator/criteria", label: "Criteria" },
   { href: "/creator/result", label: "Offers" },
-  { href: "/creator/brands/glow-bar", label: "Deals" },
+  { href: "/creator/result", label: "Deals" },
 ] as const;
 
 export const accountRoutes = [

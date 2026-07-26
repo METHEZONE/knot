@@ -54,6 +54,10 @@ def test_lock_creates_escrow_with_simulated_receipt_and_no_fee() -> None:
     client, _ = seeded()
     agreement = accepted_agreement(client)
 
+    empty_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}/escrow")
+    assert empty_response.status_code == 200
+    assert empty_response.json()["data"] == {"escrow": None, "settlements": []}
+
     data = lock(client, agreement, "lock-1")
     escrow = data["escrow"]
     assert escrow["status"] == "LOCKED"
@@ -65,6 +69,11 @@ def test_lock_creates_escrow_with_simulated_receipt_and_no_fee() -> None:
     assert data["receipt"]["status"] == "SIMULATED"
     assert data["receipt"]["signature"] is None
     assert timeline_types(client).count("ESCROW_LOCKED") == 1
+
+    escrow_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}/escrow")
+    assert escrow_response.status_code == 200
+    assert escrow_response.json()["data"]["escrow"]["escrowId"] == escrow["escrowId"]
+    assert escrow_response.json()["data"]["settlements"] == []
 
 
 def test_lock_requires_idempotency_key() -> None:
