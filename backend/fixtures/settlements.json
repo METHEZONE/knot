@@ -1,0 +1,47 @@
+[
+  {
+    "settlementId": "settlement-brand1-creator1-plan",
+    "escrowId": "escrow-brand1-creator1",
+    "agreementId": "agreement-brand1-creator1",
+    "promotionId": "promotion-lip-balm",
+    "milestoneId": "plan",
+    "creatorId": "creator-1",
+    "creatorAgentId": "agent-creator-1",
+    "amountBaseUnits": "100000000",
+    "status": "CONFIRMED",
+    "signature": null,
+    "receiptId": "receipt-release-brand1-creator1-plan",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-08-05T10:00:00Z"
+  },
+  {
+    "settlementId": "settlement-brand1-creator1-upload",
+    "escrowId": "escrow-brand1-creator1",
+    "agreementId": "agreement-brand1-creator1",
+    "promotionId": "promotion-lip-balm",
+    "milestoneId": "upload",
+    "creatorId": "creator-1",
+    "creatorAgentId": "agent-creator-1",
+    "amountBaseUnits": "250000000",
+    "status": "CONFIRMED",
+    "signature": null,
+    "receiptId": "receipt-release-brand1-creator1-upload",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-08-15T10:00:00Z"
+  },
+  {
+    "settlementId": "settlement-brand1-creator1-performance",
+    "escrowId": "escrow-brand1-creator1",
+    "agreementId": "agreement-brand1-creator1",
+    "promotionId": "promotion-lip-balm",
+    "milestoneId": "performance",
+    "creatorId": "creator-1",
+    "creatorAgentId": "agent-creator-1",
+    "amountBaseUnits": "150000000",
+    "status": "CONFIRMED",
+    "signature": null,
+    "receiptId": "receipt-release-brand1-creator1-performance",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-08-25T10:00:00Z"
+  }
+]

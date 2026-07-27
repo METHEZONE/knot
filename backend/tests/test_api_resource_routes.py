@@ -73,12 +73,18 @@ def test_brand_can_create_and_read_only_owned_promotions() -> None:
 
     created = client.post(
         "/api/v1/brand/promotions",
-        headers={"Authorization": brand["Authorization"]},
+        headers={
+            "Authorization": brand["Authorization"],
+            "Idempotency-Key": "brand-one-promotion",
+        },
         json=promotion_payload("Owned promotion"),
     )
     other_created = client.post(
         "/api/v1/brand/promotions",
-        headers={"Authorization": other["Authorization"]},
+        headers={
+            "Authorization": other["Authorization"],
+            "Idempotency-Key": "brand-two-promotion",
+        },
         json=promotion_payload("Other promotion"),
     )
 
@@ -104,6 +110,81 @@ def test_brand_can_create_and_read_only_owned_promotions() -> None:
         promotion_id
     ]
     assert forbidden.status_code == 403
+
+
+def test_brand_promotion_create_is_idempotent_and_delete_is_guarded() -> None:
+    client, repository = client_and_repository()
+    brand = complete_brand(client, "brand-delete")
+    headers = {
+        "Authorization": brand["Authorization"],
+        "Idempotency-Key": "brand-delete-promotion",
+    }
+
+    first = client.post(
+        "/api/v1/brand/promotions",
+        headers=headers,
+        json=promotion_payload("Delete guard"),
+    )
+    second = client.post(
+        "/api/v1/brand/promotions",
+        headers=headers,
+        json=promotion_payload("Delete guard"),
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    promotion_id = first.json()["data"]["promotion"]["promotionId"]
+    assert second.json()["data"]["promotion"]["promotionId"] == promotion_id
+
+    repository.save_raw_document(
+        FirestorePaths.agreement("agreement-delete-guard"),
+        {
+            "agreementId": "agreement-delete-guard",
+            "promotionId": promotion_id,
+            "brandId": brand["brandId"],
+            "creatorAgentId": "agent-creator-test",
+            "status": "ACTIVE",
+        },
+    )
+    blocked = client.delete(
+        f"/api/v1/brand/promotions/{promotion_id}",
+        headers={
+            "Authorization": brand["Authorization"],
+            "Idempotency-Key": "delete-blocked",
+        },
+    )
+
+    assert blocked.status_code == 409
+
+
+def test_brand_can_soft_delete_promotion_without_agreement() -> None:
+    client, _ = client_and_repository()
+    brand = complete_brand(client, "brand-soft-delete")
+    created = client.post(
+        "/api/v1/brand/promotions",
+        headers={
+            "Authorization": brand["Authorization"],
+            "Idempotency-Key": "soft-delete-promotion",
+        },
+        json=promotion_payload("Soft delete"),
+    )
+    promotion_id = created.json()["data"]["promotion"]["promotionId"]
+
+    deleted = client.delete(
+        f"/api/v1/brand/promotions/{promotion_id}",
+        headers={
+            "Authorization": brand["Authorization"],
+            "Idempotency-Key": "soft-delete-promotion-action",
+        },
+    )
+    listed = client.get(
+        "/api/v1/brand/promotions",
+        headers={"Authorization": brand["Authorization"]},
+    )
+
+    assert deleted.status_code == 200
+    assert deleted.json()["data"]["deleted"] is True
+    assert listed.json()["data"]["promotions"] == []
 
 
 def test_creator_offer_and_agreement_routes_are_participation_scoped() -> None:

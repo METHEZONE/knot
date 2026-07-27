@@ -6,5 +6,33 @@
     "active": true,
     "createdAt": "2026-07-24T00:00:00Z",
     "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "brandId": "brand-1",
+    "ownerUid": "user-brand-1",
+    "displayName": "루미에르 뷰티",
+    "websiteUrl": "https://lumiere.example",
+    "categories": ["beauty"],
+    "targetAudience": "20-30대 뷰티 관심 고객",
+    "description": "립 케어와 자연스러운 광채 메이크업을 만드는 뷰티 브랜드",
+    "restrictedClaims": ["의학적 효능 과장"],
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "brandId": "brand-2",
+    "ownerUid": "user-brand-2",
+    "displayName": "바삭데이",
+    "websiteUrl": "https://basakday.example",
+    "categories": ["food", "lifestyle"],
+    "targetAudience": "스낵과 간편식을 즐기는 MZ 고객",
+    "description": "가벼운 리뷰 콘텐츠에 적합한 허니버터 스낵 브랜드",
+    "restrictedClaims": ["건강 기능성 단정"],
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
   }
 ]

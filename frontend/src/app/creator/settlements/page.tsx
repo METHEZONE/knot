@@ -1,12 +1,12 @@
 "use client";
 
 import { AuthGate } from "@/auth/AuthGate";
-import { CreatorOfferListScreen } from "@/product/ProductScreens";
+import { CreatorSettlementScreen } from "@/product/ProductScreens";
 
 export default function Page() {
   return (
     <AuthGate expectedRole="CREATOR" requireCompleted>
-      {() => <CreatorOfferListScreen />}
+      {() => <CreatorSettlementScreen />}
     </AuthGate>
   );
 }

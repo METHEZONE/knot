@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
+import { safeRedirectPath } from "@/auth/authState";
 import {
   authConfigurationError,
   createFirebaseAccount,
   currentIdToken,
+  firebaseAuthErrorMessage,
   firebaseConfigured,
   signInWithEmail,
   signInWithGoogle,
@@ -16,12 +18,25 @@ import {
 import {
   ProductApiClient,
   ProductApiError,
+  type ApiAgreement,
+  type ApiNegotiation,
+  type ApiNegotiationMessage,
   type ApiDevAdminOverview,
   type BrandDashboard,
   type CreatorDashboard,
   type CurrentUserContext,
 } from "./apiClient";
+import { A2ANegotiationVisualizer } from "./A2AVisualizer";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
+import {
+  agreementMilestones,
+  calculateBrandEscrow,
+  calculateCreatorSettlement,
+  mapTaskStateToCreatorStatus,
+  normalizeNegotiationEvents,
+  productSnapshotFromPromotion,
+  promotionProgress,
+} from "./mvp";
 import type {
   AgentTask,
   BrandProduct,
@@ -90,9 +105,11 @@ export function LandingScreen() {
 
 export function LoginScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();
+  const redirect = safeRedirectPath(searchParams.get("redirect"));
 
   async function submit(formData: FormData) {
     setStatus("saving");
@@ -104,9 +121,9 @@ export function LoginScreen() {
       await signInWithEmail(email, password);
       const account = await new ProductApiClient().getMe();
       saveCurrentAccount(account);
-      router.push(account.dashboardTarget);
+      router.push(redirect ?? account.dashboardTarget);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
     }
   }
@@ -119,9 +136,9 @@ export function LoginScreen() {
       await signInWithGoogle();
       const account = await new ProductApiClient().getMe();
       saveCurrentAccount(account);
-      router.push(account.dashboardTarget);
+      router.push(redirect ?? account.dashboardTarget);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
     }
   }
@@ -135,7 +152,7 @@ export function LoginScreen() {
       <Panel>
         <form action={submit} className="grid gap-4">
           <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
-          <Input label="Password" name="password" placeholder="Password" type="password" required />
+          <Input label="Password" name="password" placeholder="Password" type="password" minLength={6} required />
           <button
             type="submit"
             className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-background"
@@ -204,34 +221,55 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
         {(dashboard) => (
           <div className="grid gap-5">
             <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="Active Promotions" value={dashboard.summary.activePromotions} />
-              <Metric label="Negotiations" value={dashboard.summary.negotiationsInProgress} />
-              <Metric label="Agreements" value={dashboard.summary.agreements} />
-              <Metric label="Locked escrow" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
+              <Metric label="진행 중인 프로모션" value={dashboard.summary.activePromotions} />
+              <Metric label="진행 중인 협상" value={dashboard.summary.negotiationsInProgress} />
+              <Metric label="체결된 크리에이터" value={dashboard.summary.agreements} />
+              <Metric label="에스크로 예치" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
             </div>
-            <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+            <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
               <Panel>
-                <SectionTitle eyebrow="Promotions" title="Active Promotions" />
+                <SectionTitle eyebrow="Promotions" title="내 프로모션" />
                 {dashboard.activePromotions.length ? (
                   <div className="mt-4 grid gap-3">
-                    {dashboard.activePromotions.map((promotion) => (
+                    {dashboard.activePromotions.map((promotion) => {
+                      const product = productSnapshotFromPromotion(promotion);
+                      return (
+                        <PromotionSummaryCard
+                          key={promotion.promotionId}
+                          promotion={promotion}
+                          productName={product.name}
+                          productCategory={product.category ?? promotion.category}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 생성한 프로모션이 없습니다." />
+                )}
+                <div className="mt-5">
+                  <PrimaryLink href="/brand/promotions/new">첫 프로모션 만들기</PrimaryLink>
+                </div>
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="Negotiations" title="최근 협상" />
+                {dashboard.recentAgentActivity.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.recentAgentActivity.slice(0, 5).map((event) => (
                       <DashboardRow
-                        key={promotion.promotionId}
-                        title={promotion.title}
-                        meta={`${promotion.status} · ${promotion.category}`}
-                        href={`/brand/negotiate?promotionId=${promotion.promotionId}`}
+                        key={event.eventId}
+                        title={event.type}
+                        meta={event.createdAt}
                       />
                     ))}
                   </div>
                 ) : (
-                  <EmptyState text="아직 Promotion이 없습니다. 브랜드 프로필을 기준으로 첫 협찬 제안을 만들 수 있습니다." />
+                  <EmptyState text={`${context.account.displayName ?? "Brand"} 계정에서 아직 협상 기록이 없습니다.`} />
                 )}
-                <div className="mt-5">
-                  <PrimaryLink href="/brand/products/new">New Promotion</PrimaryLink>
-                </div>
               </Panel>
-              <Panel>
-                <SectionTitle eyebrow="Creators" title="Contracted Creators" />
+            </div>
+            <Panel>
+              <SectionTitle eyebrow="Agreements" title="진행 중인 계약 및 에스크로" />
+              <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
                 {dashboard.contractedCreators.length ? (
                   <div className="mt-4 grid gap-3">
                     {dashboard.contractedCreators.map((creator) => (
@@ -245,23 +283,13 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
                 ) : (
                   <EmptyState text="아직 계약 완료된 Creator가 없습니다." />
                 )}
-              </Panel>
-            </div>
-            <Panel>
-              <SectionTitle eyebrow="Agent Activity" title="Recent Agent Activity" />
-              {dashboard.recentAgentActivity.length ? (
-                <div className="mt-4 grid gap-3">
-                  {dashboard.recentAgentActivity.map((event) => (
-                    <DashboardRow
-                      key={event.eventId}
-                      title={event.type}
-                      meta={event.createdAt}
-                    />
-                  ))}
+                <div className="rounded border border-border-subtle bg-background p-4">
+                  <InfoBox label="lockedAmount" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
+                  <p className="mt-3 text-sm text-muted">
+                    Agent API spend와 Creator 보수 escrow는 분리해서 표시합니다. 이 카드는 계약 보수 escrow만 집계합니다.
+                  </p>
                 </div>
-              ) : (
-                <EmptyState text={`${context.account.displayName ?? "Brand"} 계정에서 아직 Agent activity가 없습니다.`} />
-              )}
+              </div>
             </Panel>
           </div>
         )}
@@ -272,6 +300,7 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
 
 export function CreatorDashboardScreen({ context }: { context: CurrentUserContext }) {
   const [state, setState] = useDashboardState<CreatorDashboard>();
+  const creatorLabel = context.account.displayName ?? "Creator";
 
   useEffect(() => {
     void loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState);
@@ -282,65 +311,90 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
       <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState)}>
         {(dashboard) => (
           <div className="grid gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="New Offers" value={dashboard.summary.newOffers} />
-              <Metric label="Negotiations" value={dashboard.summary.agentNegotiations} />
-              <Metric label="Sponsorships" value={dashboard.summary.activeSponsorships} />
-              <Metric label="Pending payout" value={`${baseUnitsToUsdc(dashboard.summary.pendingPayoutBaseUnits)} USDC`} />
-            </div>
-            <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
-              <Panel>
-                <SectionTitle eyebrow="Offers" title="Agent Offers" />
-                {dashboard.offers.length ? (
-                  <div className="mt-4 grid gap-3">
-                    {dashboard.offers.map((offer) => (
-                      <DashboardRow
-                        key={String(offer.negotiationId)}
-                        title={String(offer.title ?? "Offer")}
-                        meta={`${String(offer.status ?? "PENDING")} · round ${String(offer.currentRound ?? "-")}`}
-                        href={`/creator/result?negotiationId=${String(offer.negotiationId)}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="아직 새 제안이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
-                )}
-              </Panel>
-              <Panel>
-                <SectionTitle eyebrow="Sponsorships" title="Active Sponsorships" />
-                {dashboard.activeSponsorships.length ? (
-                  <div className="mt-4 grid gap-3">
-                    {dashboard.activeSponsorships.map((agreement) => (
-                      <DashboardRow
-                        key={String(agreement.agreementId)}
-                        title={String(agreement.title ?? "Agreement")}
-                        meta={String(agreement.status ?? "ACTIVE")}
-                        href={`/creator/agreements/${String(agreement.agreementId)}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="진행 중인 협찬이 없습니다." />
-                )}
-                <div className="mt-5">
-                  <SecondaryLink href="/creator/settings">Agent criteria</SecondaryLink>
-                </div>
-              </Panel>
-            </div>
             <Panel>
-              <SectionTitle eyebrow="Agent Activity" title="Recent Agent Activity" />
-              {dashboard.recentAgentActivity.length ? (
+              <SectionTitle eyebrow="Settlement" title="현재 정산 가능 금액" />
+              {(() => {
+                const summary = creatorDashboardSettlement(dashboard.activeSponsorships);
+                return (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.7fr]">
+                    <div>
+                      <div className="text-5xl font-semibold">{summary.availableToClaimAmount} USDC</div>
+                      <p className="mt-2 text-sm text-muted">
+                        {summary.availableToClaimAmount > 0
+                          ? `${summary.availableToClaimAmount} USDC 정산 가능`
+                          : "현재 정산 가능한 금액이 없습니다."}
+                      </p>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-1">
+                      <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
+                      <InfoBox label="지급 대기" value={`${summary.pendingAmount} USDC`} />
+                      <InfoBox label="지갑 상태" value="연결 필요" />
+                    </div>
+                    <div className="flex flex-wrap gap-3 lg:col-span-2">
+                      <SecondaryLink href="/creator/settlements">정산내역</SecondaryLink>
+                      <button
+                        type="button"
+                        disabled
+                        className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold text-muted"
+                        title="실제 Solana claim 서명 연동 전까지 fake 성공 처리는 하지 않습니다."
+                      >
+                        지갑 연결 후 정산 가능
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Promotions" title="내가 참여 중인 프로모션" />
+              {dashboard.activeSponsorships.length ? (
                 <div className="mt-4 grid gap-3">
-                  {dashboard.recentAgentActivity.map((event) => (
+                  {dashboard.activeSponsorships.map((agreement) => {
+                    const milestones = agreementMilestones(agreement as unknown as ApiAgreement & Record<string, unknown>);
+                    const completed = milestones.filter((milestone) => ["VERIFIED", "RELEASED"].includes(milestone.status)).length;
+                    const progress = milestones.length ? Math.round((completed / milestones.length) * 100) : 0;
+                    const settlement = calculateCreatorSettlement(milestones);
+                    return (
+                      <Link
+                        key={String(agreement.agreementId)}
+                        href={`/creator/agreements/${String(agreement.agreementId)}`}
+                        className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold">{String(agreement.title ?? "Promotion")}</div>
+                            <div className="mt-1 text-sm text-muted">
+                              마일스톤 {completed} / {milestones.length} · 지급 완료 {settlement.paidAmount} USDC · 지급 대기 {settlement.pendingAmount} USDC
+                            </div>
+                          </div>
+                          <span className="font-mono text-xs uppercase text-muted">{String(agreement.status ?? "ACTIVE")}</span>
+                        </div>
+                        <div className="mt-4">
+                          <ProgressBar progress={progress} />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState text={`${creatorLabel} 계정에서 아직 참여 중인 프로모션이 없습니다.`} />
+              )}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Agent Deals" title="Agent 체결 내역" />
+              {dashboard.offers.length ? (
+                <div className="mt-4 grid gap-3">
+                  {dashboard.offers.map((offer) => (
                     <DashboardRow
-                      key={String(event.eventId)}
-                      title={String(event.label ?? event.type ?? "Activity")}
-                      meta={String(event.createdAt ?? "")}
+                      key={String(offer.negotiationId)}
+                      title={`${String(offer.brandName ?? "Brand")} · ${String(offer.title ?? "Promotion")}`}
+                      meta={`${mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · round ${String(offer.currentRound ?? "-")} · ${String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-")} USDC`}
+                      href={`/creator/offers/${String(offer.negotiationId)}`}
                     />
                   ))}
                 </div>
               ) : (
-                <EmptyState text={`${context.account.displayName ?? "Creator"} 계정에서 아직 Agent activity가 없습니다.`} />
+                <EmptyState text="아직 Agent 협상 기록이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
               )}
             </Panel>
           </div>
@@ -352,83 +406,156 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
 
 export function BrandPromotionCreateScreen() {
   const router = useRouter();
-  const [status, setStatus] = useState("idle");
+  const createAction = useMutationLock();
   const [error, setError] = useState<string | null>(null);
 
   async function submit(formData: FormData) {
-    setStatus("saving");
-    setError(null);
-    try {
-      const promotion = await new ProductApiClient().createBrandPromotion({
-        productName: formString(formData, "productName", "Product"),
-        title: formString(formData, "title", "Promotion"),
-        objective: formString(formData, "objective", "awareness"),
-        categories: splitList(formString(formData, "categories", "")),
-        targetAudience: formString(formData, "targetAudience", ""),
-        totalBudget: numberFromForm(formData, "totalBudget", 1000),
-        initialOffer: numberFromForm(formData, "initialOffer", 500),
-        maximumPerCreator: numberFromForm(formData, "maximumPerCreator", 700),
-        autoAcceptCeiling: numberFromForm(formData, "autoAcceptCeiling", 650),
-        maximumRounds: numberFromForm(formData, "maximumRounds", 3),
-        deliverables: [{ format: formString(formData, "deliverableFormat", "reel"), count: 1 }],
-        usageRights: formString(formData, "usageRights", "organicOnly"),
-        deadline: formString(formData, "deadline", "2026-08-10"),
-        prohibitedClaims: splitList(formString(formData, "prohibitedClaims", "")),
-      });
-      router.push(`/brand/promotions/${promotion.promotionId}`);
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setStatus("idle");
+    const productName = formString(formData, "productName", "");
+    if (!productName) {
+      setError("제품명을 입력해주세요.");
+      return;
     }
+    await createAction.run(async () => {
+      setError(null);
+      const promotion = await new ProductApiClient().createBrandPromotion({
+        productName,
+        title: formString(formData, "title", `${productName} 크리에이터 프로모션`),
+        objective: "제품 인지도 및 콘텐츠 확보",
+        categories: ["Instagram"],
+        targetAudience: "제품에 관심 있는 SNS 사용자",
+        totalBudget: numberFromForm(formData, "totalBudget", 1000),
+        initialOffer: numberFromForm(formData, "initialOffer", 300),
+        maximumPerCreator: numberFromForm(formData, "maximumPerCreator", 500),
+        autoAcceptCeiling: numberFromForm(formData, "autoAcceptCeiling", 400),
+        maximumRounds: numberFromForm(formData, "maximumRounds", 3),
+        deliverables: [{ format: "reel", count: 1 }],
+        usageRights: formString(formData, "usageRights", "organicOnly"),
+        deadline: formString(formData, "deadline", defaultDeadlineDate()),
+        prohibitedClaims: [],
+      }, createAction.idempotencyKey);
+      router.push(`/brand/promotions/${promotion.promotionId}`);
+    }, (caught) => setError(errorMessage(caught)));
   }
 
   return (
     <WorkspaceShell role="brand" active="product" title="새 Promotion" session={null}>
       <Panel>
         <form action={submit} className="grid gap-4">
-          <SectionTitle eyebrow="Promotion" title="협찬 제안 리소스를 생성합니다" />
-          <Input label="Product name" name="productName" placeholder="Product name" required />
-          <Input label="Promotion title" name="title" placeholder="Launch awareness" required />
-          <TextArea label="Objective" name="objective" placeholder="인지도, 전환, 리뷰 확보 등" />
-          <ChoiceGroup
-            label="Categories"
-            name="categories"
-            options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
-            defaultSelected={["beauty"]}
-          />
-          <TextArea label="Target audience" name="targetAudience" placeholder="핵심 타겟 설명" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Total budget" name="totalBudget" type="number" placeholder="2000" required />
-            <Input label="Initial offer" name="initialOffer" type="number" placeholder="500" required />
-            <Input label="Maximum per Creator" name="maximumPerCreator" type="number" placeholder="700" required />
-            <Input label="Auto-accept ceiling" name="autoAcceptCeiling" type="number" placeholder="650" required />
-            <Input label="Maximum rounds" name="maximumRounds" type="number" placeholder="3" required />
-            <Input label="Deadline" name="deadline" type="date" placeholder="2026-08-10" required />
+          <SectionTitle eyebrow="Promotion" title="제품명만 입력하면 기본 조건으로 생성합니다" />
+          <Input label="제품명" name="productName" placeholder="예: 글로우 립밤" required />
+          <Input label="Promotion title" name="title" placeholder="비워두면 제품명 기준으로 자동 생성" />
+          <div className="rounded border border-border-subtle bg-background p-4">
+            <SectionTitle eyebrow="Default values" title="자동 설정될 조건" />
+            <div className="grid gap-3 md:grid-cols-3">
+              <InfoBox label="목표" value="제품 인지도 및 콘텐츠 확보" />
+              <InfoBox label="총예산" value="1,000 USDC" />
+              <InfoBox label="채널" value="Instagram" />
+              <InfoBox label="콘텐츠" value="Reel 1개" />
+              <InfoBox label="기준 협상 금액" value="300 USDC" />
+              <InfoBox label="최대 협상 금액" value="500 USDC" />
+              <InfoBox label="자동 승인 한도" value="400 USDC" />
+              <InfoBox label="최대 라운드" value="3회" />
+              <InfoBox label="상태" value="OPEN" />
+            </div>
           </div>
-          <Input label="Deliverable format" name="deliverableFormat" placeholder="reel" />
-          <label className="block text-sm font-semibold">
-            Usage rights
-            <select
-              name="usageRights"
-              className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
-              defaultValue="organicOnly"
-            >
-              <option value="organicOnly">Organic usage only</option>
-              <option value="paidBoost30d">Paid boost up to 30 days</option>
-              <option value="fullLicense90d">Full license up to 90 days</option>
-            </select>
-          </label>
-          <TextArea label="Prohibited claims" name="prohibitedClaims" placeholder="의료 효능 과장, 무검수 게시 등" />
+          <details className="rounded border border-border-subtle bg-background p-4">
+            <summary className="cursor-pointer text-sm font-semibold">세부 설정 변경</summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Input label="Total budget" name="totalBudget" type="number" placeholder="1000" defaultValue="1000" />
+              <Input label="Initial offer" name="initialOffer" type="number" placeholder="300" defaultValue="300" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="mt-4 block text-sm font-semibold">
+                Negotiation mode
+                <select
+                  name="negotiationMode"
+                  className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+                  defaultValue="balanced"
+                >
+                  <option value="conservative">보수적</option>
+                  <option value="balanced">균형</option>
+                  <option value="aggressive">적극적</option>
+                </select>
+              </label>
+              <Input label="Maximum per Creator" name="maximumPerCreator" type="number" placeholder="500" defaultValue="500" />
+              <Input label="Auto-accept ceiling" name="autoAcceptCeiling" type="number" placeholder="400" defaultValue="400" />
+              <Input label="Maximum rounds" name="maximumRounds" type="number" placeholder="3" defaultValue="3" />
+              <Input label="Deadline" name="deadline" type="date" placeholder={defaultDeadlineDate()} defaultValue={defaultDeadlineDate()} />
+            </div>
+            <label className="block text-sm font-semibold">
+              Usage rights
+              <select
+                name="usageRights"
+                className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+                defaultValue="organicOnly"
+              >
+                <option value="organicOnly">Organic usage only</option>
+                <option value="paidBoost30d">Paid boost up to 30 days</option>
+                <option value="fullLicense90d">Full license up to 90 days</option>
+              </select>
+            </label>
+          </details>
+          <PrivacyNote>
+            자동 승인 한도를 초과한 제안은 Agent가 수락하지 않고 사용자 승인을 요청합니다. 총예산, 자동 승인 한도, 사용권, 마감일은 사용자가 직접 확정합니다.
+          </PrivacyNote>
           {error && <FormError message={error} />}
           <button
             type="submit"
-            disabled={status === "saving"}
+            disabled={createAction.status === "submitting"}
             className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
           >
-            {status === "saving" ? "Creating..." : "Create Promotion"}
+            {createAction.status === "submitting" ? "프로모션 생성 중..." : "프로모션 생성"}
           </button>
         </form>
       </Panel>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandPromotionListScreen() {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listBrandPromotions"]>>>();
+  const reload = useCallback(
+    () => loadDashboard(() => new ProductApiClient().listBrandPromotions(), setState),
+    [setState],
+  );
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return (
+    <WorkspaceShell role="brand" active="product" title="내 프로모션" session={null}>
+      <DashboardStatus state={state} retry={reload}>
+        {(promotions) => (
+          <div className="grid gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted">하나의 Brand Agent가 여러 Promotion을 관리합니다.</p>
+              <PrimaryLink href="/brand/promotions/new">첫 프로모션 만들기</PrimaryLink>
+            </div>
+            {promotions.length ? (
+              <div className="grid gap-3">
+                {promotions.map((promotion) => {
+                  const product = productSnapshotFromPromotion(promotion);
+                  return (
+                    <div key={promotion.promotionId} className="grid gap-2 rounded border border-border-subtle bg-surface p-2">
+                      <PromotionSummaryCard
+                        promotion={promotion}
+                        productName={product.name}
+                        productCategory={product.category ?? promotion.category}
+                      />
+                      <DeletePromotionButton promotionId={promotion.promotionId} onDeleted={reload} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <Panel>
+                <EmptyState text="아직 생성한 프로모션이 없습니다." />
+              </Panel>
+            )}
+          </div>
+        )}
+      </DashboardStatus>
     </WorkspaceShell>
   );
 }
@@ -444,30 +571,104 @@ export function BrandPromotionDetailScreen({ promotionId }: { promotionId: strin
     <WorkspaceShell role="brand" active="product" title="Promotion Detail" session={null}>
       <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getBrandPromotionDetail(promotionId), setState)}>
         {(detail) => (
-          <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+          <div className="grid gap-5">
             <Panel>
               <SectionTitle eyebrow="Overview" title={detail.promotion.title} />
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <InfoBox label="Status" value={detail.promotion.status} />
-                <InfoBox label="Promotion ID" value={detail.promotion.promotionId} />
-                <InfoBox label="Category" value={detail.promotion.category} />
-                <InfoBox label="Budget" value={`${detail.promotion.budget.totalUsdc} USDC`} />
+              <div className="mt-4 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded border border-border-subtle bg-background p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex size-20 items-center justify-center rounded border border-border-subtle bg-surface font-mono text-xs text-muted">
+                      IMG
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-semibold">{productSnapshotFromPromotion(detail.promotion).name}</h3>
+                      <p className="mt-1 text-sm text-muted">{productSnapshotFromPromotion(detail.promotion).category ?? detail.promotion.category}</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm leading-6 text-muted">
+                    {productSnapshotFromPromotion(detail.promotion).summary ?? detail.promotion.objective}
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <InfoBox label="상태" value={detail.promotion.status} />
+                  <InfoBox label="Promotion ID" value={detail.promotion.promotionId} />
+                  <InfoBox label="목표" value={detail.promotion.objective} />
+                  <InfoBox label="타깃" value={detail.promotion.targetAudience.join(", ")} />
+                  <InfoBox label="예산" value={`${detail.promotion.budget.totalUsdc} USDC`} />
+                  <InfoBox label="마감" value={detail.promotion.postingWindow.end} />
+                  <InfoBox label="Brand Agent" value={detail.promotion.brandAgentId} />
+                  <InfoBox label="자동 협상 라운드" value={String(detail.promotion.autonomy?.maxNegotiationRounds ?? "-")} />
+                </div>
               </div>
             </Panel>
             <Panel>
-              <SectionTitle eyebrow="Agreement" title="Agreement state" />
-              {detail.agreement ? (
-                <DashboardRow
-                  title={String(detail.agreement.agreementId)}
-                  meta={String(detail.agreement.status)}
-                  href={`/brand/agreements/${detail.agreement.agreementId}`}
-                />
+              <SectionTitle eyebrow="Negotiations" title="협상 기록" />
+              {detail.activity.length ? (
+                <div className="mt-4 grid gap-3">
+                  {detail.activity.map((event) => (
+                    <DashboardRow key={event.eventId} title={event.type} meta={event.createdAt} />
+                  ))}
+                </div>
               ) : (
-                <EmptyState text="아직 Agreement가 없습니다. Phase 4 A2A 실행 후 생성됩니다." />
+                <EmptyState text="아직 협상 기록이 없습니다. 후보 매칭 후 Brand Agent가 협상을 시작하면 여기에 기록됩니다." />
               )}
             </Panel>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Panel>
+                <SectionTitle eyebrow="Creators" title="체결된 크리에이터" />
+                {(detail.agreements ?? (detail.agreement ? [detail.agreement] : [])).length ? (
+                  <div className="grid gap-3">
+                    {(detail.agreements ?? (detail.agreement ? [detail.agreement] : [])).map((agreement) => {
+                      const milestones = agreementMilestones(agreement);
+                      const completed = milestones.filter((milestone) => ["VERIFIED", "RELEASED"].includes(milestone.status)).length;
+                      const progress = milestones.length ? Math.round((completed / milestones.length) * 100) : 0;
+                      const settlement = calculateCreatorSettlement(milestones);
+                      const creator = agreement.creatorSnapshot;
+                      const creatorName = typeof creator === "object" && creator !== null && "displayName" in creator
+                        ? String((creator as Record<string, unknown>).displayName)
+                        : String(agreement.creatorAgentId);
+                      return (
+                        <Link
+                          key={agreement.agreementId}
+                          href={`/brand/agreements/${agreement.agreementId}`}
+                          className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold">{creatorName}</div>
+                              <div className="mt-1 text-sm text-muted">
+                                마일스톤 {completed} / {milestones.length} · 정산 완료 {settlement.paidAmount} USDC · 정산 가능 {settlement.availableToClaimAmount} USDC
+                              </div>
+                            </div>
+                            <span className="font-mono text-xs uppercase text-muted">{agreement.status}</span>
+                          </div>
+                          <div className="mt-4">
+                            <ProgressBar progress={progress} />
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 체결된 Creator가 없습니다." />
+                )}
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="Escrow" title="에스크로 및 마일스톤" />
+                {detail.agreement ? (
+                  <div className="mt-4 grid gap-3">
+                    <InfoBox label="Agreement" value={detail.agreement.agreementId} />
+                    <InfoBox label="termsHash" value={String(detail.agreement.termsHash ?? "not-created")} />
+                    <InfoBox label="Milestones" value={String(detail.agreement.terms.milestones.length)} />
+                    <PrimaryLink href={`/brand/agreements/${detail.agreement.agreementId}`}>계약 상세보기</PrimaryLink>
+                  </div>
+                ) : (
+                  <EmptyState text="Agreement 생성 후 escrow와 milestone이 연결됩니다." />
+                )}
+              </Panel>
+            </div>
             <Panel>
-              <SectionTitle eyebrow="Activity" title="Agent Activity" />
+              <SectionTitle eyebrow="Agent Activity" title="Agent Activity" />
               {detail.activity.length ? (
                 <div className="mt-4 grid gap-3">
                   {detail.activity.map((event) => (
@@ -493,24 +694,172 @@ export function CreatorAgreementDetailScreen({ agreementId }: { agreementId: str
   return <AgreementResourceScreen role="creator" agreementId={agreementId} />;
 }
 
-export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: string }) {
-  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["getCreatorOfferDetail"]>>>();
+export function CreatorOfferListScreen() {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listCreatorOffers"]>>>();
 
   useEffect(() => {
-    void loadDashboard(() => new ProductApiClient().getCreatorOfferDetail(negotiationId), setState);
+    void loadDashboard(() => new ProductApiClient().listCreatorOffers(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="negotiation" title="Agent 협상 기록" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().listCreatorOffers(), setState)}>
+        {(offers) => (
+          <div className="grid gap-4">
+            {offers.length ? (
+              offers.map((offer) => (
+                <DashboardRow
+                  key={String(offer.negotiationId)}
+                  title={`${String(offer.brandName ?? "Brand")} · ${String(offer.title ?? "Promotion")}`}
+                  meta={`${mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · ${String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-")} USDC`}
+                  href={`/creator/offers/${String(offer.negotiationId)}`}
+                />
+              ))
+            ) : (
+              <Panel>
+                <EmptyState text="아직 Agent가 처리한 제안이 없습니다." />
+              </Panel>
+            )}
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function CreatorAgreementListScreen() {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listCreatorAgreements"]>>>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="result" title="체결된 협상" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState)}>
+        {(agreements) => (
+          <div className="grid gap-4">
+            {agreements.length ? (
+              agreements.map((agreement) => (
+                <DashboardRow
+                  key={agreement.agreementId}
+                  title={String(agreement.agreementId)}
+                  meta={`${agreement.status} · ${agreement.terms.compensation.baseAmountUsdc} USDC`}
+                  href={`/creator/agreements/${agreement.agreementId}`}
+                />
+              ))
+            ) : (
+              <Panel>
+                <EmptyState text="아직 체결된 협상이 없습니다." />
+              </Panel>
+            )}
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function CreatorSettlementScreen() {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listCreatorAgreements"]>>>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="settlement" title="정산" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState)}>
+        {(agreements) => {
+          const summary = creatorDashboardSettlement(agreements);
+          return (
+            <div className="grid gap-5">
+              <Panel>
+                <SectionTitle eyebrow="Settlement" title="정산 요약" />
+                <div className="mt-4 grid gap-3 md:grid-cols-5">
+                  <InfoBox label="전체 계약" value={`${summary.paidAmount + summary.availableToClaimAmount + summary.pendingAmount} USDC`} />
+                  <InfoBox label="현재 정산 가능" value={`${summary.availableToClaimAmount} USDC`} />
+                  <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
+                  <InfoBox label="조건 미달" value={`${summary.pendingAmount} USDC`} />
+                  <InfoBox label="지갑" value="연결 필요" />
+                </div>
+                <div className="mt-5 rounded border border-border-subtle bg-background p-4 text-sm text-muted">
+                  실제 Solana claim 서명과 Escrow release가 준비되기 전까지 성공한 정산처럼 표시하지 않습니다.
+                </div>
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="History" title="정산내역" />
+                {agreements.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {agreements.map((agreement) => {
+                      const milestones = agreementMilestones(agreement as unknown as ApiAgreement & Record<string, unknown>);
+                      const settlement = calculateCreatorSettlement(milestones);
+                      return (
+                        <DashboardRow
+                          key={String(agreement.agreementId)}
+                          title={String(agreement.title ?? agreement.agreementId ?? "Agreement")}
+                          meta={`정산 가능 ${settlement.availableToClaimAmount} USDC · 지급 완료 ${settlement.paidAmount} USDC · 지급 대기 ${settlement.pendingAmount} USDC`}
+                          href={`/creator/agreements/${String(agreement.agreementId)}`}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 정산내역이 없습니다." />
+                )}
+              </Panel>
+            </div>
+          );
+        }}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: string }) {
+  const [state, setState] = useDashboardState<{
+    detail: Awaited<ReturnType<ProductApiClient["getCreatorOfferDetail"]>>;
+    messages: ApiNegotiationMessage[];
+  }>();
+
+  useEffect(() => {
+    void loadDashboard(async () => {
+      const client = new ProductApiClient();
+      const [detail, messages] = await Promise.all([
+        client.getCreatorOfferDetail(negotiationId),
+        client.listNegotiationMessages(negotiationId),
+      ]);
+      return { detail, messages };
+    }, setState);
   }, [negotiationId, setState]);
 
   return (
     <WorkspaceShell role="creator" active="negotiation" title="Offer Detail" session={null}>
-      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorOfferDetail(negotiationId), setState)}>
-        {(detail) => (
-          <div className="grid gap-5 lg:grid-cols-[0.8fr_1fr]">
+      <DashboardStatus
+        state={state}
+        retry={() =>
+          loadDashboard(async () => {
+            const client = new ProductApiClient();
+            const [detail, messages] = await Promise.all([
+              client.getCreatorOfferDetail(negotiationId),
+              client.listNegotiationMessages(negotiationId),
+            ]);
+            return { detail, messages };
+          }, setState)
+        }
+      >
+        {({ detail, messages }) => {
+          const events = normalizeNegotiationEvents(messages, fallbackForNegotiation(detail.negotiation));
+          return (
+          <div className="grid gap-5">
+            <div className="grid gap-5 lg:grid-cols-[0.8fr_1fr]">
             <Panel>
               <SectionTitle eyebrow="Offer" title={String(detail.offer.title ?? "Offer")} />
               <div className="mt-4 grid gap-3">
                 <InfoBox label="Negotiation ID" value={String(detail.offer.negotiationId)} />
-                <InfoBox label="Status" value={String(detail.offer.status)} />
+                <InfoBox label="Status" value={mapTaskStateToCreatorStatus(String(detail.offer.taskState ?? ""), String(detail.offer.status ?? detail.negotiation.status))} />
                 <InfoBox label="Round" value={String(detail.offer.currentRound ?? "-")} />
+                <InfoBox label="Latest offer" value={`${String(detail.offer.currentAmountUsdc ?? detail.negotiation.currentTerms?.compensation?.baseAmountUsdc ?? "-")} USDC`} />
               </div>
             </Panel>
             <Panel>
@@ -519,8 +868,60 @@ export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: str
                 {JSON.stringify(detail.negotiation.currentTerms ?? {}, null, 2)}
               </pre>
             </Panel>
+            </div>
+            <A2ANegotiationVisualizer events={events} />
           </div>
-        )}
+        );}}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandNegotiationDetailScreen({ negotiationId }: { negotiationId: string }) {
+  const [state, setState] = useDashboardState<{
+    negotiation: ApiNegotiation;
+    messages: ApiNegotiationMessage[];
+  }>();
+
+  const load = useCallback(async () => {
+    const client = new ProductApiClient();
+    const [negotiation, messages] = await Promise.all([
+      client.getNegotiation(negotiationId),
+      client.listNegotiationMessages(negotiationId),
+    ]);
+    return { negotiation, messages };
+  }, [negotiationId]);
+
+  useEffect(() => {
+    void loadDashboard(load, setState);
+  }, [load, setState]);
+
+  return (
+    <WorkspaceShell role="brand" active="negotiation" title="협상 상세" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(load, setState)}>
+        {({ negotiation, messages }) => {
+          const events = normalizeNegotiationEvents(messages, fallbackForNegotiation(negotiation));
+          return (
+            <div className="grid gap-5">
+              <Panel>
+                <SectionTitle eyebrow="Negotiation" title={negotiation.negotiationId} />
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <InfoBox label="상태" value={negotiation.status} />
+                  <InfoBox label="라운드" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
+                  <InfoBox label="제안 금액" value={`${negotiation.currentTerms.compensation.baseAmountUsdc} USDC`} />
+                  <InfoBox label="A2A Task" value={negotiation.taskId} />
+                </div>
+              </Panel>
+              <A2ANegotiationVisualizer events={events} />
+              <Panel>
+                <SectionTitle eyebrow="Visible terms" title="최초 조건과 최신 조건" />
+                <pre className="mt-4 overflow-auto rounded border border-border-subtle bg-background p-4 text-xs">
+                  {JSON.stringify(negotiation.currentTerms, null, 2)}
+                </pre>
+              </Panel>
+            </div>
+          );
+        }}
       </DashboardStatus>
     </WorkspaceShell>
   );
@@ -548,12 +949,28 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                 <InfoBox label="Status" value={String(detail.agreement.status)} />
                 <InfoBox label="Promotion ID" value={String(detail.agreement.promotionId)} />
                 <InfoBox label="termsHash" value={String(detail.agreement.termsHash ?? "not-created")} />
+                <InfoBox label="Final amount" value={`${detail.agreement.terms.compensation.baseAmountUsdc} USDC`} />
+                <InfoBox label="Deliverables" value={detail.agreement.terms.deliverables.map((item) => `${item.count} ${item.format}`).join(", ")} />
+                <InfoBox label="Usage rights" value={detail.agreement.terms.usageRights} />
               </div>
             </Panel>
             <Panel>
               <SectionTitle eyebrow="Escrow" title="Escrow state" />
               {detail.escrow ? (
                 <div className="mt-4 grid gap-3">
+                  {role === "brand" ? (
+                    <>
+                      <InfoBox label="lockedAmount" value={`${calculateBrandEscrow(detail.escrow).lockedAmount} USDC`} />
+                      <InfoBox label="releasedAmount" value={`${calculateBrandEscrow(detail.escrow).releasedAmount} USDC`} />
+                      <InfoBox label="releasableAmount" value={`${calculateBrandEscrow(detail.escrow).releasableAmount} USDC`} />
+                    </>
+                  ) : (
+                    <>
+                      <InfoBox label="availableToClaimAmount" value={`${calculateCreatorSettlement(agreementMilestones(detail.agreement)).availableToClaimAmount} USDC`} />
+                      <InfoBox label="paidAmount" value={`${calculateCreatorSettlement(agreementMilestones(detail.agreement)).paidAmount} USDC`} />
+                      <InfoBox label="pendingAmount" value={`${calculateCreatorSettlement(agreementMilestones(detail.agreement)).pendingAmount} USDC`} />
+                    </>
+                  )}
                   <InfoBox label="Escrow ID" value={detail.escrow.escrowId} />
                   <InfoBox label="Status" value={detail.escrow.status} />
                   <InfoBox label="Signature" value={detail.escrow.lockSignature ?? "pending"} />
@@ -561,6 +978,23 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
               ) : (
                 <EmptyState text="아직 escrow가 없습니다. Phase 5에서 실제 devnet lock/release가 연결됩니다." />
               )}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Milestones" title="마일스톤 진행률" />
+              <div className="mt-4 space-y-3">
+                {agreementMilestones(detail.agreement).map((milestone) => (
+                  <div key={milestone.id} className="rounded border border-border-subtle bg-background p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{milestone.order}. {milestone.title}</div>
+                        <p className="mt-1 text-sm text-muted">{milestone.condition}</p>
+                      </div>
+                      <span className="font-mono text-sm">{milestone.amountUsdc} USDC</span>
+                    </div>
+                    <div className="mt-3 font-mono text-xs uppercase text-muted">{milestone.status}</div>
+                  </div>
+                ))}
+              </div>
             </Panel>
           </div>
         )}
@@ -616,7 +1050,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
             <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
             <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
             <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
-            <Input label="Password" name="password" placeholder="Password" type="password" required />
+            <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
             <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
@@ -1786,6 +2220,85 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function PromotionSummaryCard({
+  promotion,
+  productName,
+  productCategory,
+}: {
+  promotion: BrandDashboard["activePromotions"][number];
+  productName: string;
+  productCategory: string;
+}) {
+  const progress = promotionProgress(promotion);
+  const activeNegotiations = numberRecordValue(promotion, "activeNegotiationCount", 0);
+  const agreedCreators = numberRecordValue(promotion, "agreedCreatorCount", 0);
+  const deadline = promotion.postingWindow?.end ?? "deadline pending";
+  return (
+    <Link
+      href={`/brand/promotions/${promotion.promotionId}`}
+      className="grid gap-4 rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised md:grid-cols-[72px_1fr]"
+    >
+      <div className="flex aspect-square items-center justify-center rounded border border-border-subtle bg-surface font-mono text-xs text-muted">
+        IMG
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-semibold">{promotion.title}</h3>
+            <p className="mt-1 text-sm text-muted">{productName} · {productCategory}</p>
+          </div>
+          <span className="font-mono text-xs uppercase text-muted">{promotion.status}</span>
+        </div>
+        <div className="mt-4 grid gap-2 text-sm md:grid-cols-4">
+          <InfoBox label="총예산" value={`${promotion.budget.totalUsdc} USDC`} />
+          <InfoBox label="마감일" value={deadline} />
+          <InfoBox label="협상" value={String(activeNegotiations)} />
+          <InfoBox label="체결" value={String(agreedCreators)} />
+        </div>
+        <div className="mt-4">
+          <ProgressBar progress={progress} />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function DeletePromotionButton({
+  promotionId,
+  onDeleted,
+}: {
+  promotionId: string;
+  onDeleted: () => void;
+}) {
+  const action = useMutationLock();
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    if (action.status === "submitting") return;
+    if (!window.confirm("이 프로모션을 삭제하면 복구할 수 없습니다.")) return;
+    await action.run(async () => {
+      setError(null);
+      await new ProductApiClient().deleteBrandPromotion(promotionId, action.idempotencyKey);
+      onDeleted();
+    }, (caught) => setError(errorMessage(caught)));
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
+      <p className="text-xs text-muted">계약 또는 정산 기록이 있으면 삭제할 수 없습니다.</p>
+      <button
+        type="button"
+        onClick={remove}
+        disabled={action.status === "submitting"}
+        className="rounded-full border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-muted disabled:opacity-60"
+      >
+        {action.status === "submitting" ? "삭제 중..." : "삭제"}
+      </button>
+      {error && <div className="w-full text-xs text-red-700">{error}</div>}
+    </div>
+  );
+}
+
 function DashboardRow({ title, meta, href }: { title: string; meta: string; href?: string }) {
   const content = (
     <div className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised">
@@ -1850,6 +2363,26 @@ function baseUnitsToUsdc(value: string) {
   });
 }
 
+type DashboardSettlementSummary = {
+  paidAmount: number;
+  availableToClaimAmount: number;
+  pendingAmount: number;
+};
+
+function creatorDashboardSettlement(agreements: Array<Record<string, unknown>>): DashboardSettlementSummary {
+  return agreements.reduce<DashboardSettlementSummary>(
+    (totals, agreement) => {
+      const settlement = calculateCreatorSettlement(agreementMilestones(agreement as ApiAgreement & Record<string, unknown>));
+      return {
+        paidAmount: totals.paidAmount + settlement.paidAmount,
+        availableToClaimAmount: totals.availableToClaimAmount + settlement.availableToClaimAmount,
+        pendingAmount: totals.pendingAmount + settlement.pendingAmount,
+      };
+    },
+    { paidAmount: 0, availableToClaimAmount: 0, pendingAmount: 0 },
+  );
+}
+
 function stringList(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -1879,12 +2412,16 @@ function Input({
   placeholder,
   type = "text",
   required = false,
+  defaultValue,
+  minLength,
 }: {
   label: string;
   name?: string;
   placeholder: string;
   type?: string;
   required?: boolean;
+  defaultValue?: string | number;
+  minLength?: number;
 }) {
   return (
     <label className="mt-4 block">
@@ -1893,6 +2430,8 @@ function Input({
         type={type}
         name={name}
         required={required}
+        defaultValue={defaultValue}
+        minLength={minLength}
         className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
         placeholder={placeholder}
       />
@@ -1900,13 +2439,14 @@ function Input({
   );
 }
 
-function TextArea({ label, name, placeholder }: { label: string; name?: string; placeholder: string }) {
+function TextArea({ label, name, placeholder, defaultValue }: { label: string; name?: string; placeholder: string; defaultValue?: string }) {
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
       <textarea
         rows={4}
         name={name}
+        defaultValue={defaultValue}
         className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
         placeholder={placeholder}
       />
@@ -1977,6 +2517,32 @@ function SecondaryLink({ href, children }: { href: string; children: ReactNode }
   return <Link href={href} className="inline-flex rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised">{children}</Link>;
 }
 
+function useMutationLock() {
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const lockedRef = useRef(false);
+  const reactId = useId();
+  const idempotencyKey = useMemo(() => `frontend-${reactId.replace(/:/g, "")}`, [reactId]);
+
+  const run = useCallback(
+    async (action: () => Promise<void>, onError?: (caught: unknown) => void) => {
+      if (lockedRef.current) return;
+      lockedRef.current = true;
+      setStatus("submitting");
+      try {
+        await action();
+        setStatus("success");
+      } catch (caught) {
+        lockedRef.current = false;
+        setStatus("error");
+        onError?.(caught);
+      }
+    },
+    [],
+  );
+
+  return { idempotencyKey, run, status };
+}
+
 type LocalSession = {
   userId?: string;
   role?: Role;
@@ -2017,6 +2583,17 @@ function saveCurrentAccount(context: CurrentUserContext) {
   });
 }
 
+function fallbackForNegotiation(negotiation: ApiNegotiation) {
+  return {
+    negotiationId: negotiation.negotiationId,
+    taskId: negotiation.taskId,
+    contextId: negotiation.contextId,
+    brandAgentId: negotiation.brandAgentId,
+    creatorAgentId: negotiation.creatorAgentId,
+    status: negotiation.status,
+  };
+}
+
 function fallbackRoleSession(role: Role): RoleSession {
   const brand = role === "brand";
   return {
@@ -2043,6 +2620,12 @@ function formString(formData: FormData, key: string, fallback: string) {
   return text || fallback;
 }
 
+function defaultDeadlineDate() {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 30);
+  return deadline.toISOString().slice(0, 10);
+}
+
 function formHttpUrl(formData: FormData, key: string, fallback: string) {
   const value = formString(formData, key, fallback);
   if (value.startsWith("http://") || value.startsWith("https://")) return value;
@@ -2052,6 +2635,13 @@ function formHttpUrl(formData: FormData, key: string, fallback: string) {
 function numberFromForm(formData: FormData, key: string, fallback: number) {
   const value = Number(formData.get(key));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function numberRecordValue(record: Record<string, unknown>, key: string, fallback: number) {
+  const value = record[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && Number.isFinite(Number(value))) return Number(value);
+  return fallback;
 }
 
 function errorMessage(caught: unknown) {

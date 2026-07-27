@@ -1,0 +1,68 @@
+[
+  {
+    "escrowId": "escrow-brand1-creator1",
+    "agreementId": "agreement-brand1-creator1",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-1",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-1",
+    "lockedAmountBaseUnits": "500000000",
+    "releasedAmountBaseUnits": "500000000",
+    "milestoneAmounts": {
+      "plan": "100000000",
+      "upload": "250000000",
+      "performance": "150000000"
+    },
+    "status": "COMPLETED",
+    "lockSignature": null,
+    "lockReceiptId": "receipt-lock-brand1-creator1",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T01:32:00Z",
+    "updatedAt": "2026-08-25T10:00:00Z"
+  },
+  {
+    "escrowId": "escrow-brand1-creator2",
+    "agreementId": "agreement-brand1-creator2",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-2",
+    "lockedAmountBaseUnits": "400000000",
+    "releasedAmountBaseUnits": "0",
+    "milestoneAmounts": {
+      "plan": "100000000",
+      "upload": "200000000",
+      "performance": "100000000"
+    },
+    "status": "FUNDED",
+    "lockSignature": null,
+    "lockReceiptId": "receipt-lock-brand1-creator2",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T02:22:00Z",
+    "updatedAt": "2026-07-27T02:22:00Z"
+  },
+  {
+    "escrowId": "escrow-brand2-creator2",
+    "agreementId": "agreement-brand2-creator2",
+    "promotionId": "promotion-snack",
+    "brandId": "brand-2",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-2",
+    "creatorAgentId": "agent-creator-2",
+    "lockedAmountBaseUnits": "450000000",
+    "releasedAmountBaseUnits": "0",
+    "milestoneAmounts": {
+      "concept": "100000000",
+      "review": "250000000",
+      "performance": "100000000"
+    },
+    "status": "FUNDED",
+    "lockSignature": null,
+    "lockReceiptId": "receipt-lock-brand2-creator2",
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T03:22:00Z",
+    "updatedAt": "2026-07-27T03:22:00Z"
+  }
+]

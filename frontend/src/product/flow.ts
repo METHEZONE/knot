@@ -8,8 +8,10 @@ export const appRoutes = [
   "/signup/creator",
   "/brand",
   "/brand/onboarding",
+  "/brand/promotions",
   "/brand/promotions/new",
   "/brand/promotions/[promotionId]",
+  "/brand/negotiations/[negotiationId]",
   "/brand/agreements/[agreementId]",
   "/brand/products/new",
   "/brand/negotiate",
@@ -19,10 +21,13 @@ export const appRoutes = [
   "/brand/settings",
   "/creator",
   "/creator/onboarding",
+  "/creator/offers",
   "/creator/offers/[negotiationId]",
   "/creator/criteria",
   "/creator/result",
+  "/creator/agreements",
   "/creator/agreements/[agreementId]",
+  "/creator/settlements",
   "/creator/me",
   "/creator/settings",
   "/dev/admin",
@@ -42,16 +47,17 @@ export function roleResult(role: Role) {
 
 export const brandWorkspaceRoutes = [
   { href: "/brand", label: "Dashboard" },
-  { href: "/brand/promotions/new", label: "Promotions" },
-  { href: "/brand", label: "Negotiations" },
-  { href: "/brand", label: "Agreements" },
+  { href: "/brand/promotions", label: "Promotions" },
+  { href: "/brand/promotions", label: "Negotiations" },
+  { href: "/brand/promotions", label: "Agreements" },
 ] as const;
 
 export const creatorWorkspaceRoutes = [
   { href: "/creator", label: "Dashboard" },
   { href: "/creator/criteria", label: "Criteria" },
-  { href: "/creator", label: "Offers" },
-  { href: "/creator", label: "Agreements" },
+  { href: "/creator/offers", label: "Offers" },
+  { href: "/creator/agreements", label: "Agreements" },
+  { href: "/creator/settlements", label: "Settlements" },
 ] as const;
 
 export const accountRoutes = [

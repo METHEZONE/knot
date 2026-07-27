@@ -2,6 +2,98 @@
 
 Last updated: 2026-07-27
 
+## MVP QA 2 Summary
+
+Status: `IMPLEMENTED_LOCAL_VERIFIED`
+
+Implemented:
+
+- `AuthProvider` now mounts at the app root and avoids resetting the whole app to auth loading during route changes after initial initialization.
+- Landing uses the shared authenticated header instead of a separate static header.
+- Completed Brand and Creator accounts resolve to `/brand` and `/creator`; completed Brands are no longer forced into Promotion creation after login.
+- Brand Promotion creation is simplified to product-name-first with real default values for budget, offer caps, deliverable, usage right, deadline, and OPEN status.
+- Brand Promotion creation now sends an `Idempotency-Key`; Product API uses deterministic idempotent Promotion IDs for replay-safe create requests.
+- Product API validates Promotion amount relationships and future deadline server-side.
+- Brand Promotion deletion is soft delete only, owner-scoped, idempotency guarded, and blocked when an Agreement exists.
+- Deleted Promotions are excluded from Brand dashboard/list/detail helpers.
+- Creator dashboard now prioritizes settlement summary, participating Promotions, and Agent deal history instead of raw negotiation/protocol data.
+- Added `/creator/settlements` with settlement summaries and no fake claim success.
+- Agreement milestone utilities now read `agreement.milestones` snapshots when available for status, target count, completed count, progress, and settlement totals.
+- Brand Promotion detail now supports multiple connected Agreements/Creators through an `agreements` projection.
+- Demo seed fixtures now include deterministic Brand/Creator users, Promotions, Negotiations, Agreements, Escrows, Milestones, and Settlement history for video QA.
+- Demo business-flow seed is opt-in via `include_business_flow=True`; default backend test seed remains core catalog-compatible.
+- Firestore demo seed requires `ALLOW_DEMO_DATA_RESET=true`, matching `DEMO_PROJECT_ID`, and `--confirm=RESET_KNOT_DEMO_DATA`.
+
+Demo accounts represented in fixture data:
+
+- `test1@knot.demo`: Brand 1, 루미에르 뷰티
+- `test2@knot.demo`: Brand 2, 바삭데이
+- `test3@knot.demo`: Creator 1, 민지의 뷰티룸
+- `test4@knot.demo`: Creator 2, 하루한입
+- Demo password hint remains `0000`; Firebase Auth accounts must still be created or mapped separately for real Firebase login.
+
+Verification:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run build
+../.venv/bin/python -m pytest backend/tests
+.venv/bin/python scripts/seed_demo.py --target memory
+```
+
+Results:
+
+- Frontend tests: 17 passed.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend production build: passed.
+- Backend pytest: 94 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
+- Demo memory seed: 40 documents loaded with full business-flow fixture data.
+
+Not performed:
+
+- Firestore reset/seed was not executed because it is destructive demo-environment data work.
+- Cloud Run deployment was not executed in this local verification pass.
+- Real Solana claim/release was not executed; settlement UI remains honest about wallet/claim readiness.
+
+## MVP Frontend Auth Dashboard QA Summary
+
+Status: `COMPLETED`
+
+Implemented:
+
+- Added global frontend auth state helpers for loading, authenticated, and unauthenticated header states.
+- Header now shows login/signup for logged-out users and dashboard/mypage/logout for logged-in users.
+- Dashboard links resolve by verified account role.
+- Route guards preserve a safe redirect path for unauthenticated users.
+- Firebase Google sign-in uses a singleton `GoogleAuthProvider` and `signInWithPopup`.
+- Firebase Auth errors now map to user-facing Korean messages.
+- Added `docs/FIREBASE_AUTH_SETUP.md` for Google provider and authorized-domain setup.
+- Brand dashboard now centers on Promotions instead of Agent lists.
+- Added `/brand/promotions` and `/brand/negotiations/{negotiationId}` resource pages.
+- Added `/creator/offers` and `/creator/agreements` resource pages.
+- Promotion detail separates overview, negotiation records, contracted creators, and escrow/milestone state.
+- Agreement detail shows final terms, escrow amounts, and milestone state from Agreement terms.
+- Creator dashboard separates Agent negotiation history, agreed negotiations, and milestone activity.
+- Added A2A negotiation visualizer driven by stored negotiation messages.
+- Added URL/PDF source analysis contract for Brand Promotion creation; failed API analysis falls back only to an explicit `demo` draft.
+- MVP UI does not expose new Agent creation; one Brand/Creator Agent per account remains the surfaced model.
+
+Verification:
+
+```text
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+```
+
+Current fixture/demo boundaries:
+
+- Brand source analysis uses Product API when available. If unavailable, the frontend marks the generated draft as `demo`.
+- Existing mock data source remains available only when `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is explicitly selected.
+
 ## Phase 0 Audit Summary
 
 This status file records the repository audit from `prompts/00_REPOSITORY_AUDIT.md`.

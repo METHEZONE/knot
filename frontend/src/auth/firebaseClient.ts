@@ -14,6 +14,7 @@ import {
 } from "firebase/auth";
 
 let emulatorConnected = false;
+let googleProvider: GoogleAuthProvider | null = null;
 
 export function firebaseConfigured() {
   return Boolean(
@@ -59,9 +60,21 @@ export async function createFirebaseAccount(email: string, password: string, dis
 }
 
 export async function signInWithGoogle() {
-  const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(firebaseAuth(), provider);
-  return credential.user;
+  try {
+    const credential = await signInWithPopup(firebaseAuth(), googleAuthProvider());
+    return credential.user;
+  } catch (error) {
+    if (
+      isFirebaseAuthCode(error, "auth/unauthorized-domain") &&
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "production"
+    ) {
+      console.error(
+        `[Firebase Auth] Add "${window.location.hostname}" to Firebase Authentication > Settings > Authorized domains.`,
+      );
+    }
+    throw error;
+  }
 }
 
 export async function signOutFirebase() {
@@ -81,4 +94,50 @@ function firebaseApp(): FirebaseApp {
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   });
+}
+
+function googleAuthProvider() {
+  googleProvider ??= new GoogleAuthProvider();
+  googleProvider.setCustomParameters({ prompt: "select_account" });
+  return googleProvider;
+}
+
+export function firebaseAuthErrorMessage(error: unknown) {
+  if (isFirebaseAuthCode(error, "auth/unauthorized-domain")) {
+    return "현재 접속한 도메인이 Firebase 로그인 허용 목록에 등록되지 않았습니다.";
+  }
+  if (isFirebaseAuthCode(error, "auth/popup-closed-by-user")) {
+    return "로그인 창이 닫혔습니다. 다시 시도해주세요.";
+  }
+  if (isFirebaseAuthCode(error, "auth/popup-blocked")) {
+    return "브라우저가 로그인 팝업을 차단했습니다. 팝업을 허용해주세요.";
+  }
+  if (isFirebaseAuthCode(error, "auth/network-request-failed")) {
+    return "네트워크 연결을 확인해주세요.";
+  }
+  if (isFirebaseAuthCode(error, "auth/weak-password")) {
+    return "비밀번호는 최소 6자 이상이어야 합니다.";
+  }
+  if (isFirebaseAuthCode(error, "auth/email-already-in-use")) {
+    return "이미 가입된 이메일입니다. 로그인으로 진행해주세요.";
+  }
+  if (isFirebaseAuthCode(error, "auth/invalid-email")) {
+    return "이메일 형식을 확인해주세요.";
+  }
+  if (isFirebaseAuthCode(error, "auth/operation-not-allowed")) {
+    return "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.";
+  }
+  if (isFirebaseAuthCode(error, "auth/invalid-credential")) {
+    return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isFirebaseAuthCode(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

@@ -52,7 +52,7 @@ def test_list_and_get_seeded_promotions() -> None:
     list_response = client.get("/api/v1/promotions")
     assert list_response.status_code == 200
     promotions = list_response.json()["data"]["promotions"]
-    assert [promotion["promotionId"] for promotion in promotions] == ["promotion-001"]
+    assert "promotion-001" in [promotion["promotionId"] for promotion in promotions]
 
     get_response = client.get("/api/v1/promotions/promotion-001")
     assert get_response.status_code == 200

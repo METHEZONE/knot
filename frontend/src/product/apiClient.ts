@@ -159,6 +159,39 @@ export type BrandPromotionCreateInput = {
   prohibitedClaims: string[];
 };
 
+export type BrandSourceAnalysisInput = {
+  websiteUrl?: string;
+  productUrl?: string;
+  pdfFileRef?: string;
+};
+
+export type BrandSourceField<T> = {
+  value: T;
+  source: "WEBSITE" | "PRODUCT_URL" | "PDF" | "USER_INPUT" | "AI_INFERENCE" | "DEMO_FIXTURE";
+  confidence: number;
+};
+
+export type BrandSourceAnalysisDraft = {
+  mode: "api" | "demo";
+  brand: {
+    name: BrandSourceField<string>;
+  };
+  product: {
+    name: BrandSourceField<string>;
+    category: BrandSourceField<string>;
+    summary: BrandSourceField<string>;
+    price?: BrandSourceField<string>;
+    features: Array<BrandSourceField<string>>;
+    targetAudience: Array<BrandSourceField<string>>;
+    keywords: Array<BrandSourceField<string>>;
+  };
+  recommendations: {
+    objectives: string[];
+    channels: string[];
+    deliverables: string[];
+  };
+};
+
 export type ApiMatchRun = {
   matchRunId: string;
   promotionId: string;
@@ -250,6 +283,18 @@ export type ApiTimelineEvent = {
   promotionId: string;
   type: string;
   data: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type ApiNegotiationMessage = {
+  messageId: string;
+  negotiationId?: string;
+  contextId: string;
+  taskId: string;
+  role?: string;
+  sequence?: number;
+  payload?: Record<string, unknown>;
+  a2aMessage?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -351,6 +396,7 @@ export type ApiSettlementBundle = ApiNegotiationBundle & {
 export type BrandPromotionDetail = {
   promotion: ApiPromotion & Record<string, unknown>;
   agreement: (ApiAgreement & Record<string, unknown>) | null;
+  agreements?: Array<ApiAgreement & Record<string, unknown>>;
   activity: ApiTimelineEvent[];
 };
 
@@ -446,19 +492,37 @@ export class ProductApiClient {
     return response.promotions;
   }
 
-  async createBrandPromotion(input: BrandPromotionCreateInput) {
+  async createBrandPromotion(input: BrandPromotionCreateInput, idempotencyKey: string) {
     const response = await this.request<{ promotion: ApiPromotion & Record<string, unknown> }>(
       "/api/v1/brand/promotions",
       {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(input),
       },
     );
     return response.promotion;
   }
 
+  async analyzeBrandSource(input: BrandSourceAnalysisInput) {
+    return this.request<BrandSourceAnalysisDraft>("/api/v1/onboarding/brand/analyze-source", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
   async getBrandPromotionDetail(promotionId: string) {
     return this.request<BrandPromotionDetail>(`/api/v1/brand/promotions/${promotionId}`);
+  }
+
+  async deleteBrandPromotion(promotionId: string, idempotencyKey: string) {
+    return this.request<{ promotion: ApiPromotion & Record<string, unknown>; deleted: boolean }>(
+      `/api/v1/brand/promotions/${promotionId}`,
+      {
+        method: "DELETE",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
   }
 
   async listBrandAgreements() {
@@ -576,6 +640,13 @@ export class ProductApiClient {
       `/api/v1/negotiations/${negotiationId}`,
     );
     return response.negotiation;
+  }
+
+  async listNegotiationMessages(negotiationId: string) {
+    const response = await this.request<{ messages: ApiNegotiationMessage[] }>(
+      `/api/v1/negotiations/${negotiationId}/messages`,
+    );
+    return response.messages;
   }
 
   async startNegotiation(matchRunId: string) {

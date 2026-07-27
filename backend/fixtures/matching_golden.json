@@ -17,11 +17,29 @@
       "hardFilterReasons": []
     },
     {
+      "creatorAgentId": "agent-creator-1",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["CREATOR_INACTIVE"]
+    },
+    {
       "creatorAgentId": "creator-agent-002",
       "eligible": false,
       "score": 0.0,
       "rank": null,
       "hardFilterReasons": ["CATEGORY_MISMATCH"]
+    },
+    {
+      "creatorAgentId": "agent-creator-2",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": [
+        "CREATOR_INACTIVE",
+        "CATEGORY_MISMATCH",
+        "USAGE_RIGHTS_UNSUPPORTED"
+      ]
     }
   ]
 }
