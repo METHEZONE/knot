@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { Caveat, Gaegu, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
+import { Geist_Mono } from "next/font/google";
 import { SquiggleFilters } from "@/components/SquiggleFilters";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
-/** Body/UI hand. Gaegu carries Latin and Hangul, so Korean copy stays in-world. */
-const hand = Gaegu({
+/**
+ * 이서윤체 — 본문과 헤드라인을 같은 손글씨로 쓴다.
+ *
+ * Gaegu는 한글이 작게 렌더돼 잘 안 읽혔고, Caveat/나눔펜은 라틴과 한글 중
+ * 한쪽만 제대로 커버했다. 이 폰트 하나로 둘 다 해결되므로 위계는 글꼴이 아니라
+ * 크기와 굵기로 만든다.
+ */
+const hand = localFont({
+  src: "./fonts/LeeSeoyun.ttf",
   variable: "--font-hand",
-  subsets: ["latin"],
-  weight: ["300", "400", "700"],
-});
-
-/** Headlines and figures — a faster, more confident hand than the body font. */
-const display = Caveat({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  display: "swap",
 });
 
 /**
@@ -41,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${hand.variable} ${display.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${hand.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <SquiggleFilters />
