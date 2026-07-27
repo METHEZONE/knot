@@ -15,6 +15,20 @@ export function getMyPagePath(role: CurrentAccount["role"] | undefined | null) {
   return "/signup";
 }
 
+export function postLoginPath(
+  account: CurrentAccount,
+  dashboardTarget: string,
+  redirect: string | null,
+) {
+  if (account.onboardingStatus !== "COMPLETED") return dashboardTarget;
+  const dashboardPath = getDashboardPath(account.role) ?? dashboardTarget;
+  if (!redirect) return dashboardPath;
+  if (redirect === "/brand/promotions/new" || redirect === "/brand/products/new") return dashboardPath;
+  if (account.role === "BRAND" && redirect.startsWith("/brand/")) return redirect;
+  if (account.role === "CREATOR" && redirect.startsWith("/creator/")) return redirect;
+  return dashboardPath;
+}
+
 export function headerMenuForAuth(
   status: AuthStatus,
   role?: CurrentAccount["role"] | null,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { firebaseAuthErrorMessage } from "../src/auth/firebaseClient";
-import { getDashboardPath, headerMenuForAuth, safeRedirectPath } from "../src/auth/authState";
+import { getDashboardPath, headerMenuForAuth, postLoginPath, safeRedirectPath } from "../src/auth/authState";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { createKnotDataSource, resolveDataMode } from "../src/product/dataSource";
 import { ProductApiClient, ProductApiError, type ApiPromotion } from "../src/product/apiClient";
@@ -77,6 +77,28 @@ test("auth helpers preserve safe redirects and role dashboard paths", () => {
   assert.equal(safeRedirectPath("/brand/promotions/promotion-1"), "/brand/promotions/promotion-1");
   assert.equal(safeRedirectPath("//evil.example"), null);
   assert.equal(safeRedirectPath("/api/v1/me"), null);
+});
+
+test("post-login redirect sends completed brands to dashboard instead of creation flow", () => {
+  const brandAccount = {
+    uid: "uid",
+    userId: "uid",
+    email: "brand@example.com",
+    displayName: "Brand",
+    photoUrl: null,
+    role: "BRAND" as const,
+    onboardingStatus: "COMPLETED" as const,
+    status: "ACTIVE" as const,
+    brandId: "brand-1",
+    creatorId: null,
+    agentId: "agent-brand-1",
+    schemaVersion: 2,
+  };
+
+  assert.equal(postLoginPath(brandAccount, "/brand", "/brand/promotions/new"), "/brand");
+  assert.equal(postLoginPath(brandAccount, "/brand", "/brand/products/new"), "/brand");
+  assert.equal(postLoginPath(brandAccount, "/brand", "/brand/promotions/promotion-1"), "/brand/promotions/promotion-1");
+  assert.equal(postLoginPath(brandAccount, "/brand", "/creator"), "/brand");
 });
 
 test("Firebase auth errors map to user-facing messages", () => {

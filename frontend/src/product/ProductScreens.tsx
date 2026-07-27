@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
-import { safeRedirectPath } from "@/auth/authState";
+import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import {
   authConfigurationError,
   createFirebaseAccount,
@@ -121,7 +121,7 @@ export function LoginScreen() {
       await signInWithEmail(email, password);
       const account = await new ProductApiClient().getMe();
       saveCurrentAccount(account);
-      router.push(redirect ?? account.dashboardTarget);
+      router.push(postLoginPath(account.account, account.dashboardTarget, redirect));
     } catch (caught) {
       setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
@@ -136,7 +136,7 @@ export function LoginScreen() {
       await signInWithGoogle();
       const account = await new ProductApiClient().getMe();
       saveCurrentAccount(account);
-      router.push(redirect ?? account.dashboardTarget);
+      router.push(postLoginPath(account.account, account.dashboardTarget, redirect));
     } catch (caught) {
       setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
