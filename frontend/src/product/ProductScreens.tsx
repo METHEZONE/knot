@@ -1019,7 +1019,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
   const configured = firebaseConfigured();
   // 구글 등으로 이미 Firebase 로그인된 상태면(예: /login에서 "Continue with Google" 후 역할선택으로 유입)
   // 계정을 다시 만들지 않고(=email-already-in-use 방지) 이메일만 채워 역할 연결로 넘어간다.
-  const { status: authStatus, context: authContext } = useAuth();
+  const { status: authStatus, context: authContext, refresh } = useAuth();
   const authedEmail = authStatus === "authenticated" ? authContext?.account.email ?? null : null;
   const alreadyAuthed = Boolean(authedEmail);
 
@@ -1038,6 +1038,9 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
       await api.getMe();
       const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
       saveCurrentAccount(account);
+      // 역할 선택 결과를 AuthProvider context에 반영. 안 하면 다음 페이지 AuthGate가
+      // 여전히 role=null로 보고 /signup(역할선택)으로 되돌려 보냄.
+      await refresh();
       router.push(nextHref);
     } catch (caught) {
       setError(errorMessage(caught));
