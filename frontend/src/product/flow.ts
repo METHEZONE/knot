@@ -1,56 +1,23 @@
 import type { Role } from "./types";
 
+/** docs/24_UX_JOURNEY_v1.md §2 — 전체 7개. */
 export const appRoutes = [
   "/",
   "/login",
-  "/signup",
-  "/signup/brand",
-  "/signup/creator",
-  "/brand/onboarding",
-  "/brand/products/new",
-  "/brand/negotiate",
-  "/brand/result",
-  "/brand/settlement",
-  "/brand/me",
-  "/brand/settings",
-  "/creator/onboarding",
-  "/creator/criteria",
-  "/creator/result",
-  "/creator/brands/glow-bar",
-  "/creator/me",
-  "/creator/settings",
+  "/creator/connect",
+  "/creator/rules",
+  "/creator",
+  "/brand/product",
+  "/brand/mood",
+  "/brand",
   "/dev/admin",
 ] as const;
 
-export function roleHome(role: Role) {
-  return `/${role}/onboarding`;
+/** 로그인 직후 각 역할이 시작하는 곳. */
+export function roleEntry(role: Role) {
+  return role === "brand" ? "/brand/product" : "/creator/connect";
 }
 
-export function roleNegotiation(role: Role) {
-  return role === "brand" ? "/brand/negotiate" : "/creator/result";
-}
-
-export function roleResult(role: Role) {
-  return `/${role}/result`;
-}
-
-export const brandWorkspaceRoutes = [
-  { href: "/brand/onboarding", label: "Profile" },
-  { href: "/brand/products/new", label: "Promotions" },
-  { href: "/brand/negotiate", label: "Negotiations" },
-  { href: "/brand/settlement", label: "Settlements" },
-] as const;
-
-export const creatorWorkspaceRoutes = [
-  { href: "/creator/onboarding", label: "Profile" },
-  { href: "/creator/criteria", label: "Criteria" },
-  { href: "/creator/result", label: "Offers" },
-  { href: "/creator/brands/glow-bar", label: "Deals" },
-] as const;
-
-export const accountRoutes = [
-  { href: "/brand/me", label: "Brand My" },
-  { href: "/brand/settings", label: "Brand Settings" },
-  { href: "/creator/me", label: "Creator My" },
-  { href: "/creator/settings", label: "Creator Settings" },
-] as const;
+/** 상단바에 노출할 것 — 홈(채팅창) 하나면 충분하다. */
+export const brandWorkspaceRoutes = [{ href: "/brand", label: "내 매니저" }] as const;
+export const creatorWorkspaceRoutes = [{ href: "/creator", label: "내 매니저" }] as const;

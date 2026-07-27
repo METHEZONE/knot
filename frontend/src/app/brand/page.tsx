@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { RoleHome } from "@/features/chat/RoleHome";
 
 export default function Page() {
-  redirect("/brand/onboarding");
+  return <RoleHome role="brand" />;
 }

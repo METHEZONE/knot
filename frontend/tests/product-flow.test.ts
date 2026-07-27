@@ -1,81 +1,96 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
-import { knotDataSource } from "../src/product/dataSource";
+import {
+  appRoutes,
+  brandWorkspaceRoutes,
+  creatorWorkspaceRoutes,
+  roleEntry,
+} from "../src/product/flow";
+import { runDeal, verifyEvidence } from "../src/product/journey";
+import { lookupInstagram, suggestedMinUsdc } from "../src/product/setupStore";
+import type { BrandSetup, CreatorSetup } from "../src/product/setupStore";
 
-test("product route surface exposes separated MVP role pages", () => {
+const creator = (minUsdc: number): CreatorSetup => ({
+  ...lookupInstagram("@demobeauty"),
+  minUsdc,
+  blocked: ["gambling"],
+});
+
+const brand = (maxPerDealUsdc: number): BrandSetup => ({
+  productUrl: "https://demo-skincare.example.com/spf-daily",
+  productName: "데일리 SPF 모이스처라이저",
+  priceKrw: 28_000,
+  summary: "",
+  category: "beauty",
+  moodTags: ["차분함", "설명형"],
+  totalUsdc: 2_000,
+  maxPerDealUsdc,
+});
+
+test("route surface is the seven-screen journey (docs/24)", () => {
   assert.deepEqual(appRoutes, [
     "/",
     "/login",
-    "/signup",
-    "/signup/brand",
-    "/signup/creator",
-    "/brand/onboarding",
-    "/brand/products/new",
-    "/brand/negotiate",
-    "/brand/result",
-    "/brand/settlement",
-    "/brand/me",
-    "/brand/settings",
-    "/creator/onboarding",
-    "/creator/criteria",
-    "/creator/result",
-    "/creator/brands/glow-bar",
-    "/creator/me",
-    "/creator/settings",
+    "/creator/connect",
+    "/creator/rules",
+    "/creator",
+    "/brand/product",
+    "/brand/mood",
+    "/brand",
     "/dev/admin",
   ]);
 });
 
-test("workspace nav is menu-like and role-specific", () => {
-  assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), [
-    "/brand/onboarding",
-    "/brand/products/new",
-    "/brand/negotiate",
-    "/brand/settlement",
-  ]);
-  assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
-    "/creator/onboarding",
-    "/creator/criteria",
-    "/creator/result",
-    "/creator/brands/glow-bar",
-  ]);
+test("each role's nav is just its own chat home", () => {
+  assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand"]);
+  assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator"]);
+  assert.equal(roleEntry("brand"), "/brand/product");
+  assert.equal(roleEntry("creator"), "/creator/connect");
 });
 
-test("account routes are kept out of role workspace menus", () => {
-  assert.deepEqual(accountRoutes.map((route) => route.href), [
-    "/brand/me",
-    "/brand/settings",
-    "/creator/me",
-    "/creator/settings",
-  ]);
+test("instagram lookup is deterministic and carries a capture date", () => {
+  const a = lookupInstagram("@demobeauty");
+  const b = lookupInstagram("demobeauty");
+  assert.deepEqual(a, b);
+  assert.match(a.capturedAt, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(suggestedMinUsdc(a.followers, a.engagementRate) >= 150);
 });
 
-test("role route helpers point to current MVP entry points", () => {
-  assert.equal(roleHome("brand"), "/brand/onboarding");
-  assert.equal(roleNegotiation("brand"), "/brand/negotiate");
-  assert.equal(roleResult("brand"), "/brand/result");
-  assert.equal(roleHome("creator"), "/creator/onboarding");
-  assert.equal(roleNegotiation("creator"), "/creator/result");
-  assert.equal(roleResult("creator"), "/creator/result");
+test("deal agrees at the creator floor when it fits the brand's per-deal cap", () => {
+  const out = runDeal(creator(650), brand(800));
+  assert.equal(out.blocked, false);
+  assert.equal(out.agreedUsdc, 650);
+  // 내림 후 나머지는 마지막 마일스톤으로 (settlement.py와 동일).
+  assert.deepEqual(out.milestones.map((m) => m.usdc), [195, 455]);
+  assert.equal(out.milestones[0].usdc + out.milestones[1].usdc, 650);
+  assert.ok(out.termsHash.startsWith("sha256:"));
 });
 
-test("mock data source exposes sanitized negotiation views for both roles", async () => {
-  const brand = await knotDataSource.getNegotiation("brand");
-  const creator = await knotDataSource.getNegotiation("creator");
-
-  assert.equal(brand.taskId, creator.taskId);
-  assert.ok(brand.publicSummary.some((line) => line.includes("최소 단가")));
-  assert.ok(creator.publicSummary.some((line) => line.includes("hard maximum")));
-  assert.equal(brand.termsHash, creator.termsHash);
+test("policy blocks the deal when the floor exceeds the cap", () => {
+  const out = runDeal(creator(1_200), brand(800));
+  assert.equal(out.blocked, true);
+  assert.equal(out.agreedUsdc, null);
+  assert.ok(out.rounds.some((r) => r.speaker === "policy"));
+  // 결렬이어도 후보 3명은 남는다 — 데모 하드 게이트.
+  assert.equal(out.candidates.length, 3);
 });
 
-test("mock data source exposes DB-ready creator deal and criteria collections", async () => {
-  const criteria = await knotDataSource.getCreatorCriteria();
-  const deals = await knotDataSource.getCreatorDeals();
-  const agreedDeal = await knotDataSource.getCreatorDeal("glow-bar");
+test("the selected candidate always ranks first", () => {
+  const out = runDeal(creator(650), brand(800));
+  const [top, ...rest] = out.candidates;
+  assert.equal(top.selected, true);
+  assert.ok(rest.every((c) => c.fit < top.fit));
+});
 
-  assert.ok(criteria.blockedDomains.includes("담배"));
-  assert.ok(deals.some((deal) => deal.status === "AGREED"));
-  assert.equal(agreedDeal?.settlement.escrowStatus, "PARTIALLY_RELEASED");
+test("both outcomes always surface three candidates and stay within five rounds", () => {
+  for (const floor of [200, 650, 1_200]) {
+    const out = runDeal(creator(floor), brand(800));
+    assert.equal(out.candidates.length, 3);
+    assert.ok(out.rounds.every((r) => r.round <= out.maxRounds));
+  }
+});
+
+test("evidence verification is deterministic", () => {
+  assert.equal(verifyEvidence("https://www.instagram.com/reel/abc").passed, true);
+  assert.equal(verifyEvidence("not-a-url").passed, false);
 });

@@ -23,8 +23,8 @@ export const SESSION_EVENT = "knot:session";
 
 /** 로그인 직후 각 역할이 처음 보는 화면. */
 export const ROLE_ENTRY: Record<Role, string> = {
-  brand: "/brand/onboarding",
-  creator: "/creator/onboarding",
+  brand: "/brand/product",
+  creator: "/creator/connect",
 };
 
 /** 상단바에 "누구로 로그인했는지" 보여주는 데 쓴다 — 창을 나란히 놓고 봐야 하므로 필수. */
