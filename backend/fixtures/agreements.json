@@ -1,0 +1,317 @@
+[
+  {
+    "agreementId": "agreement-brand1-creator1",
+    "negotiationId": "negotiation-brand1-creator1",
+    "taskId": "task-brand1-creator1",
+    "artifactId": "artifact-brand1-creator1",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-1",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-1",
+    "status": "COMPLETED",
+    "totalAmountUsdc": 500,
+    "termsHash": "sha256:demo-agreement-brand1-creator1",
+    "canonicalTermsJson": "{\"demo\":true,\"agreementId\":\"agreement-brand1-creator1\"}",
+    "brandSnapshot": {
+      "brandId": "brand-1",
+      "displayName": "루미에르 뷰티"
+    },
+    "creatorSnapshot": {
+      "creatorId": "creator-1",
+      "displayName": "민지의 뷰티룸",
+      "primaryPlatform": "Instagram"
+    },
+    "promotionSnapshot": {
+      "promotionId": "promotion-lip-balm",
+      "title": "글로우 립밤 크리에이터 프로모션",
+      "productName": "글로우 립밤"
+    },
+    "terms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 500
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 1,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "plan",
+          "trigger": "contentPlanApproved",
+          "releasePct": 20
+        },
+        {
+          "id": "upload",
+          "trigger": "contentLiveVerified",
+          "releasePct": 50
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 30
+        }
+      ]
+    },
+    "milestones": [
+      {
+        "id": "plan",
+        "order": 1,
+        "title": "콘텐츠 기획안 확정",
+        "description": "브랜드가 콘텐츠 기획안을 확인했습니다.",
+        "dueDate": "2026-08-05",
+        "amountUsdc": 100,
+        "targetCount": 1,
+        "completedCount": 1,
+        "unit": "개",
+        "status": "RELEASED",
+        "releasedAt": "2026-08-05T10:00:00Z"
+      },
+      {
+        "id": "upload",
+        "order": 2,
+        "title": "립밤 Reel 업로드",
+        "description": "Instagram Reel 1개 업로드",
+        "dueDate": "2026-08-15",
+        "amountUsdc": 250,
+        "targetCount": 1,
+        "completedCount": 1,
+        "unit": "Reel",
+        "status": "RELEASED",
+        "releasedAt": "2026-08-15T10:00:00Z"
+      },
+      {
+        "id": "performance",
+        "order": 3,
+        "title": "성과 데이터 제출",
+        "description": "게시물 성과 데이터 제출",
+        "dueDate": "2026-08-25",
+        "amountUsdc": 150,
+        "targetCount": 1,
+        "completedCount": 1,
+        "unit": "건",
+        "status": "RELEASED",
+        "releasedAt": "2026-08-25T10:00:00Z"
+      }
+    ],
+    "createdAt": "2026-07-27T01:31:00Z",
+    "updatedAt": "2026-08-25T10:00:00Z"
+  },
+  {
+    "agreementId": "agreement-brand1-creator2",
+    "negotiationId": "negotiation-brand1-creator2",
+    "taskId": "task-brand1-creator2",
+    "artifactId": "artifact-brand1-creator2",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-2",
+    "status": "ACTIVE",
+    "totalAmountUsdc": 400,
+    "termsHash": "sha256:demo-agreement-brand1-creator2",
+    "canonicalTermsJson": "{\"demo\":true,\"agreementId\":\"agreement-brand1-creator2\"}",
+    "brandSnapshot": {
+      "brandId": "brand-1",
+      "displayName": "루미에르 뷰티"
+    },
+    "creatorSnapshot": {
+      "creatorId": "creator-2",
+      "displayName": "하루한입",
+      "primaryPlatform": "Instagram"
+    },
+    "promotionSnapshot": {
+      "promotionId": "promotion-lip-balm",
+      "title": "글로우 립밤 크리에이터 프로모션",
+      "productName": "글로우 립밤"
+    },
+    "terms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 400
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 3,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "plan",
+          "trigger": "contentPlanSubmitted",
+          "releasePct": 25
+        },
+        {
+          "id": "upload",
+          "trigger": "contentLiveVerified",
+          "releasePct": 50
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 25
+        }
+      ]
+    },
+    "milestones": [
+      {
+        "id": "plan",
+        "order": 1,
+        "title": "콘텐츠 기획안 제출",
+        "description": "브랜드 확인용 기획안을 제출합니다.",
+        "dueDate": "2026-08-05",
+        "amountUsdc": 100,
+        "targetCount": 1,
+        "completedCount": 0,
+        "unit": "개",
+        "status": "PENDING"
+      },
+      {
+        "id": "upload",
+        "order": 2,
+        "title": "립밤 Reel 업로드",
+        "description": "Instagram Reel 3개 업로드",
+        "dueDate": "2026-08-18",
+        "amountUsdc": 200,
+        "targetCount": 3,
+        "completedCount": 0,
+        "unit": "Reel",
+        "status": "PENDING"
+      },
+      {
+        "id": "performance",
+        "order": 3,
+        "title": "성과 데이터 제출",
+        "description": "게시물 성과 데이터 제출",
+        "dueDate": "2026-08-26",
+        "amountUsdc": 100,
+        "targetCount": 1,
+        "completedCount": 0,
+        "unit": "건",
+        "status": "PENDING"
+      }
+    ],
+    "createdAt": "2026-07-27T02:21:00Z",
+    "updatedAt": "2026-07-27T02:21:00Z"
+  },
+  {
+    "agreementId": "agreement-brand2-creator2",
+    "negotiationId": "negotiation-brand2-creator2",
+    "taskId": "task-brand2-creator2",
+    "artifactId": "artifact-brand2-creator2",
+    "promotionId": "promotion-snack",
+    "brandId": "brand-2",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-2",
+    "creatorAgentId": "agent-creator-2",
+    "status": "ACTIVE",
+    "totalAmountUsdc": 450,
+    "termsHash": "sha256:demo-agreement-brand2-creator2",
+    "canonicalTermsJson": "{\"demo\":true,\"agreementId\":\"agreement-brand2-creator2\"}",
+    "brandSnapshot": {
+      "brandId": "brand-2",
+      "displayName": "바삭데이"
+    },
+    "creatorSnapshot": {
+      "creatorId": "creator-2",
+      "displayName": "하루한입",
+      "primaryPlatform": "Instagram"
+    },
+    "promotionSnapshot": {
+      "promotionId": "promotion-snack",
+      "title": "허니버터 스낵 크리에이터 프로모션",
+      "productName": "허니버터 스낵"
+    },
+    "terms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 450
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 3,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "concept",
+          "trigger": "contentConceptApproved",
+          "releasePct": 22
+        },
+        {
+          "id": "review",
+          "trigger": "contentLiveVerified",
+          "releasePct": 56
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 22
+        }
+      ]
+    },
+    "milestones": [
+      {
+        "id": "concept",
+        "order": 1,
+        "title": "콘텐츠 콘셉트 확정",
+        "description": "리뷰 방향과 컷 구성을 확정합니다.",
+        "dueDate": "2026-08-06",
+        "amountUsdc": 100,
+        "targetCount": 1,
+        "completedCount": 0,
+        "unit": "개",
+        "status": "PENDING"
+      },
+      {
+        "id": "review",
+        "order": 2,
+        "title": "스낵 리뷰 콘텐츠 업로드",
+        "description": "Instagram Reel 3개 업로드",
+        "dueDate": "2026-08-18",
+        "amountUsdc": 250,
+        "targetCount": 3,
+        "completedCount": 0,
+        "unit": "Reel",
+        "status": "PENDING"
+      },
+      {
+        "id": "performance",
+        "order": 3,
+        "title": "성과 데이터 제출",
+        "description": "게시물 성과 데이터 제출",
+        "dueDate": "2026-08-26",
+        "amountUsdc": 100,
+        "targetCount": 1,
+        "completedCount": 0,
+        "unit": "건",
+        "status": "PENDING"
+      }
+    ],
+    "createdAt": "2026-07-27T03:21:00Z",
+    "updatedAt": "2026-07-27T03:21:00Z"
+  }
+]

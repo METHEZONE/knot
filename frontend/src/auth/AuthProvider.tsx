@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   authConfigurationError,
   currentIdToken,
@@ -29,9 +29,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(configured ? "loading" : "unauthenticated");
   const [context, setContext] = useState<CurrentUserContext | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : authConfigurationError());
+  const contextRef = useRef<CurrentUserContext | null>(null);
+  const initializedRef = useRef(!configured);
 
   const refresh = useCallback(async () => {
     const accountContext = await new ProductApiClient().getMe();
+    contextRef.current = accountContext;
+    initializedRef.current = true;
     setContext(accountContext);
     setStatus("authenticated");
     setError(null);
@@ -39,6 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await signOutFirebase();
+    contextRef.current = null;
+    initializedRef.current = true;
     setContext(null);
     setStatus("unauthenticated");
   }, []);
@@ -47,15 +53,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!configured) return;
     const unsubscribe = observeFirebaseUser((user) => {
       if (!user) {
+        contextRef.current = null;
+        initializedRef.current = true;
         setContext(null);
         setStatus("unauthenticated");
         setError(null);
         return;
       }
-      setStatus("loading");
+      if (!initializedRef.current && !contextRef.current) {
+        setStatus("loading");
+      }
       void refresh().catch((caught) => {
-        setContext(null);
-        setStatus("unauthenticated");
+        initializedRef.current = true;
+        if (!contextRef.current) {
+          setContext(null);
+          setStatus("unauthenticated");
+        }
         setError(caught instanceof Error ? caught.message : String(caught));
       });
     });

@@ -40,6 +40,7 @@ test("product route surface exposes separated MVP role pages", () => {
     "/creator/result",
     "/creator/agreements",
     "/creator/agreements/[agreementId]",
+    "/creator/settlements",
     "/creator/me",
     "/creator/settings",
     "/dev/admin",
@@ -58,6 +59,7 @@ test("workspace nav is menu-like and role-specific", () => {
     "/creator/criteria",
     "/creator/offers",
     "/creator/agreements",
+    "/creator/settlements",
   ]);
 });
 
@@ -464,22 +466,25 @@ test("API client uses resource routes for promotions offers and agreements", asy
 
   try {
     const api = new ProductApiClient("");
-    await api.createBrandPromotion({
-      productName: "Product",
-      title: "Resource",
-      objective: "awareness",
-      categories: ["beauty"],
-      targetAudience: "skincare",
-      totalBudget: 1000,
-      initialOffer: 500,
-      maximumPerCreator: 700,
-      autoAcceptCeiling: 650,
-      maximumRounds: 3,
-      deliverables: [{ format: "reel", count: 1 }],
-      usageRights: "organicOnly",
-      deadline: "2026-08-10",
-      prohibitedClaims: [],
-    });
+    await api.createBrandPromotion(
+      {
+        productName: "Product",
+        title: "Resource",
+        objective: "awareness",
+        categories: ["beauty"],
+        targetAudience: "skincare",
+        totalBudget: 1000,
+        initialOffer: 500,
+        maximumPerCreator: 700,
+        autoAcceptCeiling: 650,
+        maximumRounds: 3,
+        deliverables: [{ format: "reel", count: 1 }],
+        usageRights: "organicOnly",
+        deadline: "2026-08-10",
+        prohibitedClaims: [],
+      },
+      "frontend-resource-test",
+    );
     await api.getBrandPromotionDetail("promotion-resource");
     await api.getCreatorOfferDetail("negotiation-resource");
     await api.getBrandAgreementDetail("agreement-resource");

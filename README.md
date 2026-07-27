@@ -99,6 +99,23 @@ npm run test
 npm run build
 ```
 
+## Demo Seed Data
+
+Memory-only verification:
+
+```text
+.venv/bin/python scripts/seed_demo.py --target memory
+```
+
+Firestore demo reseed is restricted to the configured demo project and requires an explicit confirmation:
+
+```text
+ALLOW_DEMO_DATA_RESET=true DEMO_PROJECT_ID=knot-dev-503505 \
+.venv/bin/python scripts/seed_demo.py --target firestore --project knot-dev-503505 --confirm=RESET_KNOT_DEMO_DATA
+```
+
+Do not run Firestore reseed against production or unknown projects. The script does not create Firebase Auth users; it seeds Product API/Firestore fixture documents only.
+
 Web3 Gateway:
 
 ```text

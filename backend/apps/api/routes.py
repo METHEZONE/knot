@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from subprocess import TimeoutExpired
 from typing import cast
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Header, HTTPException, status
 
@@ -673,7 +673,7 @@ def build_api_router(
         promotions = [
             _promotion_document_with_raw(repository, promotion)
             for promotion in repository.list_promotions()
-            if promotion.brand_id == brand_id
+            if promotion.brand_id == brand_id and not _promotion_is_deleted(repository, promotion.promotion_id)
         ]
         return _ok({"promotions": _sorted_recent(promotions)})
 
@@ -681,12 +681,53 @@ def build_api_router(
     def create_brand_promotion(
         payload: BrandPromotionCreateRequest,
         authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> dict[str, object]:
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _require_completed_role(repository, auth_user, "BRAND")
         brand_id = _require_document_str(user, "brandId")
         brand_agent_id = _require_document_str(user, "agentId")
-        promotion_id = payload.promotion_id or f"promotion-{uuid4()}"
+        if payload.initial_offer > payload.maximum_per_creator:
+            raise _problem(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "VALIDATION_ERROR",
+                "initialOffer must be less than or equal to maximumPerCreator.",
+            )
+        if payload.auto_accept_ceiling > payload.maximum_per_creator:
+            raise _problem(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "VALIDATION_ERROR",
+                "autoAcceptCeiling must be less than or equal to maximumPerCreator.",
+            )
+        if payload.deadline <= date.today():
+            raise _problem(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "VALIDATION_ERROR",
+                "deadline must be after today.",
+            )
+        key = _require_idempotency_key(idempotency_key)
+        request_payload = {
+            "uid": auth_user.uid,
+            "brandId": brand_id,
+            **payload.model_dump(mode="json", by_alias=True),
+        }
+        _claim_idempotency(
+            repository,
+            key,
+            payload=request_payload,
+            owner_path=f"{FirestorePaths.brand(brand_id)}:promotion-create",
+        )
+        promotion_id = payload.promotion_id or f"promotion-{uuid5(NAMESPACE_URL, f'{brand_id}:{key}')}"
+        existing = repository.get_raw_document(FirestorePaths.promotion(promotion_id))
+        if existing is not None:
+            existing_owner = existing.get("brandId")
+            if existing_owner != brand_id:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "IDEMPOTENCY_CONFLICT",
+                    f"Promotion {promotion_id} already exists.",
+                )
+            return _ok({"promotion": existing})
         if repository.get_promotion(promotion_id) is not None:
             raise _problem(
                 status.HTTP_409_CONFLICT,
@@ -713,6 +754,7 @@ def build_api_router(
             "autoAcceptCeiling": payload.auto_accept_ceiling,
             "maximumRounds": payload.maximum_rounds,
             "deadline": payload.deadline.isoformat(),
+            "status": "OPEN",
             "updatedAt": _now(),
             "createdAt": _now(),
         }
@@ -721,7 +763,7 @@ def build_api_router(
             repository,
             promotion_id=promotion_id,
             event_type="PROMOTION_CREATED",
-            data={"status": "DRAFT", "ownerUid": auth_user.uid},
+            data={"status": "OPEN", "ownerUid": auth_user.uid, "idempotencyKey": key},
         )
         return _ok({"promotion": document})
 
@@ -734,13 +776,55 @@ def build_api_router(
         user = _require_completed_role(repository, auth_user, "BRAND")
         promotion = _require_brand_promotion_document(repository, user, promotion_id)
         agreement = _agreement_for_promotion(repository, promotion_id)
+        agreements = _agreements_for_promotion(repository, promotion_id)
         return _ok(
             {
                 "promotion": promotion,
                 "agreement": agreement,
+                "agreements": agreements,
                 "activity": _promotion_events(repository, {promotion_id}, limit=20),
             }
         )
+
+    @router.delete("/brand/promotions/{promotion_id}")
+    def delete_brand_promotion(
+        promotion_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        key = _require_idempotency_key(idempotency_key)
+        promotion = _require_brand_promotion_document(repository, user, promotion_id)
+        if promotion.get("deletedAt"):
+            return _ok({"promotion": promotion, "deleted": True})
+        _claim_idempotency(
+            repository,
+            key,
+            payload={"uid": auth_user.uid, "promotionId": promotion_id, "action": "DELETE_PROMOTION"},
+            owner_path=FirestorePaths.promotion(promotion_id),
+        )
+        if _agreement_for_promotion(repository, promotion_id) is not None:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "PROMOTION_DELETE_BLOCKED",
+                "계약 또는 정산 기록이 있는 프로모션은 삭제할 수 없습니다. 프로모션을 종료하거나 보관해주세요.",
+            )
+        now = _now()
+        deleted = {
+            **promotion,
+            "deletedAt": now,
+            "deletedBy": auth_user.uid,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.promotion(promotion_id), deleted)
+        _append_promotion_event(
+            repository,
+            promotion_id=promotion_id,
+            event_type="PROMOTION_DELETED",
+            data={"ownerUid": auth_user.uid, "idempotencyKey": key},
+        )
+        return _ok({"promotion": deleted, "deleted": True})
 
     @router.get("/brand/promotions/{promotion_id}/activity")
     def get_brand_promotion_activity(
@@ -2498,7 +2582,7 @@ def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dic
     promotions = [
         model_to_document(promotion)
         for promotion in repository.list_promotions()
-        if promotion.brand_id == brand_id
+        if promotion.brand_id == brand_id and not _promotion_is_deleted(repository, promotion.promotion_id)
     ]
     promotions = _sorted_recent(promotions)[:10]
     promotion_ids = {str(promotion.get("promotionId")) for promotion in promotions}
@@ -2559,13 +2643,18 @@ def _promotion_document_with_raw(
     return {**model_to_document(promotion), **raw}
 
 
+def _promotion_is_deleted(repository: KnotRepository, promotion_id: str) -> bool:
+    raw = repository.get_raw_document(FirestorePaths.promotion(promotion_id)) or {}
+    return bool(raw.get("deletedAt"))
+
+
 def _require_brand_promotion_document(
     repository: KnotRepository,
     user: dict[str, object],
     promotion_id: str,
 ) -> dict[str, object]:
     promotion = repository.get_promotion(promotion_id)
-    if promotion is None:
+    if promotion is None or _promotion_is_deleted(repository, promotion_id):
         raise _not_found("promotion", promotion_id)
     brand_id = _require_document_str(user, "brandId")
     if promotion.brand_id != brand_id:
@@ -2585,7 +2674,11 @@ def _promotion_belongs_to_brand(
     if not isinstance(promotion_id, str):
         return False
     promotion = repository.get_promotion(promotion_id)
-    return promotion is not None and promotion.brand_id == brand_id
+    return (
+        promotion is not None
+        and promotion.brand_id == brand_id
+        and not _promotion_is_deleted(repository, promotion_id)
+    )
 
 
 def _agreement_for_promotion(
@@ -2599,6 +2692,19 @@ def _agreement_for_promotion(
             if agreement.get("promotionId") == promotion_id
         ),
         None,
+    )
+
+
+def _agreements_for_promotion(
+    repository: KnotRepository,
+    promotion_id: str,
+) -> list[dict[str, object]]:
+    return _sorted_recent(
+        [
+            agreement
+            for agreement in repository.list_raw_documents(COLLECTIONS.agreements)
+            if agreement.get("promotionId") == promotion_id
+        ]
     )
 
 
@@ -2656,6 +2762,7 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
     ]
     active_sponsorships = [
         _agreement_projection(
+            repository,
             agreement,
             promotions_by_id.get(str(agreement.get("promotionId"))),
         )
@@ -2826,19 +2933,32 @@ def _offer_projection(
         "title": promotion.get("title") if promotion else "Promotion",
         "status": negotiation.get("status"),
         "currentRound": negotiation.get("currentRound"),
+        "initialAmountUsdc": negotiation.get("initialAmountUsdc"),
+        "currentAmountUsdc": negotiation.get("currentAmountUsdc"),
         "updatedAt": negotiation.get("updatedAt") or negotiation.get("createdAt"),
     }
 
 
 def _agreement_projection(
+    repository: KnotRepository,
     agreement: dict[str, object],
     promotion: dict[str, object] | None,
 ) -> dict[str, object]:
+    escrow = _find_escrow_by_agreement(
+        repository,
+        str(agreement.get("agreementId") or ""),
+    )
     return {
         "agreementId": agreement.get("agreementId"),
         "promotionId": agreement.get("promotionId"),
         "title": promotion.get("title") if promotion else "Agreement",
         "status": agreement.get("status"),
+        "terms": agreement.get("terms"),
+        "milestones": agreement.get("milestones", []),
+        "escrow": escrow,
+        "brandSnapshot": agreement.get("brandSnapshot"),
+        "creatorSnapshot": agreement.get("creatorSnapshot"),
+        "promotionSnapshot": agreement.get("promotionSnapshot"),
         "termsHash": agreement.get("termsHash"),
         "updatedAt": agreement.get("updatedAt") or agreement.get("createdAt"),
     }
@@ -2938,9 +3058,9 @@ def _dashboard_target(account: dict[str, object]) -> str:
     role = account.get("role")
     status_value = account.get("onboardingStatus")
     if role == "BRAND":
-        return "/brand/onboarding" if status_value != "COMPLETED" else "/brand/products/new"
+        return "/brand/onboarding" if status_value != "COMPLETED" else "/brand"
     if role == "CREATOR":
-        return "/creator/onboarding" if status_value != "COMPLETED" else "/creator/result"
+        return "/creator/onboarding" if status_value != "COMPLETED" else "/creator"
     return "/signup"
 
 

@@ -20,16 +20,18 @@ def main() -> int:
         default=_default_project_id(),
         help="GCP project ID for Firestore target. Defaults to GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID.",
     )
+    parser.add_argument("--confirm", default="", help="Required confirmation string for Firestore demo seed.")
     args = parser.parse_args()
 
     if args.target == "firestore":
+        _assert_safe_demo_seed(args.project, args.confirm)
         store = _firestore_store(args.project)
-        seed_demo_repository(KnotRepository(store))
+        seed_demo_repository(KnotRepository(store), include_business_flow=True)
         print("Seeded demo Firestore documents for namespace knot-demo-v1.")
         return 0
 
     memory_store = InMemoryDocumentStore()
-    seed_demo_repository(KnotRepository(memory_store))
+    seed_demo_repository(KnotRepository(memory_store), include_business_flow=True)
     print(f"Loaded {memory_store.document_count} demo documents into memory.")
     for path in memory_store.paths():
         print(path)
@@ -48,6 +50,20 @@ def _firestore_store(project: str | None) -> FirestoreDocumentStore:
 
 def _default_project_id() -> str | None:
     return os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
+
+
+def _assert_safe_demo_seed(project: str | None, confirm: str) -> None:
+    demo_project = os.getenv("DEMO_PROJECT_ID", "knot-dev-503505")
+    if os.getenv("NODE_ENV") == "production":
+        raise SystemExit("Refusing to seed demo data when NODE_ENV=production.")
+    if os.getenv("ALLOW_DEMO_DATA_RESET") != "true":
+        raise SystemExit("Set ALLOW_DEMO_DATA_RESET=true to seed Firestore demo data.")
+    if not project or project != demo_project:
+        raise SystemExit("Firestore demo seed requires project to match DEMO_PROJECT_ID.")
+    if project in {"knot-prod", "production", "prod"}:
+        raise SystemExit("Refusing to seed a production-looking project.")
+    if confirm != "RESET_KNOT_DEMO_DATA":
+        raise SystemExit("Pass --confirm=RESET_KNOT_DEMO_DATA to seed Firestore demo data.")
 
 
 if __name__ == "__main__":

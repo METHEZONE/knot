@@ -396,6 +396,7 @@ export type ApiSettlementBundle = ApiNegotiationBundle & {
 export type BrandPromotionDetail = {
   promotion: ApiPromotion & Record<string, unknown>;
   agreement: (ApiAgreement & Record<string, unknown>) | null;
+  agreements?: Array<ApiAgreement & Record<string, unknown>>;
   activity: ApiTimelineEvent[];
 };
 
@@ -491,11 +492,12 @@ export class ProductApiClient {
     return response.promotions;
   }
 
-  async createBrandPromotion(input: BrandPromotionCreateInput) {
+  async createBrandPromotion(input: BrandPromotionCreateInput, idempotencyKey: string) {
     const response = await this.request<{ promotion: ApiPromotion & Record<string, unknown> }>(
       "/api/v1/brand/promotions",
       {
         method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(input),
       },
     );
@@ -511,6 +513,16 @@ export class ProductApiClient {
 
   async getBrandPromotionDetail(promotionId: string) {
     return this.request<BrandPromotionDetail>(`/api/v1/brand/promotions/${promotionId}`);
+  }
+
+  async deleteBrandPromotion(promotionId: string, idempotencyKey: string) {
+    return this.request<{ promotion: ApiPromotion & Record<string, unknown>; deleted: boolean }>(
+      `/api/v1/brand/promotions/${promotionId}`,
+      {
+        method: "DELETE",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
   }
 
   async listBrandAgreements() {

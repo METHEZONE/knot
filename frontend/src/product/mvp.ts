@@ -189,7 +189,26 @@ export function calculateBrandEscrow(
   };
 }
 
-export function agreementMilestones(agreement: ApiAgreement) {
+export function agreementMilestones(agreement: ApiAgreement & Record<string, unknown>) {
+  if (Array.isArray(agreement.milestones)) {
+    return agreement.milestones.filter(isRecord).map((milestone, index) => {
+      const targetCount = numberValue(milestone.targetCount, 1);
+      const completedCount = numberValue(milestone.completedCount, 0);
+      return {
+        id: stringValue(milestone.id ?? milestone.milestoneId, `milestone-${index + 1}`),
+        order: numberValue(milestone.order, index + 1),
+        title: stringValue(milestone.title, `Milestone ${index + 1}`),
+        condition: stringValue(milestone.description ?? milestone.condition, ""),
+        amountUsdc: numberValue(milestone.amountUsdc, 0),
+        targetCount,
+        completedCount,
+        unit: optionalString(milestone.unit),
+        status: normalizeMilestoneStatus(stringValue(milestone.status, "PENDING")),
+        progressPercent: targetCount > 0 ? clamp(Math.round((completedCount / targetCount) * 100), 0, 100) : 0,
+      };
+    });
+  }
+  if (!agreement.terms?.compensation || !Array.isArray(agreement.terms.milestones)) return [];
   const amount = agreement.terms.compensation.baseAmountUsdc;
   return agreement.terms.milestones.map((milestone, index) => ({
     id: milestone.id,
@@ -197,7 +216,11 @@ export function agreementMilestones(agreement: ApiAgreement) {
     title: milestoneTitle(milestone.trigger),
     condition: milestone.trigger,
     amountUsdc: Math.round((amount * milestone.releasePct) / 100),
+    targetCount: 1,
+    completedCount: 0,
+    unit: undefined,
     status: "PENDING" as MilestoneStatus,
+    progressPercent: 0,
   }));
 }
 

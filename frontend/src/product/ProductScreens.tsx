@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { safeRedirectPath } from "@/auth/authState";
 import {
@@ -18,10 +18,10 @@ import {
 import {
   ProductApiClient,
   ProductApiError,
+  type ApiAgreement,
   type ApiNegotiation,
   type ApiNegotiationMessage,
   type ApiDevAdminOverview,
-  type BrandSourceAnalysisDraft,
   type BrandDashboard,
   type CreatorDashboard,
   type CurrentUserContext,
@@ -300,6 +300,7 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
 
 export function CreatorDashboardScreen({ context }: { context: CurrentUserContext }) {
   const [state, setState] = useDashboardState<CreatorDashboard>();
+  const creatorLabel = context.account.displayName ?? "Creator";
 
   useEffect(() => {
     void loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState);
@@ -310,65 +311,90 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
       <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState)}>
         {(dashboard) => (
           <div className="grid gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="응답 대기 협상" value={dashboard.summary.newOffers} />
-              <Metric label="진행 중 협상" value={dashboard.summary.agentNegotiations} />
-              <Metric label="체결된 계약" value={dashboard.summary.activeSponsorships} />
-              <Metric label="정산 가능 금액" value={`${baseUnitsToUsdc(dashboard.summary.pendingPayoutBaseUnits)} USDC`} />
-            </div>
-            <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
-              <Panel>
-                <SectionTitle eyebrow="Negotiations" title="Agent 협상 기록" />
-                {dashboard.offers.length ? (
-                  <div className="mt-4 grid gap-3">
-                    {dashboard.offers.map((offer) => (
-                      <DashboardRow
-                        key={String(offer.negotiationId)}
-                        title={`${String(offer.brandName ?? "Brand")} · ${String(offer.title ?? "Promotion")}`}
-                        meta={`${mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · round ${String(offer.currentRound ?? "-")} · ${String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-")} USDC`}
-                        href={`/creator/offers/${String(offer.negotiationId)}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="아직 새 제안이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
-                )}
-              </Panel>
-              <Panel>
-                <SectionTitle eyebrow="Agreements" title="체결된 협상" />
-                {dashboard.activeSponsorships.length ? (
-                  <div className="mt-4 grid gap-3">
-                    {dashboard.activeSponsorships.map((agreement) => (
-                      <DashboardRow
-                        key={String(agreement.agreementId)}
-                        title={String(agreement.title ?? "Agreement")}
-                        meta={String(agreement.status ?? "ACTIVE")}
-                        href={`/creator/agreements/${String(agreement.agreementId)}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text="진행 중인 협찬이 없습니다." />
-                )}
-                <div className="mt-5">
-                  <SecondaryLink href="/creator/settings">Agent criteria</SecondaryLink>
-                </div>
-              </Panel>
-            </div>
             <Panel>
-              <SectionTitle eyebrow="Milestones" title="진행 중인 마일스톤" />
-              {dashboard.recentAgentActivity.length ? (
+              <SectionTitle eyebrow="Settlement" title="현재 정산 가능 금액" />
+              {(() => {
+                const summary = creatorDashboardSettlement(dashboard.activeSponsorships);
+                return (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.7fr]">
+                    <div>
+                      <div className="text-5xl font-semibold">{summary.availableToClaimAmount} USDC</div>
+                      <p className="mt-2 text-sm text-muted">
+                        {summary.availableToClaimAmount > 0
+                          ? `${summary.availableToClaimAmount} USDC 정산 가능`
+                          : "현재 정산 가능한 금액이 없습니다."}
+                      </p>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-1">
+                      <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
+                      <InfoBox label="지급 대기" value={`${summary.pendingAmount} USDC`} />
+                      <InfoBox label="지갑 상태" value="연결 필요" />
+                    </div>
+                    <div className="flex flex-wrap gap-3 lg:col-span-2">
+                      <SecondaryLink href="/creator/settlements">정산내역</SecondaryLink>
+                      <button
+                        type="button"
+                        disabled
+                        className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold text-muted"
+                        title="실제 Solana claim 서명 연동 전까지 fake 성공 처리는 하지 않습니다."
+                      >
+                        지갑 연결 후 정산 가능
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Promotions" title="내가 참여 중인 프로모션" />
+              {dashboard.activeSponsorships.length ? (
                 <div className="mt-4 grid gap-3">
-                  {dashboard.recentAgentActivity.map((event) => (
+                  {dashboard.activeSponsorships.map((agreement) => {
+                    const milestones = agreementMilestones(agreement as unknown as ApiAgreement & Record<string, unknown>);
+                    const completed = milestones.filter((milestone) => ["VERIFIED", "RELEASED"].includes(milestone.status)).length;
+                    const progress = milestones.length ? Math.round((completed / milestones.length) * 100) : 0;
+                    const settlement = calculateCreatorSettlement(milestones);
+                    return (
+                      <Link
+                        key={String(agreement.agreementId)}
+                        href={`/creator/agreements/${String(agreement.agreementId)}`}
+                        className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold">{String(agreement.title ?? "Promotion")}</div>
+                            <div className="mt-1 text-sm text-muted">
+                              마일스톤 {completed} / {milestones.length} · 지급 완료 {settlement.paidAmount} USDC · 지급 대기 {settlement.pendingAmount} USDC
+                            </div>
+                          </div>
+                          <span className="font-mono text-xs uppercase text-muted">{String(agreement.status ?? "ACTIVE")}</span>
+                        </div>
+                        <div className="mt-4">
+                          <ProgressBar progress={progress} />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState text={`${creatorLabel} 계정에서 아직 참여 중인 프로모션이 없습니다.`} />
+              )}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Agent Deals" title="Agent 체결 내역" />
+              {dashboard.offers.length ? (
+                <div className="mt-4 grid gap-3">
+                  {dashboard.offers.map((offer) => (
                     <DashboardRow
-                      key={String(event.eventId)}
-                      title={String(event.label ?? event.type ?? "Activity")}
-                      meta={String(event.createdAt ?? "")}
+                      key={String(offer.negotiationId)}
+                      title={`${String(offer.brandName ?? "Brand")} · ${String(offer.title ?? "Promotion")}`}
+                      meta={`${mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · round ${String(offer.currentRound ?? "-")} · ${String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-")} USDC`}
+                      href={`/creator/offers/${String(offer.negotiationId)}`}
                     />
                   ))}
                 </div>
               ) : (
-                <EmptyState text={`${context.account.displayName ?? "Creator"} 계정에서 아직 진행 중인 마일스톤 기록이 없습니다.`} />
+                <EmptyState text="아직 Agent 협상 기록이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
               )}
             </Panel>
           </div>
@@ -380,211 +406,126 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
 
 export function BrandPromotionCreateScreen() {
   const router = useRouter();
-  const [status, setStatus] = useState("idle");
-  const [analysisStatus, setAnalysisStatus] = useState<"idle" | "running" | "ready" | "failed">("idle");
-  const [draft, setDraft] = useState<BrandSourceAnalysisDraft | null>(null);
+  const createAction = useMutationLock();
   const [error, setError] = useState<string | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-
-  async function analyze(formData: FormData) {
-    setAnalysisStatus("running");
-    setAnalysisError(null);
-    const websiteUrl = formString(formData, "sourceWebsiteUrl", "");
-    const productUrl = formString(formData, "sourceProductUrl", "");
-    const pdfFile = formData.get("sourcePdf");
-    const pdfFileRef = pdfFile instanceof File && pdfFile.size > 0 ? `${pdfFile.name} (${Math.round(pdfFile.size / 1024)}KB)` : "";
-    if (!websiteUrl && !productUrl && !pdfFileRef) {
-      setAnalysisStatus("failed");
-      setAnalysisError("브랜드 홈페이지 URL, 제품 URL, PDF 중 하나는 입력해야 합니다.");
-      return;
-    }
-    try {
-      const result = await new ProductApiClient().analyzeBrandSource({
-        websiteUrl: websiteUrl || undefined,
-        productUrl: productUrl || undefined,
-        pdfFileRef: pdfFileRef || undefined,
-      });
-      setDraft(result);
-      setAnalysisStatus("ready");
-    } catch (caught) {
-      setDraft(demoBrandSourceDraft(websiteUrl, productUrl, pdfFileRef));
-      setAnalysisStatus("ready");
-      setAnalysisError(`${errorMessage(caught)} 직접 입력으로 계속할 수 있도록 demo draft를 표시합니다.`);
-    }
-  }
 
   async function submit(formData: FormData) {
-    setStatus("saving");
-    setError(null);
-    try {
-      const promotion = await new ProductApiClient().createBrandPromotion({
-        productName: formString(formData, "productName", "Product"),
-        title: formString(formData, "title", "Promotion"),
-        objective: formString(formData, "objective", "awareness"),
-        categories: splitList(formString(formData, "categories", "")),
-        targetAudience: formString(formData, "targetAudience", ""),
-        totalBudget: numberFromForm(formData, "totalBudget", 1000),
-        initialOffer: numberFromForm(formData, "initialOffer", 500),
-        maximumPerCreator: numberFromForm(formData, "maximumPerCreator", 700),
-        autoAcceptCeiling: numberFromForm(formData, "autoAcceptCeiling", 650),
-        maximumRounds: numberFromForm(formData, "maximumRounds", 3),
-        deliverables: [{ format: formString(formData, "deliverableFormat", "reel"), count: 1 }],
-        usageRights: formString(formData, "usageRights", "organicOnly"),
-        deadline: formString(formData, "deadline", "2026-08-10"),
-        prohibitedClaims: splitList(formString(formData, "prohibitedClaims", "")),
-      });
-      router.push(`/brand/promotions/${promotion.promotionId}`);
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setStatus("idle");
+    const productName = formString(formData, "productName", "");
+    if (!productName) {
+      setError("제품명을 입력해주세요.");
+      return;
     }
+    await createAction.run(async () => {
+      setError(null);
+      const promotion = await new ProductApiClient().createBrandPromotion({
+        productName,
+        title: formString(formData, "title", `${productName} 크리에이터 프로모션`),
+        objective: "제품 인지도 및 콘텐츠 확보",
+        categories: ["Instagram"],
+        targetAudience: "제품에 관심 있는 SNS 사용자",
+        totalBudget: numberFromForm(formData, "totalBudget", 1000),
+        initialOffer: numberFromForm(formData, "initialOffer", 300),
+        maximumPerCreator: numberFromForm(formData, "maximumPerCreator", 500),
+        autoAcceptCeiling: numberFromForm(formData, "autoAcceptCeiling", 400),
+        maximumRounds: numberFromForm(formData, "maximumRounds", 3),
+        deliverables: [{ format: "reel", count: 1 }],
+        usageRights: formString(formData, "usageRights", "organicOnly"),
+        deadline: formString(formData, "deadline", defaultDeadlineDate()),
+        prohibitedClaims: [],
+      }, createAction.idempotencyKey);
+      router.push(`/brand/promotions/${promotion.promotionId}`);
+    }, (caught) => setError(errorMessage(caught)));
   }
 
   return (
     <WorkspaceShell role="brand" active="product" title="새 Promotion" session={null}>
-      <div className="grid gap-5">
-        <Panel>
-          <form action={analyze} className="grid gap-4">
-            <SectionTitle eyebrow="Step 1" title="브랜드 자료 연결" />
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input label="Brand website URL" name="sourceWebsiteUrl" placeholder="https://brand.example" />
-              <Input label="Product URL" name="sourceProductUrl" placeholder="https://brand.example/product" />
-            </div>
-            <label className="mt-4 block text-sm font-semibold">
-              Product PDF
-              <input
-                name="sourcePdf"
-                type="file"
-                accept="application/pdf"
-                className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
-              />
-            </label>
-            {analysisError && <FormError message={analysisError} />}
-            <button
-              type="submit"
-              disabled={analysisStatus === "running"}
-              className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
-            >
-              {analysisStatus === "running" ? "AI 초안 생성 중..." : "AI로 초안 만들기"}
-            </button>
-          </form>
-        </Panel>
-
-        {draft && (
-          <Panel>
-            <SectionTitle eyebrow={draft.mode === "demo" ? "Step 2 · demo draft" : "Step 2"} title="AI 분석 결과 확인" />
-            <div className="grid gap-3 md:grid-cols-3">
-              <DraftField label="브랜드명" field={draft.brand.name} />
-              <DraftField label="제품명" field={draft.product.name} />
-              <DraftField label="제품 카테고리" field={draft.product.category} />
-              <DraftField label="제품 요약" field={draft.product.summary} />
-              <DraftField label="추천 타깃" field={draft.product.targetAudience[0]} />
-              <DraftField label="추천 키워드" field={draft.product.keywords[0]} />
-            </div>
-          </Panel>
-        )}
-
-        <Panel>
+      <Panel>
         <form action={submit} className="grid gap-4">
-          <SectionTitle eyebrow="Step 3" title="프로모션 핵심 조건" />
-          <Input label="Product name" name="productName" placeholder="Product name" defaultValue={draft?.product.name.value} required />
-          <Input label="Promotion title" name="title" placeholder="Launch awareness" defaultValue={draft ? `${draft.product.name.value} Creator Promotion` : undefined} required />
-          <ChoiceGroup
-            label="Promotion objective"
-            name="objective"
-            options={["제품 인지도", "신규 고객 유입", "판매 전환", "콘텐츠 확보", "신제품 출시"]}
-            defaultSelected={draft?.recommendations.objectives.slice(0, 1) ?? ["제품 인지도"]}
-          />
-          <ChoiceGroup
-            label="Content channels"
-            name="channels"
-            options={["Instagram", "YouTube", "TikTok", "Blog", "기타"]}
-            defaultSelected={draft?.recommendations.channels.slice(0, 2) ?? ["Instagram"]}
-          />
-          <TextArea label="Objective detail" name="objectiveDetail" placeholder="인지도, 전환, 리뷰 확보 등" defaultValue={draft?.product.summary.value} />
-          <ChoiceGroup
-            label="Categories"
-            name="categories"
-            options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
-            defaultSelected={draft ? [draft.product.category.value] : ["beauty"]}
-          />
-          <TextArea label="Target audience" name="targetAudience" placeholder="핵심 타겟 설명" defaultValue={draft?.product.targetAudience.map((item) => item.value).join(", ")} />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Total budget" name="totalBudget" type="number" placeholder="2000" required />
-            <Input label="Initial offer" name="initialOffer" type="number" placeholder="500" required />
+          <SectionTitle eyebrow="Promotion" title="제품명만 입력하면 기본 조건으로 생성합니다" />
+          <Input label="제품명" name="productName" placeholder="예: 글로우 립밤" required />
+          <Input label="Promotion title" name="title" placeholder="비워두면 제품명 기준으로 자동 생성" />
+          <div className="rounded border border-border-subtle bg-background p-4">
+            <SectionTitle eyebrow="Default values" title="자동 설정될 조건" />
+            <div className="grid gap-3 md:grid-cols-3">
+              <InfoBox label="목표" value="제품 인지도 및 콘텐츠 확보" />
+              <InfoBox label="총예산" value="1,000 USDC" />
+              <InfoBox label="채널" value="Instagram" />
+              <InfoBox label="콘텐츠" value="Reel 1개" />
+              <InfoBox label="기준 협상 금액" value="300 USDC" />
+              <InfoBox label="최대 협상 금액" value="500 USDC" />
+              <InfoBox label="자동 승인 한도" value="400 USDC" />
+              <InfoBox label="최대 라운드" value="3회" />
+              <InfoBox label="상태" value="OPEN" />
+            </div>
           </div>
-          <ChoiceGroup
-            label="Content format"
-            name="deliverableFormat"
-            options={["Reel / Short", "Feed post", "Story", "Long-form video", "Review", "Live"]}
-            defaultSelected={draft?.recommendations.deliverables.slice(0, 1) ?? ["Reel / Short"]}
-          />
-          <SectionTitle eyebrow="Step 4" title="Agent 협상 정책" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="mt-4 block text-sm font-semibold">
-              Negotiation mode
+          <details className="rounded border border-border-subtle bg-background p-4">
+            <summary className="cursor-pointer text-sm font-semibold">세부 설정 변경</summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Input label="Total budget" name="totalBudget" type="number" placeholder="1000" defaultValue="1000" />
+              <Input label="Initial offer" name="initialOffer" type="number" placeholder="300" defaultValue="300" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="mt-4 block text-sm font-semibold">
+                Negotiation mode
+                <select
+                  name="negotiationMode"
+                  className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+                  defaultValue="balanced"
+                >
+                  <option value="conservative">보수적</option>
+                  <option value="balanced">균형</option>
+                  <option value="aggressive">적극적</option>
+                </select>
+              </label>
+              <Input label="Maximum per Creator" name="maximumPerCreator" type="number" placeholder="500" defaultValue="500" />
+              <Input label="Auto-accept ceiling" name="autoAcceptCeiling" type="number" placeholder="400" defaultValue="400" />
+              <Input label="Maximum rounds" name="maximumRounds" type="number" placeholder="3" defaultValue="3" />
+              <Input label="Deadline" name="deadline" type="date" placeholder={defaultDeadlineDate()} defaultValue={defaultDeadlineDate()} />
+            </div>
+            <label className="block text-sm font-semibold">
+              Usage rights
               <select
-                name="negotiationMode"
+                name="usageRights"
                 className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
-                defaultValue="balanced"
+                defaultValue="organicOnly"
               >
-                <option value="conservative">보수적</option>
-                <option value="balanced">균형</option>
-                <option value="aggressive">적극적</option>
+                <option value="organicOnly">Organic usage only</option>
+                <option value="paidBoost30d">Paid boost up to 30 days</option>
+                <option value="fullLicense90d">Full license up to 90 days</option>
               </select>
             </label>
-            <Input label="Maximum per Creator" name="maximumPerCreator" type="number" placeholder="700" required />
-            <Input label="Auto-accept ceiling" name="autoAcceptCeiling" type="number" placeholder="650" required />
-            <Input label="Maximum rounds" name="maximumRounds" type="number" placeholder="3" required />
-            <Input label="Deadline" name="deadline" type="date" placeholder="2026-08-10" required />
-          </div>
-          <label className="block text-sm font-semibold">
-            Usage rights
-            <select
-              name="usageRights"
-              className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
-              defaultValue="organicOnly"
-            >
-              <option value="organicOnly">Organic usage only</option>
-              <option value="paidBoost30d">Paid boost up to 30 days</option>
-              <option value="fullLicense90d">Full license up to 90 days</option>
-            </select>
-          </label>
-          <TextArea label="Prohibited claims" name="prohibitedClaims" placeholder="의료 효능 과장, 무검수 게시 등" />
+          </details>
           <PrivacyNote>
             자동 승인 한도를 초과한 제안은 Agent가 수락하지 않고 사용자 승인을 요청합니다. 총예산, 자동 승인 한도, 사용권, 마감일은 사용자가 직접 확정합니다.
           </PrivacyNote>
-          <SectionTitle eyebrow="Step 5" title="최종 검토" />
-          <div className="grid gap-3 md:grid-cols-3">
-            <InfoBox label="Agent" value="계정당 Brand Agent 1개" />
-            <InfoBox label="Product" value={draft?.product.name.value ?? "사용자 입력"} />
-            <InfoBox label="Draft mode" value={draft?.mode ?? "manual"} />
-          </div>
           {error && <FormError message={error} />}
           <button
             type="submit"
-            disabled={status === "saving"}
+            disabled={createAction.status === "submitting"}
             className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
           >
-            {status === "saving" ? "Creating..." : "프로모션 생성 및 Agent 활성화"}
+            {createAction.status === "submitting" ? "프로모션 생성 중..." : "프로모션 생성"}
           </button>
         </form>
       </Panel>
-      </div>
     </WorkspaceShell>
   );
 }
 
 export function BrandPromotionListScreen() {
   const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listBrandPromotions"]>>>();
+  const reload = useCallback(
+    () => loadDashboard(() => new ProductApiClient().listBrandPromotions(), setState),
+    [setState],
+  );
 
   useEffect(() => {
-    void loadDashboard(() => new ProductApiClient().listBrandPromotions(), setState);
-  }, [setState]);
+    void reload();
+  }, [reload]);
 
   return (
     <WorkspaceShell role="brand" active="product" title="내 프로모션" session={null}>
-      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().listBrandPromotions(), setState)}>
+      <DashboardStatus state={state} retry={reload}>
         {(promotions) => (
           <div className="grid gap-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -596,12 +537,14 @@ export function BrandPromotionListScreen() {
                 {promotions.map((promotion) => {
                   const product = productSnapshotFromPromotion(promotion);
                   return (
-                    <PromotionSummaryCard
-                      key={promotion.promotionId}
-                      promotion={promotion}
-                      productName={product.name}
-                      productCategory={product.category ?? promotion.category}
-                    />
+                    <div key={promotion.promotionId} className="grid gap-2 rounded border border-border-subtle bg-surface p-2">
+                      <PromotionSummaryCard
+                        promotion={promotion}
+                        productName={product.name}
+                        productCategory={product.category ?? promotion.category}
+                      />
+                      <DeletePromotionButton promotionId={promotion.promotionId} onDeleted={reload} />
+                    </div>
                   );
                 })}
               </div>
@@ -673,12 +616,39 @@ export function BrandPromotionDetailScreen({ promotionId }: { promotionId: strin
             <div className="grid gap-5 lg:grid-cols-2">
               <Panel>
                 <SectionTitle eyebrow="Creators" title="체결된 크리에이터" />
-                {detail.agreement ? (
-                  <DashboardRow
-                    title={String(detail.agreement.creatorAgentId)}
-                    meta={`${String(detail.agreement.terms.compensation.baseAmountUsdc)} USDC · ${detail.agreement.status}`}
-                    href={`/brand/agreements/${detail.agreement.agreementId}`}
-                  />
+                {(detail.agreements ?? (detail.agreement ? [detail.agreement] : [])).length ? (
+                  <div className="grid gap-3">
+                    {(detail.agreements ?? (detail.agreement ? [detail.agreement] : [])).map((agreement) => {
+                      const milestones = agreementMilestones(agreement);
+                      const completed = milestones.filter((milestone) => ["VERIFIED", "RELEASED"].includes(milestone.status)).length;
+                      const progress = milestones.length ? Math.round((completed / milestones.length) * 100) : 0;
+                      const settlement = calculateCreatorSettlement(milestones);
+                      const creator = agreement.creatorSnapshot;
+                      const creatorName = typeof creator === "object" && creator !== null && "displayName" in creator
+                        ? String((creator as Record<string, unknown>).displayName)
+                        : String(agreement.creatorAgentId);
+                      return (
+                        <Link
+                          key={agreement.agreementId}
+                          href={`/brand/agreements/${agreement.agreementId}`}
+                          className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold">{creatorName}</div>
+                              <div className="mt-1 text-sm text-muted">
+                                마일스톤 {completed} / {milestones.length} · 정산 완료 {settlement.paidAmount} USDC · 정산 가능 {settlement.availableToClaimAmount} USDC
+                              </div>
+                            </div>
+                            <span className="font-mono text-xs uppercase text-muted">{agreement.status}</span>
+                          </div>
+                          <div className="mt-4">
+                            <ProgressBar progress={progress} />
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <EmptyState text="아직 체결된 Creator가 없습니다." />
                 )}
@@ -785,6 +755,62 @@ export function CreatorAgreementListScreen() {
             )}
           </div>
         )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function CreatorSettlementScreen() {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["listCreatorAgreements"]>>>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState);
+  }, [setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="settlement" title="정산" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().listCreatorAgreements(), setState)}>
+        {(agreements) => {
+          const summary = creatorDashboardSettlement(agreements);
+          return (
+            <div className="grid gap-5">
+              <Panel>
+                <SectionTitle eyebrow="Settlement" title="정산 요약" />
+                <div className="mt-4 grid gap-3 md:grid-cols-5">
+                  <InfoBox label="전체 계약" value={`${summary.paidAmount + summary.availableToClaimAmount + summary.pendingAmount} USDC`} />
+                  <InfoBox label="현재 정산 가능" value={`${summary.availableToClaimAmount} USDC`} />
+                  <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
+                  <InfoBox label="조건 미달" value={`${summary.pendingAmount} USDC`} />
+                  <InfoBox label="지갑" value="연결 필요" />
+                </div>
+                <div className="mt-5 rounded border border-border-subtle bg-background p-4 text-sm text-muted">
+                  실제 Solana claim 서명과 Escrow release가 준비되기 전까지 성공한 정산처럼 표시하지 않습니다.
+                </div>
+              </Panel>
+              <Panel>
+                <SectionTitle eyebrow="History" title="정산내역" />
+                {agreements.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {agreements.map((agreement) => {
+                      const milestones = agreementMilestones(agreement as unknown as ApiAgreement & Record<string, unknown>);
+                      const settlement = calculateCreatorSettlement(milestones);
+                      return (
+                        <DashboardRow
+                          key={String(agreement.agreementId)}
+                          title={String(agreement.title ?? agreement.agreementId ?? "Agreement")}
+                          meta={`정산 가능 ${settlement.availableToClaimAmount} USDC · 지급 완료 ${settlement.paidAmount} USDC · 지급 대기 ${settlement.pendingAmount} USDC`}
+                          href={`/creator/agreements/${String(agreement.agreementId)}`}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState text="아직 정산내역이 없습니다." />
+                )}
+              </Panel>
+            </div>
+          );
+        }}
       </DashboardStatus>
     </WorkspaceShell>
   );
@@ -2237,6 +2263,42 @@ function PromotionSummaryCard({
   );
 }
 
+function DeletePromotionButton({
+  promotionId,
+  onDeleted,
+}: {
+  promotionId: string;
+  onDeleted: () => void;
+}) {
+  const action = useMutationLock();
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    if (action.status === "submitting") return;
+    if (!window.confirm("이 프로모션을 삭제하면 복구할 수 없습니다.")) return;
+    await action.run(async () => {
+      setError(null);
+      await new ProductApiClient().deleteBrandPromotion(promotionId, action.idempotencyKey);
+      onDeleted();
+    }, (caught) => setError(errorMessage(caught)));
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
+      <p className="text-xs text-muted">계약 또는 정산 기록이 있으면 삭제할 수 없습니다.</p>
+      <button
+        type="button"
+        onClick={remove}
+        disabled={action.status === "submitting"}
+        className="rounded-full border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-muted disabled:opacity-60"
+      >
+        {action.status === "submitting" ? "삭제 중..." : "삭제"}
+      </button>
+      {error && <div className="w-full text-xs text-red-700">{error}</div>}
+    </div>
+  );
+}
+
 function DashboardRow({ title, meta, href }: { title: string; meta: string; href?: string }) {
   const content = (
     <div className="rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised">
@@ -2245,26 +2307,6 @@ function DashboardRow({ title, meta, href }: { title: string; meta: string; href
     </div>
   );
   return href ? <Link href={href}>{content}</Link> : content;
-}
-
-function DraftField({
-  label,
-  field,
-}: {
-  label: string;
-  field?: { value: string; source: string; confidence: number };
-}) {
-  return (
-    <div className="rounded border border-border-subtle bg-background p-3">
-      <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
-      <div className="mt-1 text-sm font-semibold">{field?.value ?? "draft pending"}</div>
-      {field && (
-        <div className="mt-2 font-mono text-[11px] text-muted">
-          {field.source} · {Math.round(field.confidence * 100)}% · unconfirmed
-        </div>
-      )}
-    </div>
-  );
 }
 
 function ChoiceGroup({
@@ -2319,6 +2361,26 @@ function baseUnitsToUsdc(value: string) {
   return (amount / 1_000_000).toLocaleString("en-US", {
     maximumFractionDigits: 2,
   });
+}
+
+type DashboardSettlementSummary = {
+  paidAmount: number;
+  availableToClaimAmount: number;
+  pendingAmount: number;
+};
+
+function creatorDashboardSettlement(agreements: Array<Record<string, unknown>>): DashboardSettlementSummary {
+  return agreements.reduce<DashboardSettlementSummary>(
+    (totals, agreement) => {
+      const settlement = calculateCreatorSettlement(agreementMilestones(agreement as ApiAgreement & Record<string, unknown>));
+      return {
+        paidAmount: totals.paidAmount + settlement.paidAmount,
+        availableToClaimAmount: totals.availableToClaimAmount + settlement.availableToClaimAmount,
+        pendingAmount: totals.pendingAmount + settlement.pendingAmount,
+      };
+    },
+    { paidAmount: 0, availableToClaimAmount: 0, pendingAmount: 0 },
+  );
 }
 
 function stringList(value: unknown) {
@@ -2455,6 +2517,32 @@ function SecondaryLink({ href, children }: { href: string; children: ReactNode }
   return <Link href={href} className="inline-flex rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised">{children}</Link>;
 }
 
+function useMutationLock() {
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const lockedRef = useRef(false);
+  const reactId = useId();
+  const idempotencyKey = useMemo(() => `frontend-${reactId.replace(/:/g, "")}`, [reactId]);
+
+  const run = useCallback(
+    async (action: () => Promise<void>, onError?: (caught: unknown) => void) => {
+      if (lockedRef.current) return;
+      lockedRef.current = true;
+      setStatus("submitting");
+      try {
+        await action();
+        setStatus("success");
+      } catch (caught) {
+        lockedRef.current = false;
+        setStatus("error");
+        onError?.(caught);
+      }
+    },
+    [],
+  );
+
+  return { idempotencyKey, run, status };
+}
+
 type LocalSession = {
   userId?: string;
   role?: Role;
@@ -2506,39 +2594,6 @@ function fallbackForNegotiation(negotiation: ApiNegotiation) {
   };
 }
 
-function demoBrandSourceDraft(websiteUrl: string, productUrl: string, pdfFileRef: string): BrandSourceAnalysisDraft {
-  const source = pdfFileRef ? "PDF" : productUrl ? "PRODUCT_URL" : "WEBSITE";
-  return {
-    mode: "demo",
-    brand: {
-      name: { value: "KNOT Demo Brand", source: "DEMO_FIXTURE", confidence: 0.72 },
-    },
-    product: {
-      name: { value: "Demo Product", source, confidence: 0.7 },
-      category: { value: "beauty", source: "AI_INFERENCE", confidence: 0.68 },
-      summary: {
-        value: `입력한 자료(${productUrl || websiteUrl || pdfFileRef})를 기준으로 생성된 demo 초안입니다.`,
-        source: "DEMO_FIXTURE",
-        confidence: 0.55,
-      },
-      features: [
-        { value: "creator-friendly product story", source: "AI_INFERENCE", confidence: 0.6 },
-      ],
-      targetAudience: [
-        { value: "20-30대 SNS 기반 구매 고객", source: "AI_INFERENCE", confidence: 0.58 },
-      ],
-      keywords: [
-        { value: "review", source: "AI_INFERENCE", confidence: 0.52 },
-      ],
-    },
-    recommendations: {
-      objectives: ["제품 인지도"],
-      channels: ["Instagram", "TikTok"],
-      deliverables: ["Reel / Short"],
-    },
-  };
-}
-
 function fallbackRoleSession(role: Role): RoleSession {
   const brand = role === "brand";
   return {
@@ -2563,6 +2618,12 @@ function formString(formData: FormData, key: string, fallback: string) {
   const value = formData.get(key);
   const text = typeof value === "string" ? value.trim() : "";
   return text || fallback;
+}
+
+function defaultDeadlineDate() {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 30);
+  return deadline.toISOString().slice(0, 10);
 }
 
 function formHttpUrl(formData: FormData, key: string, fallback: string) {

@@ -2,17 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-import {
-  authConfigurationError,
-  currentIdToken,
-  firebaseConfigured,
-  observeFirebaseUser,
-} from "@/auth/firebaseClient";
-import { safeRedirectPath } from "@/auth/authState";
-import { ProductApiClient, ProductApiError, type CurrentUserContext } from "@/product/apiClient";
-
-ProductApiClient.setAuthTokenProvider(currentIdToken);
+import { useEffect } from "react";
+import { useAuth } from "@/auth/AuthProvider";
+import { getDashboardPath, safeRedirectPath } from "@/auth/authState";
+import type { CurrentUserContext } from "@/product/apiClient";
 
 type GuardRole = "BRAND" | "CREATOR";
 
@@ -32,76 +25,37 @@ export function AuthGate({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const configured = firebaseConfigured();
-  const [state, setState] = useState<
-    | { type: "loading" }
-    | { type: "ready"; context: CurrentUserContext }
-    | { type: "unauthenticated" }
-    | { type: "forbidden"; message: string }
-    | { type: "not-found"; message: string }
-    | { type: "error"; message: string }
-  >(
-    configured
-      ? { type: "loading" }
-      : { type: "error", message: authConfigurationError() },
-  );
+  const { status, context, error } = useAuth();
 
   useEffect(() => {
-    if (!configured) return;
-    const unsubscribe = observeFirebaseUser((user) => {
-      if (!user) {
-        setState({ type: "unauthenticated" });
-        return;
-      }
-      void new ProductApiClient()
-        .getMe()
-        .then((context) => {
-          const account = context.account;
-          if (!account.role) {
-            router.replace("/signup");
-            return;
-          }
-          if (expectedRole && account.role !== expectedRole) {
-            setState({
-              type: "forbidden",
-              message: "현재 계정 역할로는 이 페이지에 접근할 수 없습니다.",
-            });
-            return;
-          }
-          if (completedRedirect && account.onboardingStatus === "COMPLETED") {
-            router.replace(completedRedirect);
-            return;
-          }
-          if (requireCompleted && account.onboardingStatus !== "COMPLETED") {
-            router.replace(account.role === "BRAND" ? "/brand/onboarding" : "/creator/onboarding");
-            return;
-          }
-          setState({ type: "ready", context });
-        })
-        .catch((error) => {
-          if (error instanceof ProductApiError && error.status === 403) {
-            setState({ type: "forbidden", message: error.message });
-            return;
-          }
-          if (error instanceof ProductApiError && error.status === 404) {
-            setState({ type: "not-found", message: error.message });
-            return;
-          }
-          setState({
-            type: "error",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
-    });
-    return unsubscribe;
-  }, [completedRedirect, configured, expectedRole, requireCompleted, router]);
+    if (status !== "authenticated" || !context) return;
+    const account = context.account;
+    if (!account.role) {
+      router.replace("/signup");
+      return;
+    }
+    if (completedRedirect && account.onboardingStatus === "COMPLETED") {
+      router.replace(completedRedirect);
+      return;
+    }
+    if (requireCompleted && account.onboardingStatus !== "COMPLETED") {
+      router.replace(account.role === "BRAND" ? "/brand/onboarding" : "/creator/onboarding");
+      return;
+    }
+    if (expectedRole && account.role !== expectedRole) {
+      router.replace(getDashboardPath(account.role) ?? "/signup");
+    }
+  }, [completedRedirect, context, expectedRole, requireCompleted, router, status]);
 
-  if (state.type === "ready") return children(state.context);
-  if (state.type === "unauthenticated") {
+  if (status === "loading") {
+    return <GuardPanel title="계정 확인 중" body="Firebase session과 Product API account context를 확인하고 있습니다." />;
+  }
+
+  if (status === "unauthenticated") {
     return (
       <GuardPanel
         title="로그인이 필요합니다"
-        body="계정 확인 후 이 페이지로 다시 돌아올 수 있습니다."
+        body={error ?? "계정 확인 후 이 페이지로 다시 돌아올 수 있습니다."}
         actionLabel="로그인"
         onAction={() => {
           const query = searchParams.toString();
@@ -111,23 +65,26 @@ export function AuthGate({
       />
     );
   }
-  if (state.type === "forbidden") {
-    return <GuardPanel title="접근 권한이 없습니다" body={state.message} />;
+
+  if (!context) {
+    return <GuardPanel title="다시 시도해주세요" body="계정 정보를 불러오지 못했습니다." actionLabel="새로고침" onAction={() => window.location.reload()} />;
   }
-  if (state.type === "not-found") {
-    return <GuardPanel title="프로필을 찾을 수 없습니다" body={state.message} />;
+
+  const account = context.account;
+  if (!account.role) {
+    return <GuardPanel title="역할 선택이 필요합니다" body="회원가입에서 Brand 또는 Creator 역할을 선택해주세요." />;
   }
-  if (state.type === "error") {
-    return (
-      <GuardPanel
-        title="다시 시도해주세요"
-        body={state.message}
-        actionLabel="새로고침"
-        onAction={() => window.location.reload()}
-      />
-    );
+  if (expectedRole && account.role !== expectedRole) {
+    return <GuardPanel title="이동 중입니다" body="현재 계정 역할에 맞는 대시보드로 이동합니다." />;
   }
-  return <GuardPanel title="계정 확인 중" body="Firebase session과 Product API account context를 확인하고 있습니다." />;
+  if (requireCompleted && account.onboardingStatus !== "COMPLETED") {
+    return <GuardPanel title="온보딩이 필요합니다" body="프로필을 먼저 완성하면 대시보드를 볼 수 있습니다." />;
+  }
+  if (completedRedirect && account.onboardingStatus === "COMPLETED") {
+    return <GuardPanel title="이동 중입니다" body="이미 완료된 계정입니다. 대시보드로 이동합니다." />;
+  }
+
+  return children(context);
 }
 
 function GuardPanel({
