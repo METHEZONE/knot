@@ -3091,6 +3091,14 @@ def _current_user_payload(
                 "displayName": creator.get("displayName"),
                 "agentId": user.get("agentId") or user.get("creatorAgentId"),
             }
+    agent_id = user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId")
+    # 에이전트 지갑(수탁, Secret Manager) 공개키는 read-only 표시용 — docs/WALLET_AND_MONEY_FLOW §6
+    agent_wallet_pubkey = None
+    if isinstance(agent_id, str) and agent_id:
+        agent = repository.get_raw_document(FirestorePaths.agent(agent_id))
+        if agent is not None:
+            pubkey = agent.get("walletPubkey")
+            agent_wallet_pubkey = pubkey if isinstance(pubkey, str) else None
     account = {
         "uid": user.get("uid") or user.get("userId"),
         "userId": user.get("uid") or user.get("userId"),
@@ -3102,7 +3110,10 @@ def _current_user_payload(
         "status": user.get("status") or "ACTIVE",
         "brandId": user.get("brandId"),
         "creatorId": user.get("creatorId"),
-        "agentId": user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId"),
+        "agentId": agent_id,
+        # 유저 지갑(Phantom): 저장한 값을 되읽어야 새로고침 후에도 표시된다
+        "walletAddress": user.get("walletAddress"),
+        "agentWalletPubkey": agent_wallet_pubkey,
         "schemaVersion": user.get("schemaVersion") or 2,
     }
     return {

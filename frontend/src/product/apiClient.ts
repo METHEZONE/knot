@@ -66,7 +66,18 @@ export type CurrentAccount = {
   brandId?: string | null;
   creatorId?: string | null;
   agentId?: string | null;
+  /** 유저 지갑(Phantom, 비수탁) — POST /me/wallet 으로 저장된 주소 */
+  walletAddress?: string | null;
+  /** 에이전트 지갑(수탁, Secret Manager) 공개키 — read-only 표시용 */
+  agentWalletPubkey?: string | null;
   schemaVersion: number;
+};
+
+export type ApiUserNotification = {
+  notificationId: string;
+  type: string;
+  createdAt?: string;
+  data?: Record<string, unknown>;
 };
 
 export type CurrentUserContext = {
@@ -157,6 +168,9 @@ export type BrandPromotionCreateInput = {
   usageRights: string;
   deadline: string;
   prohibitedClaims: string[];
+  /** cap(autoAcceptCeiling) 이내에서 에이전트가 사람 승인 없이 에스크로 락/릴리즈 */
+  autoEscrow?: boolean;
+  autoRelease?: boolean;
 };
 
 export type BrandSourceAnalysisInput = {
@@ -449,6 +463,13 @@ export class ProductApiClient {
       method: "POST",
       body: JSON.stringify({ walletAddress }),
     });
+  }
+
+  async listMyNotifications() {
+    const response = await this.request<{ notifications: ApiUserNotification[] }>(
+      "/api/v1/me/notifications",
+    );
+    return response.notifications;
   }
 
   async selectMyRole(role: "BRAND" | "CREATOR", idempotencyKey: string) {
