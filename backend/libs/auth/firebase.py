@@ -16,6 +16,7 @@ class AuthenticatedUser:
     email: str | None = None
     display_name: str | None = None
     photo_url: str | None = None
+    claims: dict[str, Any] | None = None
 
 
 class FirebaseTokenVerifier:
@@ -88,4 +89,5 @@ def _user_from_claims(claims: dict[str, Any]) -> AuthenticatedUser:
         email=email if isinstance(email, str) else None,
         display_name=display_name if isinstance(display_name, str) else None,
         photo_url=photo_url if isinstance(photo_url, str) else None,
+        claims=claims,
     )

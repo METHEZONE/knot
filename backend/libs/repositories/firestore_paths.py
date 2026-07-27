@@ -50,6 +50,8 @@ class FirestoreCollection:
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
     idempotency_records: str = "idempotencyRecords"
+    admin_jobs: str = "adminJobs"
+    deletion_jobs: str = "deletionJobs"
 
 
 COLLECTIONS = FirestoreCollection()
@@ -186,3 +188,11 @@ class FirestorePaths:
     @staticmethod
     def idempotency_record(key: str) -> str:
         return document_path(COLLECTIONS.idempotency_records, key)
+
+    @staticmethod
+    def admin_job(job_id: str) -> str:
+        return document_path(COLLECTIONS.admin_jobs, job_id)
+
+    @staticmethod
+    def deletion_job(job_id: str) -> str:
+        return document_path(COLLECTIONS.deletion_jobs, job_id)

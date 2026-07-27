@@ -1,7 +1,5 @@
-import { DevAdminScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+import { DevAdminLiveScreen } from "@/product/ProductScreens";
 
-export default async function Page() {
-  const overview = await knotDataSource.getDevOverview();
-  return <DevAdminScreen overview={overview} />;
+export default function Page() {
+  return <DevAdminLiveScreen />;
 }

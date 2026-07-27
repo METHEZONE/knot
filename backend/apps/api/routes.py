@@ -361,6 +361,292 @@ def build_api_router(
                 ) from exc
         return _ok({"revoked": True, "uid": auth_user.uid})
 
+    @router.get("/dev-admin/overview")
+    def dev_admin_overview(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        return _ok(
+            {
+                "overview": {
+                    "enabled": True,
+                    "actorUid": admin.uid,
+                    "counts": _admin_counts(repository),
+                    "latestFailures": _latest_failures(repository),
+                }
+            }
+        )
+
+    @router.get("/dev-admin/users")
+    def dev_admin_users(
+        q: str | None = None,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        users = repository.list_raw_documents(COLLECTIONS.users)
+        if q:
+            needle = q.lower()
+            users = [
+                user
+                for user in users
+                if needle in str(user.get("uid") or user.get("userId") or "").lower()
+                or needle in str(user.get("email") or "").lower()
+            ]
+        users.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+        return _ok({"users": [_admin_user_projection(user) for user in users[:50]]})
+
+    @router.get("/dev-admin/users/{uid}")
+    def dev_admin_user_detail(
+        uid: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        user = repository.get_raw_document(FirestorePaths.user(uid))
+        if user is None:
+            raise _not_found("user", uid)
+        return _ok(
+            {
+                "user": _admin_user_projection(user),
+                "inventory": _admin_inventory(repository, user),
+            }
+        )
+
+    @router.post("/dev-admin/users/{uid}:disable")
+    def dev_admin_disable_user(
+        uid: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        user = _require_user_document(repository, uid)
+        updated = {**user, "status": "DISABLED", "disabledAt": _now(), "updatedAt": _now()}
+        repository.save_raw_document(FirestorePaths.user(uid), updated)
+        _append_audit(
+            repository,
+            action="DEV_ADMIN_USER_DISABLED",
+            data={"actorUid": admin.uid, "targetUid": uid},
+        )
+        return _ok({"user": _admin_user_projection(updated)})
+
+    @router.post("/dev-admin/users/{uid}:enable")
+    def dev_admin_enable_user(
+        uid: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        user = _require_user_document(repository, uid)
+        updated = {**user, "status": "ACTIVE", "enabledAt": _now(), "updatedAt": _now()}
+        repository.save_raw_document(FirestorePaths.user(uid), updated)
+        _append_audit(
+            repository,
+            action="DEV_ADMIN_USER_ENABLED",
+            data={"actorUid": admin.uid, "targetUid": uid},
+        )
+        return _ok({"user": _admin_user_projection(updated)})
+
+    @router.post("/dev-admin/users/{uid}:delete")
+    def dev_admin_delete_user(
+        uid: str,
+        payload: dict[str, object] | None = None,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        user = _require_user_document(repository, uid)
+        confirm = bool((payload or {}).get("confirm"))
+        key = _require_idempotency_key(idempotency_key) if confirm else f"dry-run:{uid}:{uuid4()}"
+        job_id = f"deletion-{uuid4()}"
+        inventory = _admin_inventory(repository, user)
+        demo_tagged = _is_demo_document(user)
+        if confirm:
+            _claim_idempotency(
+                repository,
+                key,
+                payload={"op": "DEV_ADMIN_DELETE_USER", "uid": uid},
+                owner_path=f"delete:{uid}",
+            )
+        if confirm and not demo_tagged:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "REAL_USER_DELETE_FORBIDDEN",
+                "Only disposable demo-tagged users can be deleted by dev admin.",
+            )
+        now = _now()
+        job = {
+            "jobId": job_id,
+            "targetUid": uid,
+            "actorUid": admin.uid,
+            "dryRun": not confirm,
+            "status": "DRY_RUN" if not confirm else "COMPLETED",
+            "idempotencyKey": key,
+            "inventory": inventory,
+            "retainedRecords": inventory["retainedRecords"],
+            "deletedRecords": [] if not confirm else inventory["safeDeleteRecords"],
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        if confirm:
+            redacted = {
+                **user,
+                "email": None,
+                "displayName": None,
+                "photoUrl": None,
+                "status": "DELETED",
+                "deletedAt": now,
+                "updatedAt": now,
+                "deletionJobId": job_id,
+            }
+            repository.save_raw_document(FirestorePaths.user(uid), redacted)
+        repository.save_raw_document(FirestorePaths.deletion_job(job_id), job)
+        _append_audit(
+            repository,
+            action="DEV_ADMIN_USER_DELETE_DRY_RUN" if not confirm else "DEV_ADMIN_USER_DELETED",
+            data={"actorUid": admin.uid, "targetUid": uid, "jobId": job_id},
+        )
+        return _ok({"deletionJob": job})
+
+    @router.get("/dev-admin/deletion-jobs/{job_id}")
+    def dev_admin_deletion_job(
+        job_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        job = repository.get_raw_document(FirestorePaths.deletion_job(job_id))
+        if job is None:
+            raise _not_found("deletionJob", job_id)
+        return _ok({"deletionJob": job})
+
+    @router.get("/dev-admin/commerce")
+    def dev_admin_commerce(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        return _ok(
+            {
+                "counts": {
+                    name: len(repository.list_raw_documents(name))
+                    for name in (
+                        COLLECTIONS.promotions,
+                        COLLECTIONS.match_runs,
+                        COLLECTIONS.negotiations,
+                        COLLECTIONS.agreements,
+                        COLLECTIONS.evidence,
+                    )
+                }
+            }
+        )
+
+    @router.get("/dev-admin/agents")
+    def dev_admin_agents(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        agents = repository.list_raw_documents(COLLECTIONS.agents)
+        tasks = repository.list_raw_documents(COLLECTIONS.a2a_tasks)
+        return _ok({"agentCount": len(agents), "a2aTaskCount": len(tasks)})
+
+    @router.get("/dev-admin/escrows")
+    def dev_admin_escrows(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        return _ok(
+            {
+                "escrows": repository.list_raw_documents(COLLECTIONS.escrows),
+                "receiptCount": len(
+                    repository.list_raw_documents(COLLECTIONS.transaction_receipts)
+                ),
+            }
+        )
+
+    @router.get("/dev-admin/audit")
+    def dev_admin_audit(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        events = repository.list_raw_documents(COLLECTIONS.audit_events)
+        events.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+        return _ok({"events": events[:100]})
+
+    @router.post("/dev-admin/demo:seed", status_code=status.HTTP_201_CREATED)
+    def dev_admin_demo_seed(
+        payload: dict[str, object] | None = None,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        seed_batch_id = str((payload or {}).get("seedBatchId") or f"seed-{uuid4()}")
+        now = _now()
+        uid = f"demo-user-{seed_batch_id}"
+        user = {
+            "uid": uid,
+            "userId": uid,
+            "email": f"{uid}@example.test",
+            "displayName": "Disposable Demo User",
+            "role": None,
+            "onboardingStatus": "ROLE_REQUIRED",
+            "status": "ACTIVE",
+            "environment": "demo",
+            "seedBatchId": seed_batch_id,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.user(uid), user)
+        _append_audit(
+            repository,
+            action="DEV_ADMIN_DEMO_SEEDED",
+            data={"actorUid": admin.uid, "seedBatchId": seed_batch_id},
+        )
+        return _ok({"seedBatchId": seed_batch_id, "users": [_admin_user_projection(user)]})
+
+    @router.post("/dev-admin/demo:reset")
+    def dev_admin_demo_reset(
+        payload: dict[str, object],
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        admin = _require_dev_admin(repository, settings, token_verifier, authorization)
+        seed_batch_id = payload.get("seedBatchId")
+        if not isinstance(seed_batch_id, str) or not seed_batch_id:
+            raise _problem(
+                status.HTTP_400_BAD_REQUEST,
+                "VALIDATION_ERROR",
+                "seedBatchId is required for scoped demo reset.",
+            )
+        users = [
+            user
+            for user in repository.list_raw_documents(COLLECTIONS.users)
+            if user.get("seedBatchId") == seed_batch_id and user.get("environment") == "demo"
+        ]
+        now = _now()
+        for user in users:
+            uid = _require_document_str(user, "uid")
+            repository.save_raw_document(
+                FirestorePaths.user(uid),
+                {
+                    **user,
+                    "email": None,
+                    "displayName": None,
+                    "status": "DELETED",
+                    "deletedAt": now,
+                    "updatedAt": now,
+                },
+            )
+        job_id = f"admin-job-{uuid4()}"
+        job = {
+            "jobId": job_id,
+            "type": "DEMO_RESET",
+            "actorUid": admin.uid,
+            "seedBatchId": seed_batch_id,
+            "affectedUserCount": len(users),
+            "status": "COMPLETED",
+            "createdAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.admin_job(job_id), job)
+        _append_audit(
+            repository,
+            action="DEV_ADMIN_DEMO_RESET",
+            data={"actorUid": admin.uid, "seedBatchId": seed_batch_id, "jobId": job_id},
+        )
+        return _ok({"job": job})
+
     @router.get("/brand/dashboard")
     def get_brand_dashboard(
         authorization: str | None = Header(default=None, alias="Authorization"),
@@ -1979,6 +2265,129 @@ def _require_auth_user(
         return token_verifier.verify_authorization_header(authorization)
     except AuthError as exc:
         raise _problem(status.HTTP_401_UNAUTHORIZED, "UNAUTHENTICATED", str(exc)) from exc
+
+
+def _require_dev_admin(
+    repository: KnotRepository,
+    settings: Settings,
+    token_verifier: FirebaseTokenVerifier,
+    authorization: str | None,
+) -> AuthenticatedUser:
+    auth_user = _require_auth_user(token_verifier, authorization)
+    _bootstrap_authenticated_user(repository, auth_user)
+    if not settings.dev_admin_enabled:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Dev admin is disabled.",
+        )
+    claims = auth_user.claims or {}
+    allowlist = {item.lower() for item in settings.dev_admin_allowlist}
+    is_claim_admin = claims.get("admin") is True
+    is_allowlisted = auth_user.uid.lower() in allowlist or (
+        auth_user.email is not None and auth_user.email.lower() in allowlist
+    )
+    if not is_claim_admin and not is_allowlisted:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Dev admin access requires admin claim or allowlist.",
+        )
+    return auth_user
+
+
+def _require_user_document(repository: KnotRepository, uid: str) -> dict[str, object]:
+    user = repository.get_raw_document(FirestorePaths.user(uid))
+    if user is None:
+        raise _not_found("user", uid)
+    return user
+
+
+def _admin_counts(repository: KnotRepository) -> dict[str, int]:
+    return {
+        "users": len(repository.list_raw_documents(COLLECTIONS.users)),
+        "brands": len(repository.list_raw_documents(COLLECTIONS.brands)),
+        "creatorProfiles": len(repository.list_raw_documents(COLLECTIONS.creator_profiles)),
+        "promotions": len(repository.list_raw_documents(COLLECTIONS.promotions)),
+        "negotiations": len(repository.list_raw_documents(COLLECTIONS.negotiations)),
+        "agreements": len(repository.list_raw_documents(COLLECTIONS.agreements)),
+        "escrows": len(repository.list_raw_documents(COLLECTIONS.escrows)),
+        "transactionReceipts": len(repository.list_raw_documents(COLLECTIONS.transaction_receipts)),
+        "auditEvents": len(repository.list_raw_documents(COLLECTIONS.audit_events)),
+    }
+
+
+def _latest_failures(repository: KnotRepository) -> list[dict[str, object]]:
+    failures: list[dict[str, object]] = []
+    for receipt in repository.list_raw_documents(COLLECTIONS.transaction_receipts):
+        if receipt.get("status") == "FAILED":
+            failures.append(
+                {
+                    "type": "TRANSACTION_RECEIPT",
+                    "receiptId": receipt.get("receiptId"),
+                    "createdAt": receipt.get("createdAt"),
+                    "detail": receipt.get("detail"),
+                }
+            )
+    failures.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+    return failures[:10]
+
+
+def _admin_user_projection(user: dict[str, object]) -> dict[str, object]:
+    return {
+        "uid": user.get("uid") or user.get("userId"),
+        "email": user.get("email"),
+        "displayName": user.get("displayName"),
+        "role": user.get("role"),
+        "status": user.get("status"),
+        "onboardingStatus": user.get("onboardingStatus"),
+        "brandId": user.get("brandId"),
+        "creatorId": user.get("creatorId"),
+        "agentId": user.get("agentId"),
+        "environment": user.get("environment"),
+        "seedBatchId": user.get("seedBatchId"),
+        "createdAt": user.get("createdAt"),
+        "updatedAt": user.get("updatedAt"),
+    }
+
+
+def _admin_inventory(
+    repository: KnotRepository,
+    user: dict[str, object],
+) -> dict[str, object]:
+    uid = str(user.get("uid") or user.get("userId"))
+    brand_id = user.get("brandId")
+    creator_id = user.get("creatorId")
+    agent_id = user.get("agentId")
+    safe_records = [FirestorePaths.user(uid)] if _is_demo_document(user) else []
+    retained_records: list[str] = []
+    for collection in (
+        COLLECTIONS.agreements,
+        COLLECTIONS.escrows,
+        COLLECTIONS.settlements,
+        COLLECTIONS.transaction_receipts,
+        COLLECTIONS.payment_operations,
+    ):
+        for document in repository.list_raw_documents(collection):
+            if (
+                document.get("brandId") == brand_id
+                or document.get("creatorId") == creator_id
+                or document.get("brandAgentId") == agent_id
+                or document.get("creatorAgentId") == agent_id
+                or document.get("agreementId") in {brand_id, creator_id, agent_id}
+            ):
+                document_id = document.get(collection[:-1] + "Id", "unknown")
+                retained_records.append(f"{collection}/{document_id}")
+    return {
+        "safeDeleteRecords": safe_records,
+        "retainedRecords": retained_records,
+        "retainedFinancialRecordCount": len(retained_records),
+        "demoTagged": _is_demo_document(user),
+    }
+
+
+def _is_demo_document(document: dict[str, object]) -> bool:
+    return document.get("environment") == "demo" or isinstance(document.get("seedBatchId"), str)
 
 
 def _bootstrap_authenticated_user(

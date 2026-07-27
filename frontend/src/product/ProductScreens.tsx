@@ -16,6 +16,7 @@ import {
 import {
   ProductApiClient,
   ProductApiError,
+  type ApiDevAdminOverview,
   type BrandDashboard,
   type CreatorDashboard,
   type CurrentUserContext,
@@ -1227,6 +1228,97 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+export function DevAdminLiveScreen() {
+  const [overview, setOverview] = useState<ApiDevAdminOverview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  async function load() {
+    setStatus("loading");
+    setError(null);
+    try {
+      const client = new ProductApiClient();
+      setOverview(await client.getDevAdminOverview());
+      setStatus("ready");
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    async function loadInitial() {
+      try {
+        const client = new ProductApiClient();
+        const nextOverview = await client.getDevAdminOverview();
+        if (!active) return;
+        setOverview(nextOverview);
+        setStatus("ready");
+      } catch (caught) {
+        if (!active) return;
+        setError(errorMessage(caught));
+        setStatus("error");
+      }
+    }
+    void loadInitial();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-7 py-8">
+      <PageTitle
+        eyebrow="Dev admin"
+        title="운영자용 상태 확인"
+        body="Verified admin claim 또는 서버 allowlist를 통과한 계정만 Product API 운영 정보를 볼 수 있습니다."
+      />
+      {status === "loading" && <Panel>관리자 권한과 운영 데이터를 확인하는 중입니다.</Panel>}
+      {status === "error" && (
+        <Panel>
+          <SectionTitle eyebrow="Access" title="접근할 수 없습니다" />
+          <FormError message={error ?? "Dev admin request failed."} />
+          <button
+            type="button"
+            onClick={load}
+            className="mt-5 rounded-full border border-border-subtle px-4 py-2 text-sm font-semibold"
+          >
+            다시 시도
+          </button>
+        </Panel>
+      )}
+      {overview && (
+        <>
+          <div className="grid gap-5 md:grid-cols-3">
+            <InfoPanel label="Admin API" value={overview.enabled ? "enabled" : "disabled"} />
+            <InfoPanel label="Actor UID" value={overview.actorUid} />
+            <InfoPanel label="Failures" value={String(overview.latestFailures.length)} />
+          </div>
+          <Panel>
+            <SectionTitle eyebrow="Overview" title="Firestore counts" />
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {Object.entries(overview.counts).map(([key, value]) => (
+                <InfoBox key={key} label={key} value={String(value)} />
+              ))}
+            </div>
+          </Panel>
+          <Panel>
+            <SectionTitle eyebrow="Tabs" title="Admin surface" />
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              {["Overview", "Users", "Commerce", "Agents & A2A", "Escrow", "Audit"].map((tab) => (
+                <div key={tab} className="rounded border border-border-subtle bg-background p-3 text-sm">
+                  {tab}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </>
+      )}
     </div>
   );
 }

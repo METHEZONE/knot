@@ -52,6 +52,8 @@ class Settings(BaseModel):
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
+    dev_admin_enabled: bool = False
+    dev_admin_allowlist: list[str] = []
 
 
 @lru_cache
@@ -87,4 +89,16 @@ def get_settings(service_name: str | None = None) -> Settings:
         escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
+        dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
+        dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
     )
+
+
+def _truthy(value: str | None) -> bool:
+    return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
+def _csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]

@@ -8,7 +8,7 @@ Last updated: 2026-07-27
 
 ## Latest Completed Milestone
 
-Phase 5 Devnet Escrow from `prompts/05_ESCROW.md`.
+Phase 6 Protected Dev Admin from `prompts/06_DEV_ADMIN.md`.
 
 Previously completed Auth foundation:
 
@@ -81,6 +81,15 @@ Phase 5 completed with external blocker:
 - Frontend escrow action copy now states that success requires a confirmed Solana Devnet signature.
 - External devnet smoke was not run because safe signing configuration is missing in the current process.
 
+Phase 6 completed:
+
+- Added `KNOT_DEV_ADMIN_ENABLED` and `KNOT_DEV_ADMIN_ALLOWLIST`.
+- Backend dev-admin APIs require verified Firebase auth plus `admin: true` custom claim or strict server allowlist.
+- Added protected endpoints for overview, user search/detail, disable/enable, deletion dry run, demo-only deletion job, deletion job lookup, commerce, agents, escrows, audit, demo seed, and scoped demo reset.
+- Admin mutations write audit events.
+- Confirmed receipts, settlements, payment operations, and audit records are retained.
+- Frontend `/dev/admin` now reads protected Product API overview using Firebase bearer auth.
+
 ## Verification
 
 ```text
@@ -91,6 +100,7 @@ cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_ap
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_settlement.py tests/test_domain_models.py tests/test_api_promotions.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd backend && ../.venv/bin/python -m pytest tests/test_api_dev_admin.py tests/test_api_auth.py tests/test_health_apps.py tests/test_api_resource_routes.py
 cd web3/gateway && npm run build
 cd web3/gateway && npm run lint
 cd web3/gateway && npm run test
@@ -104,6 +114,7 @@ Results:
 
 - Backend Ruff passed.
 - Backend selected pytest passed: 39 passed, 1 Starlette/httpx deprecation warning for Phase 5 escrow selection.
+- Backend selected pytest passed: 15 passed, 1 Starlette/httpx deprecation warning for Phase 6 dev-admin selection.
 - Web3 Gateway build/lint/tests passed: 9 tests passed, 1 Node `punycode` deprecation warning.
 - Frontend typecheck passed.
 - Frontend lint passed.
@@ -161,6 +172,15 @@ KNOT_CREATOR_KEYPAIR_JSON=...
 KNOT_AGENT_KEYPAIR_JSON=...
 ```
 
+For dev admin:
+
+```text
+KNOT_DEV_ADMIN_ENABLED=true
+KNOT_DEV_ADMIN_ALLOWLIST=admin@example.com
+```
+
+Alternatively set Firebase custom claim `admin: true` for the operator account.
+
 ## Not Done In This Milestone
 
 - Legacy demo endpoints still exist for compatibility.
@@ -168,9 +188,9 @@ KNOT_AGENT_KEYPAIR_JSON=...
 - Full server-cookie route middleware is not complete; current guards use Firebase client state and `/api/v1/me`.
 - Firestore migration/reset was not run.
 - No GCP IAM, Secret Manager, deployment, wallet funding, program deployment, or on-chain transaction was performed.
-- Dev Admin backend implementation is still Phase 6.
 - External devnet escrow smoke is blocked by missing safe signing configuration.
+- Final E2E and cleanup is still Phase 7.
 
 ## Next Recommended Milestone
 
-Phase 6 should implement the protected `/dev/admin` route and backend dev-admin APIs with strict admin authorization, audit events, and safe demo-only reset/deletion behavior.
+Phase 7 should run the full real-data E2E cleanup pass, remove dead active mocks/fixtures, update README and deployment notes, and produce final evidence.

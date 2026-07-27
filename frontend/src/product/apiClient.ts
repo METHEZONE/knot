@@ -333,6 +333,13 @@ export type ApiAgreementEscrowBundle = {
   settlements: ApiSettlement[];
 };
 
+export type ApiDevAdminOverview = {
+  enabled: boolean;
+  actorUid: string;
+  counts: Record<string, number>;
+  latestFailures: Array<Record<string, unknown>>;
+};
+
 export type ApiSettlementBundle = ApiNegotiationBundle & {
   agreement: ApiAgreement;
   evidence: ApiEvidence;
@@ -671,6 +678,13 @@ export class ProductApiClient {
         headers: { "Idempotency-Key": `frontend-release-${escrowId}-${milestoneId}` },
       },
     );
+  }
+
+  async getDevAdminOverview() {
+    const response = await this.request<{ overview: ApiDevAdminOverview }>(
+      "/api/v1/dev-admin/overview",
+    );
+    return response.overview;
   }
 
   private async raw<T>(path: string, init?: RequestInit): Promise<T> {

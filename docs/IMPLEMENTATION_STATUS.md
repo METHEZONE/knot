@@ -269,6 +269,50 @@ Remaining after Phase 5:
 - Final mock/dead-code cleanup and safe E2E remain Phase 7.
 - Web3 Gateway still supports explicit local simulated mode for local boundary tests; Product API rejects that mode as escrow success.
 
+## Phase 6 Protected Dev Admin Summary
+
+Status: `COMPLETED`
+
+Implemented from `prompts/06_DEV_ADMIN.md`:
+
+- Added `KNOT_DEV_ADMIN_ENABLED`.
+- Added `KNOT_DEV_ADMIN_ALLOWLIST`.
+- Backend dev-admin authorization now requires verified Firebase auth plus `admin: true` custom claim or strict server allowlist.
+- Added protected `/api/v1/dev-admin/overview`.
+- Added protected user search/detail endpoints.
+- Added protected user disable/enable actions with audit events.
+- Added deletion dry run.
+- Added demo-only confirmed deletion job that redacts disposable demo user projection and preserves financial/audit records.
+- Added deletion job lookup.
+- Added protected Commerce, Agents & A2A, Escrow, and Audit projections.
+- Added scoped demo seed/reset using `seedBatchId` and `environment=demo`.
+- Frontend `/dev/admin` now calls the protected Product API overview with Firebase bearer auth.
+
+Verification:
+
+```text
+cd backend && ../.venv/bin/python -m ruff check apps libs tests
+cd backend && ../.venv/bin/python -m pytest tests/test_api_dev_admin.py tests/test_api_auth.py tests/test_health_apps.py tests/test_api_resource_routes.py
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+cd frontend && npm run build
+```
+
+Results:
+
+- Backend Ruff: passed.
+- Backend selected pytest: 15 passed, 1 Starlette/httpx deprecation warning.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend tests: 12 passed.
+- Frontend production build: passed.
+
+Remaining after Phase 6:
+
+- Final E2E and cleanup remains Phase 7.
+- Firebase Admin SDK disable/delete calls are not exercised in automated tests; emulator-mode tests verify Firestore state transitions and authorization.
+
 ## Current Product Gap
 
 Target MVP:
@@ -291,7 +335,7 @@ Current implementation is still partially demo-oriented beyond the completed Aut
 - Legacy step pages redirect, but some unused legacy component code remains until Phase 7 cleanup.
 - Real A2A HTTP negotiation is implemented and tested through an actual localhost service boundary.
 - Escrow lock/release requires confirmed gateway receipts; external devnet smoke is blocked by missing safe signing configuration.
-- Dev Admin UI exists as a status panel only; backend admin APIs are missing.
+- Dev Admin backend APIs and protected frontend overview are implemented.
 
 ## Repository Structure
 
