@@ -444,6 +444,13 @@ export class ProductApiClient {
     return this.request<CurrentUserContext>("/api/v1/me");
   }
 
+  async saveWalletAddress(walletAddress: string) {
+    return this.request<CurrentUserContext>("/api/v1/me/wallet", {
+      method: "POST",
+      body: JSON.stringify({ walletAddress }),
+    });
+  }
+
   async selectMyRole(role: "BRAND" | "CREATOR", idempotencyKey: string) {
     return this.request<CurrentUserContext>("/api/v1/me/role", {
       method: "POST",
