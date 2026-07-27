@@ -12,8 +12,8 @@ import {
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
-  createAccount,
   getAccount,
+  getOrCreateAssociatedTokenAccount,
   mintTo
 } from "@solana/spl-token";
 import type { GatewayConfig } from "./config.js";
@@ -92,7 +92,11 @@ export async function submitEscrowLock(
   const deposit = total + brandFeeTotal;
 
   // funder = agent: 에이전트 토큰계정에 예산 확보(데모는 자체 민팅; 실제론 유저 top-up으로 이미 채워짐)
-  const agentToken = await createAccount(connection, brand, mint, agent.publicKey);
+  // 에이전트 지갑은 딜마다 재사용되므로 반드시 멱등하게 확보해야 한다 —
+  // createAccount 는 이미 존재하면 "Provided owner is not allowed" 로 실패해서 두 번째 락이 깨졌다.
+  const agentToken = (
+    await getOrCreateAssociatedTokenAccount(connection, brand, mint, agent.publicKey)
+  ).address;
   await mintTo(connection, brand, mint, agentToken, brand, deposit);
   await sendIx(
     connection,
@@ -137,7 +141,9 @@ export async function submitEscrowLock(
       campaignId,
       campaign: campaign.toBase58(),
       creator: creator.publicKey.toBase58(),
-      creatorToken: (await createAccount(connection, brand, mint, creator.publicKey)).toBase58(),
+      creatorToken: (
+        await getOrCreateAssociatedTokenAccount(connection, brand, mint, creator.publicKey)
+      ).address.toBase58(),
       agentAuthority: agent.publicKey.toBase58(),
       treasuryToken: treasuryToken.toBase58(),
       mint: mint.toBase58(),
