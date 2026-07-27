@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { postLoginPath, safeRedirectPath } from "@/auth/authState";
+import { useAuth } from "@/auth/AuthProvider";
 import {
   authConfigurationError,
   createFirebaseAccount,
@@ -1017,6 +1018,11 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();
+  // 구글 등으로 이미 Firebase 로그인된 상태면(예: /login에서 "Continue with Google" 후 역할선택으로 유입)
+  // 계정을 다시 만들지 않고(=email-already-in-use 방지) 이메일만 채워 역할 연결로 넘어간다.
+  const { status: authStatus, context: authContext, refresh } = useAuth();
+  const authedEmail = authStatus === "authenticated" ? authContext?.account.email ?? null : null;
+  const alreadyAuthed = Boolean(authedEmail);
 
   async function submit(formData: FormData) {
     setStatus("saving");
@@ -1024,13 +1030,18 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
     try {
       if (!configured) throw new Error(authConfigurationError());
       const displayName = String(formData.get("name") ?? roleSession.userLabel);
-      const email = String(formData.get("email") ?? "");
-      const password = String(formData.get("password") ?? "");
-      await createFirebaseAccount(email, password, displayName);
+      const email = alreadyAuthed ? authedEmail! : String(formData.get("email") ?? "");
+      if (!alreadyAuthed) {
+        const password = String(formData.get("password") ?? "");
+        await createFirebaseAccount(email, password, displayName);
+      }
       const api = new ProductApiClient();
       await api.getMe();
       const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
       saveCurrentAccount(account);
+      // 역할 선택 결과를 AuthProvider context에 반영. 안 하면 다음 페이지 AuthGate가
+      // 여전히 role=null로 보고 /signup(역할선택)으로 되돌려 보냄.
+      await refresh();
       router.push(nextHref);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -1056,8 +1067,10 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
             <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
-            <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
-            <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
+            <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required defaultValue={authedEmail ?? undefined} readOnly={alreadyAuthed} />
+            {!alreadyAuthed && (
+              <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
+            )}
             <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
@@ -2439,6 +2452,7 @@ function Input({
   required = false,
   defaultValue,
   minLength,
+  readOnly = false,
 }: {
   label: string;
   name?: string;
@@ -2447,6 +2461,7 @@ function Input({
   required?: boolean;
   defaultValue?: string | number;
   minLength?: number;
+  readOnly?: boolean;
 }) {
   return (
     <label className="mt-4 block">
@@ -2457,7 +2472,8 @@ function Input({
         required={required}
         defaultValue={defaultValue}
         minLength={minLength}
-        className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+        readOnly={readOnly}
+        className={`mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent${readOnly ? " opacity-70" : ""}`}
         placeholder={placeholder}
       />
     </label>
