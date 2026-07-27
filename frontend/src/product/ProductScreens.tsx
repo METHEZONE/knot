@@ -984,7 +984,14 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                   <InfoBox label="Signature" value={detail.escrow.lockSignature ?? "pending"} />
                 </div>
               ) : (
-                <EmptyState text="아직 escrow가 없습니다. Phase 5에서 실제 devnet lock/release가 연결됩니다." />
+                <EmptyState text="아직 escrow가 없습니다. 정산 페이지에서 lock/release를 실행할 수 있습니다." />
+              )}
+              {role === "brand" && (
+                <div className="mt-5">
+                  <PrimaryLink href={`/brand/settlement?agreementId=${String(detail.agreement.agreementId)}`}>
+                    정산 페이지로 이동
+                  </PrimaryLink>
+                </div>
               )}
             </Panel>
             <Panel>
@@ -1595,7 +1602,8 @@ export function CreatorBrandDetailScreen({ deal }: { deal: CreatorDeal }) {
 }
 
 export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const roleSession = session ?? fallbackRoleSession(role);
+  const serverSession = useServerRoleSession(role);
+  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
   return (
     <WorkspaceShell role={role} active="me" title="마이페이지" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
@@ -1622,7 +1630,8 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
 }
 
 export function RoleSettingsScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const roleSession = session ?? fallbackRoleSession(role);
+  const serverSession = useServerRoleSession(role);
+  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
   const wallet = usePhantomWallet();
   return (
     <WorkspaceShell role={role} active="settings" title="설정" session={roleSession}>
@@ -1640,7 +1649,7 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
-          <InfoBox label="Wallet address" value={wallet.address ?? roleSession.walletAddress} />
+          <Input label="Wallet address" placeholder={wallet.address ?? roleSession.walletAddress} />
           <InfoBox label="Network" value="Solana Devnet" />
           <button
             type="button"
@@ -1654,7 +1663,7 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
               ? "연결 중..."
               : wallet.status === "saving"
                 ? "저장 중..."
-                : wallet.address
+                : (wallet.address ?? (roleSession.walletAddress !== "not-connected" ? roleSession.walletAddress : null))
                   ? "Phantom 재연결"
                   : "Phantom 연결"}
           </button>
@@ -2633,6 +2642,47 @@ function fallbackForNegotiation(negotiation: ApiNegotiation) {
     creatorAgentId: negotiation.creatorAgentId,
     status: negotiation.status,
   };
+}
+
+/**
+ * 화면들이 받는 RoleSession 을 서버(/me)와 로컬 세션 저장소에서 만든다.
+ * /brand/settings · /creator/me 처럼 session 을 넘기지 않는 페이지가 fallback mock(`creator-signup-agent`,
+ * `not-connected`) 대신 실제 계정·지갑 값으로 뜨게 하기 위한 것. 화면 마크업은 건드리지 않는다.
+ */
+function useServerRoleSession(role: Role): RoleSession | null {
+  const [state, setState] = useDashboardState<RoleSession>();
+  const load = useCallback(
+    () =>
+      loadDashboard(async () => {
+        const local = readLocalSession();
+        const { account } = await new ProductApiClient().getMe();
+        const brand = role === "brand";
+        const session: RoleSession = {
+          role,
+          userLabel: account.displayName ?? account.email ?? (brand ? "Brand operator" : "Creator"),
+          organizationLabel:
+            (brand ? account.brandId : account.creatorId) ??
+            (brand ? "Brand workspace" : "Creator workspace"),
+          agentId:
+            account.agentId ??
+            (brand ? local.brandAgentId : local.creatorAgentId) ??
+            `${role}-signup-agent`,
+          agentLabel: brand ? "Brand Agent" : "Creator Agent",
+          profileSummary: account.agentWalletPubkey
+            ? `에이전트 지갑(수탁): ${account.agentWalletPubkey}`
+            : "온보딩이 완료되어 Agent가 활성화되어 있습니다.",
+          walletAddress: account.walletAddress ?? "not-connected",
+        };
+        return session;
+      }, setState),
+    [role, setState],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return state.type === "ready" ? state.data : null;
 }
 
 function fallbackRoleSession(role: Role): RoleSession {
