@@ -86,6 +86,14 @@ test("Firebase auth errors map to user-facing messages", () => {
     firebaseAuthErrorMessage({ code: "auth/popup-blocked" }),
     "브라우저가 로그인 팝업을 차단했습니다. 팝업을 허용해주세요.",
   );
+  assert.equal(
+    firebaseAuthErrorMessage({ code: "auth/weak-password" }),
+    "비밀번호는 최소 6자 이상이어야 합니다.",
+  );
+  assert.equal(
+    firebaseAuthErrorMessage({ code: "auth/operation-not-allowed" }),
+    "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.",
+  );
 });
 
 test("A2A task state maps to creator display status", () => {

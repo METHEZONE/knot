@@ -152,7 +152,7 @@ export function LoginScreen() {
       <Panel>
         <form action={submit} className="grid gap-4">
           <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
-          <Input label="Password" name="password" placeholder="Password" type="password" required />
+          <Input label="Password" name="password" placeholder="Password" type="password" minLength={6} required />
           <button
             type="submit"
             className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-background"
@@ -1024,7 +1024,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
             <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
             <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
             <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
-            <Input label="Password" name="password" placeholder="Password" type="password" required />
+            <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
             <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
@@ -2351,6 +2351,7 @@ function Input({
   type = "text",
   required = false,
   defaultValue,
+  minLength,
 }: {
   label: string;
   name?: string;
@@ -2358,6 +2359,7 @@ function Input({
   type?: string;
   required?: boolean;
   defaultValue?: string | number;
+  minLength?: number;
 }) {
   return (
     <label className="mt-4 block">
@@ -2367,6 +2369,7 @@ function Input({
         name={name}
         required={required}
         defaultValue={defaultValue}
+        minLength={minLength}
         className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
         placeholder={placeholder}
       />
