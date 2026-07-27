@@ -560,6 +560,7 @@ Current status:
 - Product API supports actual HTTP A2A when `KNOT_CREATOR_A2A_MODE=http`.
 - HTTP A2A path is tested with AgentCard discovery, service auth, server-created Task, shared `contextId`/`taskId`, COUNTER, Brand ACCEPT, final Artifact, and Agreement creation.
 - Creator A2A resolves real Firestore `creatorAgentId` tenants when deployed with `KNOT_REPOSITORY_BACKEND=firestore`; seed demo tenants remain available only as explicit development fixtures.
+- Brand Promotion creation stores the submitted deadline as the initial posting window so creator lead-time policy can produce an Agreement instead of defaulting to immediate escalation.
 - Local `InMemoryA2ATaskStore` remains explicit test/development mode.
 - New negotiation documents redact Creator private policy snapshots.
 

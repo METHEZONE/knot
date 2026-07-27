@@ -216,7 +216,7 @@ class BrandPromotionCreateRequest(DomainModel):
                 maxPerCreatorUsdc=self.maximum_per_creator,
             ),
             deliverables=self.deliverables,
-            postingWindow=PostingWindow(start=date.today(), end=self.deadline),
+            postingWindow=PostingWindow(start=self.deadline, end=self.deadline),
             usageRights=self.usage_rights,
             constraints=PromotionConstraints(
                 requiredCategories=self.categories,

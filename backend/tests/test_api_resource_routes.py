@@ -83,8 +83,13 @@ def test_brand_can_create_and_read_only_owned_promotions() -> None:
     )
 
     assert created.status_code == 201
-    promotion_id = created.json()["data"]["promotion"]["promotionId"]
+    created_promotion = created.json()["data"]["promotion"]
+    promotion_id = created_promotion["promotionId"]
     other_id = other_created.json()["data"]["promotion"]["promotionId"]
+    assert created_promotion["postingWindow"] == {
+        "start": "2026-08-10",
+        "end": "2026-08-10",
+    }
 
     listed = client.get(
         "/api/v1/brand/promotions",
