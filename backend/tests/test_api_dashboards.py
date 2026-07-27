@@ -15,6 +15,7 @@ from libs.domain.models import (
     UsageRights,
 )
 from libs.repositories.firestore_paths import FirestorePaths
+from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
 
@@ -146,6 +147,47 @@ def test_creator_dashboard_filters_by_authenticated_creator_agent() -> None:
     assert response.status_code == 200
     offers = response.json()["data"]["dashboard"]["offers"]
     assert [offer["negotiationId"] for offer in offers] == ["negotiation-owned"]
+
+
+def test_seeded_demo_dashboards_show_expected_agreements_and_payouts() -> None:
+    repository = KnotRepository(InMemoryDocumentStore())
+    seed_demo_repository(repository, include_business_flow=True)
+    settings = Settings(auth_mode="emulator", firebase_project_id="knot-dev-503505")
+    client = TestClient(create_app(repository=repository, settings=settings))
+
+    brand = client.get(
+        "/api/v1/brand/dashboard",
+        headers=auth_headers("user-brand-1", "test1@knot.demo"),
+    )
+    creator_one = client.get(
+        "/api/v1/creator/dashboard",
+        headers=auth_headers("user-creator-1", "test3@knot.demo"),
+    )
+    creator_two = client.get(
+        "/api/v1/creator/dashboard",
+        headers=auth_headers("user-creator-2", "test4@knot.demo"),
+    )
+
+    assert brand.status_code == 200
+    brand_dashboard = brand.json()["data"]["dashboard"]
+    assert brand_dashboard["summary"]["activePromotions"] == 1
+    assert brand_dashboard["summary"]["agreements"] == 2
+    assert len(brand_dashboard["contractedCreators"]) == 2
+    assert len(brand_dashboard["recentAgentActivity"]) >= 2
+
+    assert creator_one.status_code == 200
+    creator_one_summary = creator_one.json()["data"]["dashboard"]["summary"]
+    assert creator_one_summary["agentNegotiations"] == 1
+    assert creator_one_summary["releasedPayoutBaseUnits"] == "500000000"
+    assert creator_one_summary["availablePayoutBaseUnits"] == "0"
+    assert creator_one_summary["pendingPayoutBaseUnits"] == "0"
+
+    assert creator_two.status_code == 200
+    creator_two_summary = creator_two.json()["data"]["dashboard"]["summary"]
+    assert creator_two_summary["agentNegotiations"] == 2
+    assert creator_two_summary["releasedPayoutBaseUnits"] == "0"
+    assert creator_two_summary["availablePayoutBaseUnits"] == "0"
+    assert creator_two_summary["pendingPayoutBaseUnits"] == "850000000"
 
 
 def test_dashboard_wrong_role_and_missing_profile_states() -> None:

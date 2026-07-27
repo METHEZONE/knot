@@ -673,7 +673,8 @@ def build_api_router(
         promotions = [
             _promotion_document_with_raw(repository, promotion)
             for promotion in repository.list_promotions()
-            if promotion.brand_id == brand_id and not _promotion_is_deleted(repository, promotion.promotion_id)
+            if promotion.brand_id == brand_id
+            and not _promotion_is_deleted(repository, promotion.promotion_id)
         ]
         return _ok({"promotions": _sorted_recent(promotions)})
 
@@ -717,7 +718,9 @@ def build_api_router(
             payload=request_payload,
             owner_path=f"{FirestorePaths.brand(brand_id)}:promotion-create",
         )
-        promotion_id = payload.promotion_id or f"promotion-{uuid5(NAMESPACE_URL, f'{brand_id}:{key}')}"
+        promotion_id = payload.promotion_id or (
+            f"promotion-{uuid5(NAMESPACE_URL, f'{brand_id}:{key}')}"
+        )
         existing = repository.get_raw_document(FirestorePaths.promotion(promotion_id))
         if existing is not None:
             existing_owner = existing.get("brandId")
@@ -801,14 +804,19 @@ def build_api_router(
         _claim_idempotency(
             repository,
             key,
-            payload={"uid": auth_user.uid, "promotionId": promotion_id, "action": "DELETE_PROMOTION"},
+            payload={
+                "uid": auth_user.uid,
+                "promotionId": promotion_id,
+                "action": "DELETE_PROMOTION",
+            },
             owner_path=FirestorePaths.promotion(promotion_id),
         )
         if _agreement_for_promotion(repository, promotion_id) is not None:
             raise _problem(
                 status.HTTP_409_CONFLICT,
                 "PROMOTION_DELETE_BLOCKED",
-                "계약 또는 정산 기록이 있는 프로모션은 삭제할 수 없습니다. 프로모션을 종료하거나 보관해주세요.",
+                "계약 또는 정산 기록이 있는 프로모션은 삭제할 수 없습니다. "
+                "프로모션을 종료하거나 보관해주세요.",
             )
         now = _now()
         deleted = {
@@ -2582,7 +2590,8 @@ def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dic
     promotions = [
         model_to_document(promotion)
         for promotion in repository.list_promotions()
-        if promotion.brand_id == brand_id and not _promotion_is_deleted(repository, promotion.promotion_id)
+        if promotion.brand_id == brand_id
+        and not _promotion_is_deleted(repository, promotion.promotion_id)
     ]
     promotions = _sorted_recent(promotions)[:10]
     promotion_ids = {str(promotion.get("promotionId")) for promotion in promotions}
@@ -2598,6 +2607,8 @@ def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dic
         if str(document.get("promotionId")) in promotion_ids
     ]
     events = _promotion_events(repository, promotion_ids, limit=8)
+    if not events:
+        events = _creator_activity(negotiations, agreements, limit=8)
     contracted_creator_agent_ids = {
         str(agreement.get("creatorAgentId"))
         for agreement in agreements
@@ -2768,11 +2779,7 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
         )
         for agreement in _sorted_recent(agreements)[:10]
     ]
-    pending_payout = sum(
-        _int_string(document.get("amountBaseUnits"))
-        for document in repository.list_raw_documents(COLLECTIONS.settlements)
-        if document.get("creatorId") == creator_id or document.get("creatorAgentId") == agent_id
-    )
+    payout_totals = _agreement_milestone_totals_base_units(agreements)
     recent_activity = _creator_activity(negotiations, agreements, limit=8)
     return {
         "creator": creator,
@@ -2780,7 +2787,9 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
             "newOffers": sum(1 for offer in offers if offer["status"] in {"OFFERED", "CREATED"}),
             "agentNegotiations": len(negotiations),
             "activeSponsorships": len(agreements),
-            "pendingPayoutBaseUnits": str(pending_payout),
+            "availablePayoutBaseUnits": str(payout_totals["available"]),
+            "releasedPayoutBaseUnits": str(payout_totals["released"]),
+            "pendingPayoutBaseUnits": str(payout_totals["pending"]),
         },
         "offers": offers,
         "activeSponsorships": active_sponsorships,
@@ -2978,6 +2987,31 @@ def _int_string(value: object) -> int:
     if isinstance(value, str) and value.isdigit():
         return int(value)
     return 0
+
+
+def _agreement_milestone_totals_base_units(
+    agreements: list[dict[str, object]],
+) -> dict[str, int]:
+    totals = {"released": 0, "available": 0, "pending": 0}
+    for agreement in agreements:
+        milestones = agreement.get("milestones")
+        if not isinstance(milestones, list):
+            continue
+        for milestone in milestones:
+            if not isinstance(milestone, dict):
+                continue
+            amount = milestone.get("amountUsdc")
+            if not isinstance(amount, int | float):
+                continue
+            base_units = int(amount * 1_000_000)
+            status_value = str(milestone.get("status") or "")
+            if status_value == "RELEASED":
+                totals["released"] += base_units
+            elif status_value == "VERIFIED":
+                totals["available"] += base_units
+            else:
+                totals["pending"] += base_units
+    return totals
 
 
 def _with_custom_category(categories: list[str], custom_category: str | None) -> list[str]:

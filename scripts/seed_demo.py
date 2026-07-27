@@ -3,13 +3,59 @@ import os
 import sys
 from pathlib import Path
 
+# ruff: noqa: E402,I001
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from libs.repositories.firestore_adapter import FirestoreDocumentStore
-from libs.repositories.seed import seed_demo_repository
-from libs.repositories.store import InMemoryDocumentStore, KnotRepository
+from libs.repositories.firestore_adapter import FirestoreDocumentStore  # noqa: E402
+from libs.repositories.firestore_paths import COLLECTIONS  # noqa: E402
+from libs.repositories.seed import seed_demo_repository  # noqa: E402
+from libs.repositories.store import InMemoryDocumentStore, KnotRepository  # noqa: E402
+
+
+DEMO_AUTH_USERS = [
+    {
+        "uid": "user-brand-1",
+        "email": "test1@knot.demo",
+        "display_name": "루미에르 뷰티 담당자",
+    },
+    {
+        "uid": "user-brand-2",
+        "email": "test2@knot.demo",
+        "display_name": "바삭데이 담당자",
+    },
+    {
+        "uid": "user-creator-1",
+        "email": "test3@knot.demo",
+        "display_name": "민지의 뷰티룸",
+    },
+    {
+        "uid": "user-creator-2",
+        "email": "test4@knot.demo",
+        "display_name": "하루한입",
+    },
+]
+
+RESET_COLLECTIONS = [
+    COLLECTIONS.idempotency_records,
+    COLLECTIONS.payment_operations,
+    COLLECTIONS.transaction_receipts,
+    COLLECTIONS.settlements,
+    COLLECTIONS.escrows,
+    COLLECTIONS.evidence,
+    COLLECTIONS.agreements,
+    COLLECTIONS.a2a_tasks,
+    COLLECTIONS.negotiations,
+    COLLECTIONS.match_runs,
+    COLLECTIONS.promotions,
+    COLLECTIONS.agent_policies,
+    COLLECTIONS.agents,
+    COLLECTIONS.creator_profiles,
+    COLLECTIONS.brands,
+    COLLECTIONS.users,
+]
 
 
 def main() -> int:
@@ -18,15 +64,45 @@ def main() -> int:
     parser.add_argument(
         "--project",
         default=_default_project_id(),
-        help="GCP project ID for Firestore target. Defaults to GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID.",
+        help=(
+            "GCP project ID for Firestore target. "
+            "Defaults to GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID."
+        ),
     )
-    parser.add_argument("--confirm", default="", help="Required confirmation string for Firestore demo seed.")
+    parser.add_argument(
+        "--confirm",
+        default="",
+        help="Required confirmation string for Firestore demo seed.",
+    )
+    parser.add_argument(
+        "--reset-existing",
+        action="store_true",
+        help="Delete KNOT dev/demo Firestore collections before seeding.",
+    )
+    parser.add_argument(
+        "--create-auth-users",
+        action="store_true",
+        help="Create or update deterministic Firebase Auth demo users.",
+    )
+    parser.add_argument(
+        "--auth-password",
+        default="0000",
+        help=(
+            "Password for Firebase Auth demo users. "
+            "Firebase may reject passwords shorter than 6 chars."
+        ),
+    )
     args = parser.parse_args()
 
     if args.target == "firestore":
         _assert_safe_demo_seed(args.project, args.confirm)
-        store = _firestore_store(args.project)
+        firestore_client = _firestore_client(args.project)
+        if args.reset_existing:
+            _reset_firestore_demo_data(firestore_client)
+        store = FirestoreDocumentStore(firestore_client)
         seed_demo_repository(KnotRepository(store), include_business_flow=True)
+        if args.create_auth_users:
+            _create_or_update_auth_users(args.project, args.auth_password)
         print("Seeded demo Firestore documents for namespace knot-demo-v1.")
         return 0
 
@@ -38,14 +114,61 @@ def main() -> int:
     return 0
 
 
-def _firestore_store(project: str | None) -> FirestoreDocumentStore:
+def _firestore_client(project: str | None):
     try:
         from google.cloud import firestore
     except ImportError as exc:
         raise SystemExit(
             "google-cloud-firestore is not installed. Run backend dependency install first."
         ) from exc
-    return FirestoreDocumentStore(firestore.Client(project=project))
+    return firestore.Client(project=project)
+
+
+def _reset_firestore_demo_data(firestore_client) -> None:
+    deleted = 0
+    for collection_name in RESET_COLLECTIONS:
+        deleted += firestore_client.recursive_delete(firestore_client.collection(collection_name))
+    print(f"Deleted {deleted} Firestore documents from KNOT dev/demo collections.")
+
+
+def _create_or_update_auth_users(project: str | None, password: str) -> None:
+    if len(password) < 6:
+        raise SystemExit(
+            "Firebase Auth requires passwords to be at least 6 characters. "
+            "Pass --auth-password with a 6+ character demo password."
+        )
+    try:
+        import firebase_admin
+        from firebase_admin import auth, credentials
+    except ImportError as exc:
+        raise SystemExit(
+            "firebase-admin is not installed. Run backend dependency install first."
+        ) from exc
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.ApplicationDefault(), {"projectId": project})
+
+    for user in DEMO_AUTH_USERS:
+        try:
+            auth.update_user(
+                user["uid"],
+                email=user["email"],
+                password=password,
+                display_name=user["display_name"],
+                email_verified=True,
+                disabled=False,
+            )
+            print(f"Updated Firebase Auth demo user {user['uid']}.")
+        except auth.UserNotFoundError:
+            auth.create_user(
+                uid=user["uid"],
+                email=user["email"],
+                password=password,
+                display_name=user["display_name"],
+                email_verified=True,
+                disabled=False,
+            )
+            print(f"Created Firebase Auth demo user {user['uid']}.")
 
 
 def _default_project_id() -> str | None:
