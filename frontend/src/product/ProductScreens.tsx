@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import {
   authConfigurationError,
@@ -340,6 +340,225 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
                 </div>
               ) : (
                 <EmptyState text={`${context.account.displayName ?? "Creator"} 계정에서 아직 Agent activity가 없습니다.`} />
+              )}
+            </Panel>
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandPromotionCreateScreen() {
+  const router = useRouter();
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      const promotion = await new ProductApiClient().createBrandPromotion({
+        productName: formString(formData, "productName", "Product"),
+        title: formString(formData, "title", "Promotion"),
+        objective: formString(formData, "objective", "awareness"),
+        categories: splitList(formString(formData, "categories", "")),
+        targetAudience: formString(formData, "targetAudience", ""),
+        totalBudget: numberFromForm(formData, "totalBudget", 1000),
+        initialOffer: numberFromForm(formData, "initialOffer", 500),
+        maximumPerCreator: numberFromForm(formData, "maximumPerCreator", 700),
+        autoAcceptCeiling: numberFromForm(formData, "autoAcceptCeiling", 650),
+        maximumRounds: numberFromForm(formData, "maximumRounds", 3),
+        deliverables: [{ format: formString(formData, "deliverableFormat", "reel"), count: 1 }],
+        usageRights: formString(formData, "usageRights", "organicOnly"),
+        deadline: formString(formData, "deadline", "2026-08-10"),
+        prohibitedClaims: splitList(formString(formData, "prohibitedClaims", "")),
+      });
+      router.push(`/brand/promotions/${promotion.promotionId}`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <WorkspaceShell role="brand" active="product" title="새 Promotion" session={null}>
+      <Panel>
+        <form action={submit} className="grid gap-4">
+          <SectionTitle eyebrow="Promotion" title="협찬 제안 리소스를 생성합니다" />
+          <Input label="Product name" name="productName" placeholder="Product name" required />
+          <Input label="Promotion title" name="title" placeholder="Launch awareness" required />
+          <TextArea label="Objective" name="objective" placeholder="인지도, 전환, 리뷰 확보 등" />
+          <ChoiceGroup
+            label="Categories"
+            name="categories"
+            options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
+            defaultSelected={["beauty"]}
+          />
+          <TextArea label="Target audience" name="targetAudience" placeholder="핵심 타겟 설명" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Total budget" name="totalBudget" type="number" placeholder="2000" required />
+            <Input label="Initial offer" name="initialOffer" type="number" placeholder="500" required />
+            <Input label="Maximum per Creator" name="maximumPerCreator" type="number" placeholder="700" required />
+            <Input label="Auto-accept ceiling" name="autoAcceptCeiling" type="number" placeholder="650" required />
+            <Input label="Maximum rounds" name="maximumRounds" type="number" placeholder="3" required />
+            <Input label="Deadline" name="deadline" type="date" placeholder="2026-08-10" required />
+          </div>
+          <Input label="Deliverable format" name="deliverableFormat" placeholder="reel" />
+          <label className="block text-sm font-semibold">
+            Usage rights
+            <select
+              name="usageRights"
+              className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+              defaultValue="organicOnly"
+            >
+              <option value="organicOnly">Organic usage only</option>
+              <option value="paidBoost30d">Paid boost up to 30 days</option>
+              <option value="fullLicense90d">Full license up to 90 days</option>
+            </select>
+          </label>
+          <TextArea label="Prohibited claims" name="prohibitedClaims" placeholder="의료 효능 과장, 무검수 게시 등" />
+          {error && <FormError message={error} />}
+          <button
+            type="submit"
+            disabled={status === "saving"}
+            className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+          >
+            {status === "saving" ? "Creating..." : "Create Promotion"}
+          </button>
+        </form>
+      </Panel>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandPromotionDetailScreen({ promotionId }: { promotionId: string }) {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["getBrandPromotionDetail"]>>>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().getBrandPromotionDetail(promotionId), setState);
+  }, [promotionId, setState]);
+
+  return (
+    <WorkspaceShell role="brand" active="product" title="Promotion Detail" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getBrandPromotionDetail(promotionId), setState)}>
+        {(detail) => (
+          <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+            <Panel>
+              <SectionTitle eyebrow="Overview" title={detail.promotion.title} />
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <InfoBox label="Status" value={detail.promotion.status} />
+                <InfoBox label="Promotion ID" value={detail.promotion.promotionId} />
+                <InfoBox label="Category" value={detail.promotion.category} />
+                <InfoBox label="Budget" value={`${detail.promotion.budget.totalUsdc} USDC`} />
+              </div>
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Agreement" title="Agreement state" />
+              {detail.agreement ? (
+                <DashboardRow
+                  title={String(detail.agreement.agreementId)}
+                  meta={String(detail.agreement.status)}
+                  href={`/brand/agreements/${detail.agreement.agreementId}`}
+                />
+              ) : (
+                <EmptyState text="아직 Agreement가 없습니다. Phase 4 A2A 실행 후 생성됩니다." />
+              )}
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Activity" title="Agent Activity" />
+              {detail.activity.length ? (
+                <div className="mt-4 grid gap-3">
+                  {detail.activity.map((event) => (
+                    <DashboardRow key={event.eventId} title={event.type} meta={event.createdAt} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState text="아직 Promotion activity가 없습니다." />
+              )}
+            </Panel>
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+export function BrandAgreementDetailScreen({ agreementId }: { agreementId: string }) {
+  return <AgreementResourceScreen role="brand" agreementId={agreementId} />;
+}
+
+export function CreatorAgreementDetailScreen({ agreementId }: { agreementId: string }) {
+  return <AgreementResourceScreen role="creator" agreementId={agreementId} />;
+}
+
+export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: string }) {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["getCreatorOfferDetail"]>>>();
+
+  useEffect(() => {
+    void loadDashboard(() => new ProductApiClient().getCreatorOfferDetail(negotiationId), setState);
+  }, [negotiationId, setState]);
+
+  return (
+    <WorkspaceShell role="creator" active="negotiation" title="Offer Detail" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorOfferDetail(negotiationId), setState)}>
+        {(detail) => (
+          <div className="grid gap-5 lg:grid-cols-[0.8fr_1fr]">
+            <Panel>
+              <SectionTitle eyebrow="Offer" title={String(detail.offer.title ?? "Offer")} />
+              <div className="mt-4 grid gap-3">
+                <InfoBox label="Negotiation ID" value={String(detail.offer.negotiationId)} />
+                <InfoBox label="Status" value={String(detail.offer.status)} />
+                <InfoBox label="Round" value={String(detail.offer.currentRound ?? "-")} />
+              </div>
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Sanitized terms" title="Agent 협상 상태" />
+              <pre className="mt-4 overflow-auto rounded border border-border-subtle bg-background p-4 text-xs">
+                {JSON.stringify(detail.negotiation.currentTerms ?? {}, null, 2)}
+              </pre>
+            </Panel>
+          </div>
+        )}
+      </DashboardStatus>
+    </WorkspaceShell>
+  );
+}
+
+function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementId: string }) {
+  const [state, setState] = useDashboardState<Awaited<ReturnType<ProductApiClient["getBrandAgreementDetail"]>>>();
+  const load = useCallback(() =>
+    role === "brand"
+      ? new ProductApiClient().getBrandAgreementDetail(agreementId)
+      : new ProductApiClient().getCreatorAgreementDetail(agreementId), [agreementId, role]);
+
+  useEffect(() => {
+    void loadDashboard(load, setState);
+  }, [load, setState]);
+
+  return (
+    <WorkspaceShell role={role} active="result" title="Agreement Detail" session={null}>
+      <DashboardStatus state={state} retry={() => loadDashboard(load, setState)}>
+        {(detail) => (
+          <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+            <Panel>
+              <SectionTitle eyebrow="Agreement" title={String(detail.agreement.agreementId)} />
+              <div className="mt-4 grid gap-3">
+                <InfoBox label="Status" value={String(detail.agreement.status)} />
+                <InfoBox label="Promotion ID" value={String(detail.agreement.promotionId)} />
+                <InfoBox label="termsHash" value={String(detail.agreement.termsHash ?? "not-created")} />
+              </div>
+            </Panel>
+            <Panel>
+              <SectionTitle eyebrow="Escrow" title="Escrow state" />
+              {detail.escrow ? (
+                <div className="mt-4 grid gap-3">
+                  <InfoBox label="Escrow ID" value={detail.escrow.escrowId} />
+                  <InfoBox label="Status" value={detail.escrow.status} />
+                  <InfoBox label="Signature" value={detail.escrow.lockSignature ?? "pending"} />
+                </div>
+              ) : (
+                <EmptyState text="아직 escrow가 없습니다. Phase 5에서 실제 devnet lock/release가 연결됩니다." />
               )}
             </Panel>
           </div>

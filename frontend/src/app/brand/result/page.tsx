@@ -1,11 +1,5 @@
-import { BrandResultScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+import { redirect } from "next/navigation";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ promotionId?: string; negotiationId?: string; agreementId?: string }>;
-}) {
-  const view = await knotDataSource.getNegotiation("brand", await searchParams);
-  return <BrandResultScreen view={view} />;
+export default function Page() {
+  redirect("/brand");
 }

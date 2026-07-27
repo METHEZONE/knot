@@ -1,7 +1,5 @@
-import { CreatorResultScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+import { redirect } from "next/navigation";
 
-export default async function Page() {
-  const deals = await knotDataSource.getCreatorDeals();
-  return <CreatorResultScreen deals={deals} />;
+export default function Page() {
+  redirect("/creator");
 }

@@ -1,7 +1,5 @@
-import { BrandProductScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+import { redirect } from "next/navigation";
 
-export default async function Page() {
-  const product = await knotDataSource.getBrandProduct();
-  return <BrandProductScreen product={product} />;
+export default function Page() {
+  redirect("/brand/promotions/new");
 }

@@ -1,0 +1,168 @@
+from fastapi.testclient import TestClient
+
+from apps.api.main import create_app
+from libs.repositories.firestore_paths import FirestorePaths
+from libs.repositories.store import InMemoryDocumentStore, KnotRepository
+from libs.settings.config import Settings
+from tests.test_api_dashboards import auth_headers
+
+
+def client_and_repository() -> tuple[TestClient, KnotRepository]:
+    repository = KnotRepository(InMemoryDocumentStore())
+    settings = Settings(auth_mode="emulator", firebase_project_id="knot-dev-503505")
+    return TestClient(create_app(repository=repository, settings=settings)), repository
+
+
+def complete_brand(client: TestClient, uid: str) -> dict[str, str]:
+    headers = auth_headers(uid, f"{uid}@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": f"{uid}-role"},
+        json={"role": "BRAND"},
+    )
+    response = client.post(
+        "/api/v1/me/brand-profile",
+        headers={**headers, "Idempotency-Key": f"{uid}-brand-profile"},
+        json={
+            "brandName": "Brand",
+            "websiteUrl": "https://brand.example",
+            "categories": ["beauty"],
+            "targetAudience": "skincare shoppers",
+            "restrictedClaims": [],
+        },
+    )
+    return {
+        "Authorization": headers["Authorization"],
+        "brandId": response.json()["data"]["brand"]["brandId"],
+    }
+
+
+def complete_creator(client: TestClient, uid: str) -> dict[str, str]:
+    headers = auth_headers(uid, f"{uid}@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": f"{uid}-role"},
+        json={"role": "CREATOR"},
+    )
+    response = client.post(
+        "/api/v1/me/creator-profile",
+        headers={**headers, "Idempotency-Key": f"{uid}-creator-profile"},
+        json={
+            "creatorName": "Creator",
+            "snsUrl": "https://instagram.com/creator",
+            "categories": ["beauty"],
+            "minimumUsdc": 500,
+            "blockedDomains": [],
+            "preferredContent": ["Instagram Reels"],
+        },
+    )
+    account = response.json()["data"]["account"]
+    return {
+        "Authorization": headers["Authorization"],
+        "creatorId": account["creatorId"],
+        "agentId": account["agentId"],
+    }
+
+
+def test_brand_can_create_and_read_only_owned_promotions() -> None:
+    client, _ = client_and_repository()
+    brand = complete_brand(client, "brand-one")
+    other = complete_brand(client, "brand-two")
+
+    created = client.post(
+        "/api/v1/brand/promotions",
+        headers={"Authorization": brand["Authorization"]},
+        json=promotion_payload("Owned promotion"),
+    )
+    other_created = client.post(
+        "/api/v1/brand/promotions",
+        headers={"Authorization": other["Authorization"]},
+        json=promotion_payload("Other promotion"),
+    )
+
+    assert created.status_code == 201
+    promotion_id = created.json()["data"]["promotion"]["promotionId"]
+    other_id = other_created.json()["data"]["promotion"]["promotionId"]
+
+    listed = client.get(
+        "/api/v1/brand/promotions",
+        headers={"Authorization": brand["Authorization"]},
+    )
+    forbidden = client.get(
+        f"/api/v1/brand/promotions/{other_id}",
+        headers={"Authorization": brand["Authorization"]},
+    )
+
+    assert [item["promotionId"] for item in listed.json()["data"]["promotions"]] == [
+        promotion_id
+    ]
+    assert forbidden.status_code == 403
+
+
+def test_creator_offer_and_agreement_routes_are_participation_scoped() -> None:
+    client, repository = client_and_repository()
+    creator = complete_creator(client, "creator-one")
+    other = complete_creator(client, "creator-two")
+    repository.save_raw_document(
+        FirestorePaths.negotiation("negotiation-owned"),
+        {
+            "negotiationId": "negotiation-owned",
+            "promotionId": "promotion-owned",
+            "creatorAgentId": creator["agentId"],
+            "status": "OFFERED",
+            "currentRound": 1,
+            "currentTerms": {},
+            "createdAt": "2026-07-27T00:00:00Z",
+            "updatedAt": "2026-07-27T00:00:00Z",
+        },
+    )
+    repository.save_raw_document(
+        FirestorePaths.agreement("agreement-owned"),
+        {
+            "agreementId": "agreement-owned",
+            "promotionId": "promotion-owned",
+            "creatorAgentId": creator["agentId"],
+            "status": "AGREED",
+            "termsHash": "sha256:owned",
+            "createdAt": "2026-07-27T00:00:00Z",
+            "updatedAt": "2026-07-27T00:00:00Z",
+        },
+    )
+
+    offer = client.get(
+        "/api/v1/creator/offers/negotiation-owned",
+        headers={"Authorization": creator["Authorization"]},
+    )
+    forbidden = client.get(
+        "/api/v1/creator/offers/negotiation-owned",
+        headers={"Authorization": other["Authorization"]},
+    )
+    agreement = client.get(
+        "/api/v1/creator/agreements/agreement-owned",
+        headers={"Authorization": creator["Authorization"]},
+    )
+
+    assert offer.status_code == 200
+    assert forbidden.status_code == 403
+    assert agreement.status_code == 200
+
+
+def promotion_payload(title: str) -> dict[str, object]:
+    return {
+        "productName": "Product",
+        "title": title,
+        "objective": "awareness",
+        "categories": ["beauty"],
+        "targetAudience": "skincare shoppers",
+        "totalBudget": 2000,
+        "initialOffer": 500,
+        "maximumPerCreator": 700,
+        "autoAcceptCeiling": 650,
+        "maximumRounds": 3,
+        "deliverables": [{"format": "reel", "count": 1}],
+        "usageRights": "organicOnly",
+        "deadline": "2026-08-10",
+        "prohibitedClaims": [],
+    }

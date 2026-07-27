@@ -122,6 +122,53 @@ Remaining after Phase 2:
 - Real HTTP A2A, escrow, and dev admin are not implemented in this phase.
 - Full server-cookie middleware is not implemented; current route guards are Firebase-client based and call `/api/v1/me`.
 
+## Phase 3 Resource Routes And Real Data Summary
+
+Status: `COMPLETED`
+
+Implemented from `prompts/03_RESOURCE_ROUTES_AND_REAL_DATA.md`:
+
+- Added `/brand/promotions/new`.
+- Added `/brand/promotions/{promotionId}`.
+- Added `/brand/agreements/{agreementId}`.
+- Added `/creator/offers/{negotiationId}`.
+- Replaced `/creator/agreements/{agreementId}` with authenticated resource-backed detail.
+- Added authenticated Brand Promotion create/list/detail/activity Product API routes.
+- Added authenticated Brand Agreement list/detail Product API routes.
+- Added authenticated Creator Offer list/detail Product API routes.
+- Added authenticated Creator Agreement list/detail Product API routes.
+- Promotion fields now belong in Promotion creation rather than Brand onboarding.
+- Legacy demo-step routes redirect instead of rendering the old active implementation.
+- Removed active `/creator/brands/glow-bar` style dependency by redirecting `/creator/brands/{brandId}` to `/creator`.
+- Resource APIs use verified Firebase account context and ownership/participation checks.
+
+Verification:
+
+```text
+cd backend && ../.venv/bin/python -m ruff check apps libs tests
+cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+cd frontend && npm run build
+```
+
+Results:
+
+- Backend Ruff: passed.
+- Backend selected pytest: 12 passed, 1 Starlette/httpx deprecation warning.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend tests: 12 passed.
+- Frontend production build: passed.
+
+Remaining after Phase 3:
+
+- Real HTTP A2A negotiation internals are not implemented yet.
+- Agreement creation still depends on the existing local/A2A orchestration path until Phase 4.
+- Escrow execution is still Phase 5.
+- Some old component code remains unused and will be removed during Phase 7 cleanup.
+
 ## Current Product Gap
 
 Target MVP:

@@ -2,13 +2,13 @@
 
 import { use } from "react";
 import { AuthGate } from "@/auth/AuthGate";
-import { CreatorAgreementDetailScreen } from "@/product/ProductScreens";
+import { BrandAgreementDetailScreen } from "@/product/ProductScreens";
 
 export default function Page({ params }: { params: Promise<{ agreementId: string }> }) {
   const { agreementId } = use(params);
   return (
-    <AuthGate expectedRole="CREATOR" requireCompleted>
-      {() => <CreatorAgreementDetailScreen agreementId={agreementId} />}
+    <AuthGate expectedRole="BRAND" requireCompleted>
+      {() => <BrandAgreementDetailScreen agreementId={agreementId} />}
     </AuthGate>
   );
 }

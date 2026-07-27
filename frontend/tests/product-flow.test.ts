@@ -13,6 +13,9 @@ test("product route surface exposes separated MVP role pages", () => {
     "/signup/creator",
     "/brand",
     "/brand/onboarding",
+    "/brand/promotions/new",
+    "/brand/promotions/[promotionId]",
+    "/brand/agreements/[agreementId]",
     "/brand/products/new",
     "/brand/negotiate",
     "/brand/result",
@@ -21,6 +24,7 @@ test("product route surface exposes separated MVP role pages", () => {
     "/brand/settings",
     "/creator",
     "/creator/onboarding",
+    "/creator/offers/[negotiationId]",
     "/creator/criteria",
     "/creator/result",
     "/creator/agreements/[agreementId]",
@@ -33,15 +37,15 @@ test("product route surface exposes separated MVP role pages", () => {
 test("workspace nav is menu-like and role-specific", () => {
   assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), [
     "/brand",
-    "/brand/products/new",
-    "/brand/negotiate",
-    "/brand/settlement",
+    "/brand/promotions/new",
+    "/brand",
+    "/brand",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
     "/creator",
     "/creator/criteria",
-    "/creator/result",
-    "/creator/result",
+    "/creator",
+    "/creator",
   ]);
 });
 
@@ -313,6 +317,79 @@ test("API client reads authenticated role dashboards without mock fallback", asy
     assert.equal((await api.getBrandDashboard()).brand.brandId, "brand-owned");
     assert.equal((await api.getCreatorDashboard()).creator.creatorId, "creator-owned");
     assert.deepEqual(calls, ["/api/v1/brand/dashboard", "/api/v1/creator/dashboard"]);
+  } finally {
+    ProductApiClient.setAuthTokenProvider(null);
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("API client uses resource routes for promotions offers and agreements", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls: Array<{ url: string; method: string }> = [];
+  ProductApiClient.setAuthTokenProvider(async () => "resource-token");
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, method: init?.method ?? "GET" });
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer resource-token");
+    if (url.endsWith("/api/v1/brand/promotions") && init?.method === "POST") {
+      return Response.json({ data: { promotion: { promotionId: "promotion-resource" } } }, { status: 201 });
+    }
+    if (url.endsWith("/api/v1/brand/promotions/promotion-resource")) {
+      return Response.json({
+        data: {
+          promotion: { promotionId: "promotion-resource", title: "Resource", status: "DRAFT" },
+          agreement: null,
+          activity: [],
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/creator/offers/negotiation-resource")) {
+      return Response.json({
+        data: {
+          offer: { negotiationId: "negotiation-resource", status: "OFFERED" },
+          negotiation: { negotiationId: "negotiation-resource", currentTerms: {} },
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/brand/agreements/agreement-resource")) {
+      return Response.json({
+        data: {
+          agreement: { agreementId: "agreement-resource", status: "AGREED" },
+          escrow: null,
+        },
+      });
+    }
+    return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const api = new ProductApiClient("");
+    await api.createBrandPromotion({
+      productName: "Product",
+      title: "Resource",
+      objective: "awareness",
+      categories: ["beauty"],
+      targetAudience: "skincare",
+      totalBudget: 1000,
+      initialOffer: 500,
+      maximumPerCreator: 700,
+      autoAcceptCeiling: 650,
+      maximumRounds: 3,
+      deliverables: [{ format: "reel", count: 1 }],
+      usageRights: "organicOnly",
+      deadline: "2026-08-10",
+      prohibitedClaims: [],
+    });
+    await api.getBrandPromotionDetail("promotion-resource");
+    await api.getCreatorOfferDetail("negotiation-resource");
+    await api.getBrandAgreementDetail("agreement-resource");
+    assert.deepEqual(calls, [
+      { url: "/api/v1/brand/promotions", method: "POST" },
+      { url: "/api/v1/brand/promotions/promotion-resource", method: "GET" },
+      { url: "/api/v1/creator/offers/negotiation-resource", method: "GET" },
+      { url: "/api/v1/brand/agreements/agreement-resource", method: "GET" },
+    ]);
   } finally {
     ProductApiClient.setAuthTokenProvider(null);
     globalThis.fetch = previousFetch;

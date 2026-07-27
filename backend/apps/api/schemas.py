@@ -171,6 +171,68 @@ class PromotionCreateRequest(DomainModel):
         )
 
 
+class BrandPromotionCreateRequest(DomainModel):
+    promotion_id: str | None = Field(default=None, alias="promotionId")
+    product_name: str = Field(alias="productName")
+    title: str
+    objective: str
+    categories: list[str] = Field(default_factory=list)
+    target_audience: str = Field(alias="targetAudience")
+    total_budget: int = Field(alias="totalBudget", ge=1)
+    initial_offer: int = Field(alias="initialOffer", ge=1)
+    maximum_per_creator: int = Field(alias="maximumPerCreator", ge=1)
+    auto_accept_ceiling: int = Field(alias="autoAcceptCeiling", ge=1)
+    maximum_rounds: int = Field(default=3, alias="maximumRounds", ge=1, le=5)
+    deliverables: list[Deliverable]
+    usage_rights: UsageRights = Field(alias="usageRights")
+    deadline: date
+    prohibited_claims: list[str] = Field(default_factory=list, alias="prohibitedClaims")
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, value: list[str]) -> list[str]:
+        categories = [item.strip() for item in value if item.strip()]
+        if not categories:
+            raise ValueError("at least one category is required")
+        return categories
+
+    def to_promotion(
+        self,
+        promotion_id: str,
+        brand_id: str,
+        brand_agent_id: str,
+        now: datetime,
+    ) -> Promotion:
+        return Promotion(
+            promotionId=promotion_id,
+            brandId=brand_id,
+            brandAgentId=brand_agent_id,
+            title=self.title,
+            objective=self.objective,
+            category=self.categories[0],
+            targetAudience=[self.target_audience],
+            budget=MoneyBudget(
+                totalUsdc=self.total_budget,
+                maxPerCreatorUsdc=self.maximum_per_creator,
+            ),
+            deliverables=self.deliverables,
+            postingWindow=PostingWindow(start=date.today(), end=self.deadline),
+            usageRights=self.usage_rights,
+            constraints=PromotionConstraints(
+                requiredCategories=self.categories,
+                prohibitedClaims=self.prohibited_claims,
+            ),
+            autonomy=PromotionAutonomy(
+                maxNegotiationRounds=self.maximum_rounds,
+                autoEscrow=False,
+                autoRelease=False,
+            ),
+            status="DRAFT",
+            createdAt=now,
+            updatedAt=now,
+        )
+
+
 class PromotionResponse(DomainModel):
     promotion: Promotion
 

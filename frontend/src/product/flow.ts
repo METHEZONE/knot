@@ -8,6 +8,9 @@ export const appRoutes = [
   "/signup/creator",
   "/brand",
   "/brand/onboarding",
+  "/brand/promotions/new",
+  "/brand/promotions/[promotionId]",
+  "/brand/agreements/[agreementId]",
   "/brand/products/new",
   "/brand/negotiate",
   "/brand/result",
@@ -16,6 +19,7 @@ export const appRoutes = [
   "/brand/settings",
   "/creator",
   "/creator/onboarding",
+  "/creator/offers/[negotiationId]",
   "/creator/criteria",
   "/creator/result",
   "/creator/agreements/[agreementId]",
@@ -38,16 +42,16 @@ export function roleResult(role: Role) {
 
 export const brandWorkspaceRoutes = [
   { href: "/brand", label: "Dashboard" },
-  { href: "/brand/products/new", label: "Promotions" },
-  { href: "/brand/negotiate", label: "Negotiations" },
-  { href: "/brand/settlement", label: "Settlements" },
+  { href: "/brand/promotions/new", label: "Promotions" },
+  { href: "/brand", label: "Negotiations" },
+  { href: "/brand", label: "Agreements" },
 ] as const;
 
 export const creatorWorkspaceRoutes = [
   { href: "/creator", label: "Dashboard" },
   { href: "/creator/criteria", label: "Criteria" },
-  { href: "/creator/result", label: "Offers" },
-  { href: "/creator/result", label: "Deals" },
+  { href: "/creator", label: "Offers" },
+  { href: "/creator", label: "Agreements" },
 ] as const;
 
 export const accountRoutes = [

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 
 from apps.api.schemas import (
     BrandOnboardingRequest,
+    BrandPromotionCreateRequest,
     CreatorCriteriaRequest,
     CreatorOnboardingRequest,
     CurrentUserBrandProfileRequest,
@@ -375,6 +376,167 @@ def build_api_router(
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _require_completed_role(repository, auth_user, "CREATOR")
         return _ok({"dashboard": _creator_dashboard(repository, user)})
+
+    @router.get("/brand/promotions")
+    def list_brand_promotions(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        brand_id = _require_document_str(user, "brandId")
+        promotions = [
+            _promotion_document_with_raw(repository, promotion)
+            for promotion in repository.list_promotions()
+            if promotion.brand_id == brand_id
+        ]
+        return _ok({"promotions": _sorted_recent(promotions)})
+
+    @router.post("/brand/promotions", status_code=status.HTTP_201_CREATED)
+    def create_brand_promotion(
+        payload: BrandPromotionCreateRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        brand_id = _require_document_str(user, "brandId")
+        brand_agent_id = _require_document_str(user, "agentId")
+        promotion_id = payload.promotion_id or f"promotion-{uuid4()}"
+        if repository.get_promotion(promotion_id) is not None:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "IDEMPOTENCY_CONFLICT",
+                f"Promotion {promotion_id} already exists.",
+            )
+        now = _now_datetime()
+        promotion = payload.to_promotion(
+            promotion_id=promotion_id,
+            brand_id=brand_id,
+            brand_agent_id=brand_agent_id,
+            now=now,
+        )
+        document = {
+            **model_to_document(promotion),
+            "ownerUid": auth_user.uid,
+            "productName": payload.product_name,
+            "categories": payload.categories,
+            "targetAudienceText": payload.target_audience,
+            "currency": "USDC",
+            "totalBudget": payload.total_budget,
+            "initialOffer": payload.initial_offer,
+            "maximumPerCreator": payload.maximum_per_creator,
+            "autoAcceptCeiling": payload.auto_accept_ceiling,
+            "maximumRounds": payload.maximum_rounds,
+            "deadline": payload.deadline.isoformat(),
+            "updatedAt": _now(),
+            "createdAt": _now(),
+        }
+        repository.save_raw_document(FirestorePaths.promotion(promotion_id), document)
+        _append_promotion_event(
+            repository,
+            promotion_id=promotion_id,
+            event_type="PROMOTION_CREATED",
+            data={"status": "DRAFT", "ownerUid": auth_user.uid},
+        )
+        return _ok({"promotion": document})
+
+    @router.get("/brand/promotions/{promotion_id}")
+    def get_brand_promotion(
+        promotion_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        promotion = _require_brand_promotion_document(repository, user, promotion_id)
+        agreement = _agreement_for_promotion(repository, promotion_id)
+        return _ok(
+            {
+                "promotion": promotion,
+                "agreement": agreement,
+                "activity": _promotion_events(repository, {promotion_id}, limit=20),
+            }
+        )
+
+    @router.get("/brand/promotions/{promotion_id}/activity")
+    def get_brand_promotion_activity(
+        promotion_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        _require_brand_promotion_document(repository, user, promotion_id)
+        return _ok({"events": _promotion_events(repository, {promotion_id}, limit=50)})
+
+    @router.get("/brand/agreements")
+    def list_brand_agreements(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        brand_id = _require_document_str(user, "brandId")
+        agreements = [
+            agreement
+            for agreement in repository.list_raw_documents(COLLECTIONS.agreements)
+            if agreement.get("brandId") == brand_id
+            or _promotion_belongs_to_brand(repository, agreement.get("promotionId"), brand_id)
+        ]
+        return _ok({"agreements": _sorted_recent(agreements)})
+
+    @router.get("/brand/agreements/{agreement_id}")
+    def get_brand_agreement(
+        agreement_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        agreement = _require_brand_agreement_document(repository, user, agreement_id)
+        return _ok(
+            {
+                "agreement": agreement,
+                "escrow": _find_escrow_by_agreement(repository, agreement_id),
+            }
+        )
+
+    @router.get("/creator/offers")
+    def list_creator_offers(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        offers = _creator_offer_documents(repository, user)
+        return _ok({"offers": offers})
+
+    @router.get("/creator/offers/{negotiation_id}")
+    def get_creator_offer(
+        negotiation_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        negotiation = _require_creator_negotiation_document(repository, user, negotiation_id)
+        promotion = repository.get_raw_document(
+            FirestorePaths.promotion(_require_document_str(negotiation, "promotionId"))
+        )
+        return _ok({"offer": _offer_projection(negotiation, promotion), "negotiation": negotiation})
+
+    @router.get("/creator/agreements")
+    def list_creator_agreements(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        agreements = _creator_agreement_documents(repository, user)
+        return _ok({"agreements": agreements})
+
+    @router.get("/creator/agreements/{agreement_id}")
+    def get_creator_agreement(
+        agreement_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        agreement = _require_creator_agreement_document(repository, user, agreement_id)
+        escrow = _find_escrow_by_agreement(repository, agreement_id)
+        return _ok({"agreement": agreement, "escrow": escrow})
 
     @router.post("/users:bootstrap", status_code=status.HTTP_201_CREATED)
     def bootstrap_user(payload: UserBootstrapRequest) -> dict[str, object]:
@@ -1701,6 +1863,77 @@ def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dic
     }
 
 
+def _promotion_document_with_raw(
+    repository: KnotRepository,
+    promotion: Promotion,
+) -> dict[str, object]:
+    raw = repository.get_raw_document(FirestorePaths.promotion(promotion.promotion_id)) or {}
+    return {**model_to_document(promotion), **raw}
+
+
+def _require_brand_promotion_document(
+    repository: KnotRepository,
+    user: dict[str, object],
+    promotion_id: str,
+) -> dict[str, object]:
+    promotion = repository.get_promotion(promotion_id)
+    if promotion is None:
+        raise _not_found("promotion", promotion_id)
+    brand_id = _require_document_str(user, "brandId")
+    if promotion.brand_id != brand_id:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Promotion does not belong to the authenticated Brand.",
+        )
+    return _promotion_document_with_raw(repository, promotion)
+
+
+def _promotion_belongs_to_brand(
+    repository: KnotRepository,
+    promotion_id: object,
+    brand_id: str,
+) -> bool:
+    if not isinstance(promotion_id, str):
+        return False
+    promotion = repository.get_promotion(promotion_id)
+    return promotion is not None and promotion.brand_id == brand_id
+
+
+def _agreement_for_promotion(
+    repository: KnotRepository,
+    promotion_id: str,
+) -> dict[str, object] | None:
+    return next(
+        (
+            agreement
+            for agreement in _sorted_recent(repository.list_raw_documents(COLLECTIONS.agreements))
+            if agreement.get("promotionId") == promotion_id
+        ),
+        None,
+    )
+
+
+def _require_brand_agreement_document(
+    repository: KnotRepository,
+    user: dict[str, object],
+    agreement_id: str,
+) -> dict[str, object]:
+    agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
+    if agreement is None:
+        raise _not_found("agreement", agreement_id)
+    brand_id = _require_document_str(user, "brandId")
+    if agreement.get("brandId") == brand_id:
+        return agreement
+    if _promotion_belongs_to_brand(repository, agreement.get("promotionId"), brand_id):
+        return agreement
+    raise _problem(
+        status.HTTP_403_FORBIDDEN,
+        "FORBIDDEN",
+        "Agreement does not belong to the authenticated Brand.",
+    )
+
+
 def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> dict[str, object]:
     creator_id = _require_document_str(user, "creatorId")
     creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
@@ -1758,6 +1991,83 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
         "activeSponsorships": active_sponsorships,
         "recentAgentActivity": recent_activity,
     }
+
+
+def _creator_offer_documents(
+    repository: KnotRepository,
+    user: dict[str, object],
+) -> list[dict[str, object]]:
+    negotiations = [
+        negotiation
+        for negotiation in repository.list_raw_documents(COLLECTIONS.negotiations)
+        if _creator_participates(user, negotiation)
+    ]
+    promotions_by_id = {
+        promotion.promotion_id: model_to_document(promotion)
+        for promotion in repository.list_promotions()
+    }
+    return [
+        _offer_projection(item, promotions_by_id.get(str(item.get("promotionId"))))
+        for item in _sorted_recent(negotiations)
+    ]
+
+
+def _creator_agreement_documents(
+    repository: KnotRepository,
+    user: dict[str, object],
+) -> list[dict[str, object]]:
+    return _sorted_recent(
+        [
+            agreement
+            for agreement in repository.list_raw_documents(COLLECTIONS.agreements)
+            if _creator_participates(user, agreement)
+        ]
+    )
+
+
+def _require_creator_negotiation_document(
+    repository: KnotRepository,
+    user: dict[str, object],
+    negotiation_id: str,
+) -> dict[str, object]:
+    negotiation = repository.get_raw_document(FirestorePaths.negotiation(negotiation_id))
+    if negotiation is None:
+        raise _not_found("negotiation", negotiation_id)
+    if not _creator_participates(user, negotiation):
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Offer does not belong to the authenticated Creator.",
+        )
+    return negotiation
+
+
+def _require_creator_agreement_document(
+    repository: KnotRepository,
+    user: dict[str, object],
+    agreement_id: str,
+) -> dict[str, object]:
+    agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
+    if agreement is None:
+        raise _not_found("agreement", agreement_id)
+    if not _creator_participates(user, agreement):
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Agreement does not belong to the authenticated Creator.",
+        )
+    return agreement
+
+
+def _creator_participates(user: dict[str, object], document: dict[str, object]) -> bool:
+    creator_id = user.get("creatorId")
+    agent_id = user.get("agentId") or user.get("creatorAgentId")
+    return (
+        isinstance(creator_id, str)
+        and document.get("creatorId") == creator_id
+        or isinstance(agent_id, str)
+        and document.get("creatorAgentId") == agent_id
+    )
 
 
 def _promotion_events(

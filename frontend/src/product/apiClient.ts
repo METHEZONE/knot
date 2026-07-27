@@ -141,6 +141,24 @@ export type PromotionCreateInput = Omit<ApiPromotion, "promotionId" | "status"> 
   status?: string;
 };
 
+export type BrandPromotionCreateInput = {
+  promotionId?: string;
+  productName: string;
+  title: string;
+  objective: string;
+  categories: string[];
+  targetAudience: string;
+  totalBudget: number;
+  initialOffer: number;
+  maximumPerCreator: number;
+  autoAcceptCeiling: number;
+  maximumRounds: number;
+  deliverables: Array<{ format: string; count: number }>;
+  usageRights: string;
+  deadline: string;
+  prohibitedClaims: string[];
+};
+
 export type ApiMatchRun = {
   matchRunId: string;
   promotionId: string;
@@ -323,6 +341,22 @@ export type ApiSettlementBundle = ApiNegotiationBundle & {
   receipt: ApiReceipt;
 };
 
+export type BrandPromotionDetail = {
+  promotion: ApiPromotion & Record<string, unknown>;
+  agreement: (ApiAgreement & Record<string, unknown>) | null;
+  activity: ApiTimelineEvent[];
+};
+
+export type AgreementDetail = {
+  agreement: ApiAgreement & Record<string, unknown>;
+  escrow: ApiEscrow | null;
+};
+
+export type CreatorOfferDetail = {
+  offer: Record<string, unknown>;
+  negotiation: ApiNegotiation & Record<string, unknown>;
+};
+
 export class ProductApiError extends Error {
   status: number;
   code: string;
@@ -396,6 +430,61 @@ export class ProductApiClient {
   async getBrandDashboard() {
     const response = await this.request<{ dashboard: BrandDashboard }>("/api/v1/brand/dashboard");
     return response.dashboard;
+  }
+
+  async listBrandPromotions() {
+    const response = await this.request<{ promotions: Array<ApiPromotion & Record<string, unknown>> }>(
+      "/api/v1/brand/promotions",
+    );
+    return response.promotions;
+  }
+
+  async createBrandPromotion(input: BrandPromotionCreateInput) {
+    const response = await this.request<{ promotion: ApiPromotion & Record<string, unknown> }>(
+      "/api/v1/brand/promotions",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    return response.promotion;
+  }
+
+  async getBrandPromotionDetail(promotionId: string) {
+    return this.request<BrandPromotionDetail>(`/api/v1/brand/promotions/${promotionId}`);
+  }
+
+  async listBrandAgreements() {
+    const response = await this.request<{ agreements: Array<ApiAgreement & Record<string, unknown>> }>(
+      "/api/v1/brand/agreements",
+    );
+    return response.agreements;
+  }
+
+  async getBrandAgreementDetail(agreementId: string) {
+    return this.request<AgreementDetail>(`/api/v1/brand/agreements/${agreementId}`);
+  }
+
+  async listCreatorOffers() {
+    const response = await this.request<{ offers: Array<Record<string, unknown>> }>(
+      "/api/v1/creator/offers",
+    );
+    return response.offers;
+  }
+
+  async getCreatorOfferDetail(negotiationId: string) {
+    return this.request<CreatorOfferDetail>(`/api/v1/creator/offers/${negotiationId}`);
+  }
+
+  async listCreatorAgreements() {
+    const response = await this.request<{ agreements: Array<ApiAgreement & Record<string, unknown>> }>(
+      "/api/v1/creator/agreements",
+    );
+    return response.agreements;
+  }
+
+  async getCreatorAgreementDetail(agreementId: string) {
+    return this.request<AgreementDetail>(`/api/v1/creator/agreements/${agreementId}`);
   }
 
   async getCreatorDashboard() {

@@ -1,7 +1,5 @@
-import { CreatorCriteriaScreen } from "@/product/ProductScreens";
-import { knotDataSource } from "@/product/dataSource";
+import { redirect } from "next/navigation";
 
-export default async function Page() {
-  const criteria = await knotDataSource.getCreatorCriteria();
-  return <CreatorCriteriaScreen criteria={criteria} />;
+export default function Page() {
+  redirect("/creator/settings");
 }

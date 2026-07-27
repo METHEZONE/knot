@@ -8,7 +8,7 @@ Last updated: 2026-07-27
 
 ## Latest Completed Milestone
 
-Phase 2 One-page Onboarding and Real Dashboards from `prompts/02_ONBOARDING_AND_DASHBOARDS.md`.
+Phase 3 Resource Routes and Real Data from `prompts/03_RESOURCE_ROUTES_AND_REAL_DATA.md`.
 
 Previously completed Auth foundation:
 
@@ -43,6 +43,19 @@ Phase 2 completed:
 - Dashboard data is filtered by authenticated Brand ownership or Creator participation.
 - Guarded UI states include loading, unauthenticated, forbidden, not-found, and retryable errors.
 
+Phase 3 completed:
+
+- Added active resource pages:
+  - `/brand/promotions/new`
+  - `/brand/promotions/{promotionId}`
+  - `/brand/agreements/{agreementId}`
+  - `/creator/offers/{negotiationId}`
+  - `/creator/agreements/{agreementId}`
+- Added authenticated Product API resource endpoints for Brand Promotions, Brand Agreements, Creator Offers, and Creator Agreements.
+- Promotion creation now uses authenticated Brand context instead of browser-supplied `brandId`.
+- Legacy demo-step routes now redirect rather than rendering old flow pages.
+- Cross-user Brand Promotion access and Creator participation access are tested.
+
 ## Verification
 
 ```text
@@ -50,6 +63,7 @@ cd backend && ../.venv/bin/python -m ruff check apps libs tests/test_api_auth.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_health_apps.py tests/test_api_onboarding.py
 cd backend && ../.venv/bin/python -m ruff check apps libs tests
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_health_apps.py tests/test_api_onboarding.py
+cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd frontend && npm run typecheck
 cd frontend && npm run lint
 cd frontend && npm run test
@@ -62,7 +76,7 @@ Results:
 - Backend selected pytest passed: 12 passed, 1 Starlette/httpx deprecation warning.
 - Frontend typecheck passed.
 - Frontend lint passed.
-- Frontend tests passed: 11 passed.
+- Frontend tests passed: 12 passed.
 - Frontend production build passed.
 
 ## Environment Needed For Manual Auth Test
@@ -87,13 +101,13 @@ NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
 
 ## Not Done In This Milestone
 
-- Resource-route migration is not done yet.
+- Real HTTP A2A is not implemented yet.
 - Legacy demo endpoints still exist for compatibility.
-- Legacy demo-step pages still exist until Phase 3 redirects.
+- Legacy demo-step route files are redirect-only, but some unused legacy components remain until Phase 7 cleanup.
 - Full server-cookie route middleware is not complete; current guards use Firebase client state and `/api/v1/me`.
 - Firestore migration/reset was not run.
 - No GCP IAM, Secret Manager, deployment, wallet funding, program deployment, or on-chain transaction was performed.
 
 ## Next Recommended Milestone
 
-Phase 3 should migrate active flows to Promotion and Agreement resource routes with real IDs and ownership checks.
+Phase 4 should replace local A2A fallback with a real HTTP Creator A2A service boundary and persisted multi-turn negotiation.
