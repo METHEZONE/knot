@@ -99,7 +99,7 @@ test("mock data source exposes DB-ready creator deal and criteria collections", 
   const mockDataSource = createKnotDataSource("mock");
   const criteria = await mockDataSource.getCreatorCriteria();
   const deals = await mockDataSource.getCreatorDeals();
-  const agreedDeal = await mockDataSource.getCreatorDeal("agreement-demo-glow");
+  const agreedDeal = await mockDataSource.getCreatorDeal("agreement-mock-alpha");
 
   assert.ok(criteria.blockedDomains.includes("담배"));
   assert.ok(deals.some((deal) => deal.status === "AGREED"));

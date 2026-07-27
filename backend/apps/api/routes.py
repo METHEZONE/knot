@@ -836,7 +836,7 @@ def build_api_router(
                 "displayName": payload.display_name,
                 "roles": [payload.role],
                 "activeRole": payload.role,
-                "authProvider": "local-demo",
+                "authProvider": "legacy-bootstrap",
                 "createdAt": now,
                 "updatedAt": now,
                 "lastLoginAt": now,

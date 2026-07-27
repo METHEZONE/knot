@@ -1,64 +1,122 @@
-# KNOT Codex Development Pack v1
+# KNOT v1
 
-이 패키지는 KNOT 해커톤 MVP를 Codex에 위임하기 위한 개발 기준 문서 모음이다.
+KNOT is an agentic promotion workflow for Brands and Creators.
 
-## 구현 현황 (2026-07-25)
+```text
+Firebase login
+-> one-page role onboarding
+-> role dashboard
+-> Promotion / Offer
+-> HTTP A2A negotiation
+-> Agreement
+-> evidence verification
+-> Solana Devnet escrow lock/release through Web3 Gateway
+```
 
-`be`(앱 백엔드) + `hyo/blockchain-setup`(온체인/결제)이 `integrate/be-blockchain`으로 병합됨 (PR #1).
+## Current Status
 
-- ✅ Promotion → 매칭 → A2A 협상 → Agreement → Evidence → **에스크로 lock/release** API (결정론; `ruff`/`mypy`/`pytest` 59 passed)
-- ✅ Anchor 에스크로 프로그램 **devnet 배포**(`Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`) + **온체인 마일스톤 정산 검증** (에이전트가 cap 이내 사람 없이 릴리스)
-- ⬜ 남음: 실제 서명 배선(현재 escrow receipt는 SIMULATED) · pay.sh 흐름1 · Cloud Run · 프론트
+- Frontend: Next.js + TypeScript.
+- Backend: FastAPI Product API, Brand orchestration, Creator A2A service, Firestore repository boundary.
+- A2A: HTTP+JSON Creator A2A Service with AgentCard discovery, service auth, server-created Task, multi-turn negotiation, final Agreement Artifact.
+- Escrow: Product API requires confirmed Web3 Gateway receipts with real Solana Devnet signatures for successful lock/release. Local simulated gateway receipts are rejected by Product API as escrow success.
+- Dev Admin: `/dev/admin` calls protected Product API endpoints requiring Firebase admin claim or server allowlist.
 
-상세: `docs/INTEGRATION_PLAN.md`, `docs/20_IMPLEMENTATION_STATUS.md`.
+External Solana devnet smoke is blocked until safe existing devnet signer/RPC/program configuration is provided. No mainnet or real-value transfer is used.
 
-## 핵심 원칙
+## Source Of Truth
 
-- 제품 문서 버전은 **v1**이다.
-- **온보딩 로직은 현재 범위에서 제외**한다. 브랜드·크리에이터·에이전트 프로필은 seed fixture 또는 관리자 스크립트로 준비한다.
-- 모든 애플리케이션·에이전트·데이터·배포 인프라는 **Google Cloud 기반**으로 구현한다.
-- Solana, USDC, pay.sh/x402는 결제 실행 레이어로 사용한다.
-- 브랜드 홍보 사업 단위는 **프로모션(Promotion)** 으로 통일한다. 과거 명칭이나 별도 유사 용어를 새 코드와 문서에 사용하지 않는다.
-- Creator 탐색·매칭은 Brand Agent가 수행한다.
-- LLM은 제안과 설명을 생성하지만, 정책 검증과 결제 권한은 결정론적 코드가 통제한다.
+Read `AGENTS.md`, then use `docs/00_DOCUMENT_INDEX.md` for task-specific documents.
 
-## 권장 사용 순서
+Important status files:
 
-1. Codex가 저장소 루트의 `AGENTS.md`를 읽도록 한다.
-2. 신규 작업 시작 전 `docs/00_INDEX.md`에서 관련 기준 문서를 확인한다.
-3. 여러 파일과 서비스에 걸친 작업은 `PLANS.md` 형식으로 실행 계획을 먼저 갱신한다.
-4. 작업 프롬프트는 외부 프롬프트 파일을 참고하되, 프롬프트 파일 자체는 저장소에 추적하지 않는다.
-5. 완료 후 `docs/20_IMPLEMENTATION_STATUS.md`와 WBS를 업데이트한다.
+- `docs/IMPLEMENTATION_STATUS.md`
+- `docs/HANDOFF.md`
+- `.agent/execplans/`
 
-## 패키지 적용
+## Environment
 
-주요 코드 영역은 `frontend/`, `backend/`, `web3/` 세 곳이다. 현재 `frontend/`는 폴더만 유지하고 구현 파일은 두지 않는다. `infra/`, `scripts/`는 실제 배포나 seed/smoke 구현이 시작될 때 추가한다. 프롬프트 원본, `MANIFEST.json`, OS 임시 파일은 저장소에 넣지 않는다.
+Backend:
 
-## 로컬 개발
+```text
+KNOT_AUTH_MODE=firebase
+FIREBASE_PROJECT_ID=knot-dev-503505
+KNOT_REPOSITORY_BACKEND=firestore
+GOOGLE_CLOUD_PROJECT=knot-dev-503505
+KNOT_CREATOR_A2A_MODE=http
+CREATOR_AGENT_BASE_URL=http://localhost:8081/a2a/v1
+KNOT_A2A_SERVICE_TOKEN=...
+KNOT_WEB3_MODE=gateway
+WEB3_GATEWAY_BASE_URL=http://localhost:8082
+KNOT_DEV_ADMIN_ENABLED=false
+KNOT_DEV_ADMIN_ALLOWLIST=
+```
+
+Frontend:
+
+```text
+NEXT_PUBLIC_KNOT_DATA_MODE=api
+KNOT_API_BASE_URL=http://127.0.0.1:18080
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=knot-dev-503505.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=knot-dev-503505
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+```
+
+Web3 Gateway devnet signing requires existing safe development credentials:
+
+```text
+KNOT_WEB3_SIGNING_MODE=devnet
+SOLANA_RPC_URL=...
+KNOT_ESCROW_PROGRAM_ID=...
+KNOT_USDC_MINT=...
+KNOT_BRAND_KEYPAIR_JSON=...
+KNOT_CREATOR_KEYPAIR_JSON=...
+KNOT_AGENT_KEYPAIR_JSON=...
+```
+
+Do not commit secrets, private keys, service account JSON, seed phrases, or tokens.
+
+## Local Checks
+
+Backend:
 
 ```text
 python3 -m venv .venv
 .venv/bin/python -m pip install -e 'backend[dev]'
-.venv/bin/python -m ruff check backend
-.venv/bin/python -m pytest backend/tests
-.venv/bin/python -m mypy backend/apps backend/libs
+cd backend
+../.venv/bin/python -m ruff check apps libs tests
+../.venv/bin/python -m pytest tests
 ```
 
+Frontend:
+
 ```text
-.venv/bin/python scripts/seed_demo.py --target memory
-.venv/bin/python scripts/firestore_smoke.py --target memory
-GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
-  .venv/bin/python scripts/seed_demo.py --target firestore
-GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
-  .venv/bin/python scripts/firestore_smoke.py --target firestore
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
-  .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
+cd frontend
+npm install
+npm run typecheck
+npm run lint
+npm run test
+npm run build
 ```
+
+Web3 Gateway:
 
 ```text
 cd web3/gateway
 npm install
-npm run lint
-npm test
 npm run build
+npm run lint
+npm run test
 ```
+
+## Deployment Notes
+
+All off-chain runtime targets Google Cloud:
+
+- Frontend: Cloud Run.
+- Product API: Cloud Run.
+- Creator A2A Service: Cloud Run.
+- Web3 Gateway: private Cloud Run.
+- Database: Firestore Native mode.
+
+Do not deploy, change IAM, rotate secrets, fund wallets, or send devnet transactions unless the operator explicitly approves that external action.

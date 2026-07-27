@@ -13,9 +13,9 @@ export const roleSessions: Record<"brand" | "creator", RoleSession> = {
   brand: {
     role: "brand",
     userLabel: "Yuna",
-    organizationLabel: "Glow Bar Labs",
-    agentId: "brand-agent-glow",
-    agentLabel: "Glow Agent",
+    organizationLabel: "Alpha Brand Labs",
+    agentId: "brand-agent-alpha",
+    agentLabel: "Alpha Agent",
     profileSummary:
       "스킨케어 제품을 만드는 브랜드. 주요 타깃은 20대 후반-30대 초반, 톤은 신뢰감 있고 일상적입니다.",
     walletAddress: "9wFF...GLOW",
@@ -33,8 +33,8 @@ export const roleSessions: Record<"brand" | "creator", RoleSession> = {
 };
 
 export const brandProduct: BrandProduct = {
-  productId: "product-glow-summer-kit",
-  title: "Glow Bar Summer Kit",
+  productId: "product-alpha-summer-kit",
+  title: "Alpha Summer Kit",
   category: "wellness skincare",
   targetAudience: "25-34 wellness-conscious creators and followers",
   budgetUsdc: 3000,
@@ -92,16 +92,16 @@ const settlement: Settlement = {
   releasedUsdc: 285,
   pendingUsdc: 665,
   escrowStatus: "PARTIALLY_RELEASED",
-  lockTx: "devnet-lock-signature-pending-live",
-  releaseTx: "devnet-release-signature-pending-live",
+  lockTx: null,
+  releaseTx: null,
 };
 
 export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
   brand: {
     role: "brand",
     promotionId: brandProduct.productId,
-    negotiationId: "negotiation-demo-glow",
-    agreementId: "agreement-demo-glow",
+    negotiationId: "negotiation-mock-alpha",
+    agreementId: "agreement-mock-alpha",
     title: brandProduct.title,
     counterpartyLabel: "Mina Studio",
     counterpartyAgentLabel: "Mina Agent",
@@ -174,18 +174,18 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
       "결과 화면에는 합의 금액, deliverables, usage rights, deadline만 표시합니다.",
     ],
     terms,
-    termsHash: "sha256:7f1d-demo-agreement-terms",
+    termsHash: "sha256:mock-explicit-fixture-only",
   },
   creator: {
     role: "creator",
     promotionId: brandProduct.productId,
-    negotiationId: "negotiation-demo-glow",
-    agreementId: "agreement-demo-glow",
+    negotiationId: "negotiation-mock-alpha",
+    agreementId: "agreement-mock-alpha",
     title: brandProduct.title,
-    counterpartyLabel: "Glow Bar Labs",
-    counterpartyAgentLabel: "Glow Agent",
+    counterpartyLabel: "Alpha Brand Labs",
+    counterpartyAgentLabel: "Alpha Agent",
     agentId: "creator-agent-mina",
-    counterpartyAgentId: "brand-agent-glow",
+    counterpartyAgentId: "brand-agent-alpha",
     taskId: "a2a-task-20260725-001",
     taskState: "TASK_STATE_WORKING",
     progressPercent: 74,
@@ -228,26 +228,26 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
       },
     ],
     publicSummary: [
-      "Glow Bar Labs 제안을 Agent가 협상 중입니다.",
+      "Alpha Brand Labs 제안을 Agent가 협상 중입니다.",
       "브랜드의 hard maximum과 내부 scoring은 Creator 화면에 노출하지 않습니다.",
       "결과 페이지에는 각 브랜드별 협상 상태와 공개 가능한 결과만 표시합니다.",
     ],
     terms,
-    termsHash: "sha256:7f1d-demo-agreement-terms",
+    termsHash: "sha256:mock-explicit-fixture-only",
   },
 };
 
 export const creatorDeals: CreatorDeal[] = [
   {
-    agreementId: "agreement-demo-glow",
-    brandId: "glow-bar",
-    brandName: "Glow Bar Labs",
+    agreementId: "agreement-mock-alpha",
+    brandId: "brand-alpha",
+    brandName: "Alpha Brand Labs",
     creatorAgentId: "creator-agent-mina",
     productTitle: "Glow Bar Summer Kit",
     status: "AGREED",
     visibleResult: "950 USDC, Reel 1개 + Story 2개로 합의됐습니다.",
     amountUsdc: 950,
-    termsHash: "sha256:7f1d-demo-agreement-terms",
+    termsHash: "sha256:mock-explicit-fixture-only",
     milestones,
     settlement,
   },

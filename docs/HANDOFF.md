@@ -8,7 +8,7 @@ Last updated: 2026-07-27
 
 ## Latest Completed Milestone
 
-Phase 6 Protected Dev Admin from `prompts/06_DEV_ADMIN.md`.
+Phase 7 Final E2E And Cleanup from `prompts/07_FINAL_E2E_AND_CLEANUP.md`.
 
 Previously completed Auth foundation:
 
@@ -90,6 +90,15 @@ Phase 6 completed:
 - Confirmed receipts, settlements, payment operations, and audit records are retained.
 - Frontend `/dev/admin` now reads protected Product API overview using Firebase bearer auth.
 
+Phase 7 completed with external blocker:
+
+- README now reflects current KNOT v1 architecture, env, checks, and deployment notes.
+- Stale simulated escrow success documentation was removed.
+- Active mock fixture names and fake devnet signature placeholders were cleaned up.
+- Legacy bootstrap provider is labeled `legacy-bootstrap`.
+- Full backend/web3/frontend validation suite passed.
+- External Solana devnet smoke remains blocked by missing safe signer/RPC/program configuration.
+
 ## Verification
 
 ```text
@@ -101,6 +110,7 @@ cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_ap
 cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_settlement.py tests/test_domain_models.py tests/test_api_promotions.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_dev_admin.py tests/test_api_auth.py tests/test_health_apps.py tests/test_api_resource_routes.py
+cd backend && ../.venv/bin/python -m pytest tests
 cd web3/gateway && npm run build
 cd web3/gateway && npm run lint
 cd web3/gateway && npm run test
@@ -115,6 +125,7 @@ Results:
 - Backend Ruff passed.
 - Backend selected pytest passed: 39 passed, 1 Starlette/httpx deprecation warning for Phase 5 escrow selection.
 - Backend selected pytest passed: 15 passed, 1 Starlette/httpx deprecation warning for Phase 6 dev-admin selection.
+- Backend full pytest passed: 91 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
 - Web3 Gateway build/lint/tests passed: 9 tests passed, 1 Node `punycode` deprecation warning.
 - Frontend typecheck passed.
 - Frontend lint passed.
@@ -189,8 +200,8 @@ Alternatively set Firebase custom claim `admin: true` for the operator account.
 - Firestore migration/reset was not run.
 - No GCP IAM, Secret Manager, deployment, wallet funding, program deployment, or on-chain transaction was performed.
 - External devnet escrow smoke is blocked by missing safe signing configuration.
-- Final E2E and cleanup is still Phase 7.
+- No reboot phase remains incomplete.
 
 ## Next Recommended Milestone
 
-Phase 7 should run the full real-data E2E cleanup pass, remove dead active mocks/fixtures, update README and deployment notes, and produce final evidence.
+Provide safe devnet signer/RPC/program configuration and explicitly approve a single lock/release smoke transaction when ready.

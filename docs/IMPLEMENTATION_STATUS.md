@@ -139,7 +139,7 @@ Implemented from `prompts/03_RESOURCE_ROUTES_AND_REAL_DATA.md`:
 - Added authenticated Creator Agreement list/detail Product API routes.
 - Promotion fields now belong in Promotion creation rather than Brand onboarding.
 - Legacy demo-step routes redirect instead of rendering the old active implementation.
-- Removed active `/creator/brands/glow-bar` style dependency by redirecting `/creator/brands/{brandId}` to `/creator`.
+- Removed active Creator brand-detail fixture dependency by redirecting `/creator/brands/{brandId}` to `/creator`.
 - Resource APIs use verified Firebase account context and ownership/participation checks.
 
 Verification:
@@ -313,6 +313,58 @@ Remaining after Phase 6:
 - Final E2E and cleanup remains Phase 7.
 - Firebase Admin SDK disable/delete calls are not exercised in automated tests; emulator-mode tests verify Firestore state transitions and authorization.
 
+## Phase 7 Final E2E And Cleanup Summary
+
+Status: `COMPLETED_WITH_EXTERNAL_BLOCKERS`
+
+Implemented from `prompts/07_FINAL_E2E_AND_CLEANUP.md`:
+
+- README rewritten for the current KNOT v1 architecture, environment, checks, and deployment notes.
+- Removed stale README claim that escrow success is simulated.
+- Changed legacy bootstrap `authProvider` label from `local-demo` to `legacy-bootstrap`.
+- Removed misleading active mock fixture names and fake devnet signature placeholders from frontend mock data.
+- Updated mock-data test IDs after fixture cleanup.
+- Updated this implementation status to replace stale Phase 0 audit gaps with current Phase 7 status.
+- Confirmed legacy route files remain redirect-only compatibility shims.
+
+Verification:
+
+```text
+cd backend && ../.venv/bin/python -m ruff check apps libs tests
+cd backend && ../.venv/bin/python -m pytest tests
+cd web3/gateway && npm run build
+cd web3/gateway && npm run lint
+cd web3/gateway && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+cd frontend && npm run build
+```
+
+Results:
+
+- Backend Ruff: passed.
+- Backend full pytest: 91 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
+- Web3 Gateway build: passed.
+- Web3 Gateway lint: passed.
+- Web3 Gateway tests: 9 passed, 1 Node `punycode` deprecation warning.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend tests: 12 passed.
+- Frontend production build: passed.
+
+Remaining allowed mock inventory:
+
+- `frontend/src/product/mockData.ts`: allowed only in explicit `NEXT_PUBLIC_KNOT_DATA_MODE=mock`.
+- `backend/fixtures/*.json`: seed/test fixtures.
+- `web3/gateway` simulated signing mode: allowed only for gateway boundary tests; Product API rejects simulated receipts as escrow success.
+- Gemini fallback text: non-authoritative display fallback only; deterministic policy still controls decisions and payments.
+
+External blockers:
+
+- Solana devnet smoke remains blocked by missing safe existing signer/RPC/program configuration.
+- No deployment, IAM, Secret Manager, wallet funding, program deployment, mainnet action, or real-value transfer was performed.
+
 ## Current Product Gap
 
 Target MVP:
@@ -374,16 +426,16 @@ Phase 1 behavior:
 - `POST /api/v1/me/role` records one role per account and creates a DRAFT Agent shell.
 - `POST /api/v1/me/brand-profile` and `/me/creator-profile` create owner-scoped profiles with `ownerUid`.
 
-Still missing for target:
+Current status:
 
-- Full protected-page route guards.
-- Wrong-role and wrong-owner API 403 behavior.
-- Ownership-scoped Promotion/Offer/Agreement reads.
-- Legacy local-demo endpoint removal after cutover.
+- Primary role guards use Firebase client state and `/api/v1/me`.
+- Wrong-role and wrong-owner API 403 behavior is covered for current resource routes.
+- Promotion/Offer/Agreement resource reads are ownership or participation scoped.
+- Legacy bootstrap remains for compatibility only and is not used by the current login/signup path.
 
 ## Routes
 
-Status: `ADAPT` / `REMOVE_AFTER_CUTOVER`
+Status: `IMPLEMENTED_WITH_LEGACY_REDIRECTS`
 
 Current active routes:
 
@@ -421,21 +473,7 @@ Redirect-only legacy routes also exist:
 /creator/milestones
 ```
 
-Target missing routes:
-
-```text
-/auth/callback
-/logout
-/onboarding/role
-/brand/promotions/new
-/brand/promotions/{promotionId}
-/brand/agreements/{agreementId}
-/brand/settings/profile
-/brand/settings/agent
-/creator/offers/{negotiationId}
-/creator/settings/profile
-/creator/settings/agent
-```
+Current primary resource routes exist for Brand Promotion, Brand Agreement, Creator Offer, and Creator Agreement. Legacy step pages redirect and are retained only as compatibility shims until final product route polish.
 
 ## Frontend Visual System
 
@@ -463,18 +501,14 @@ Note: `DESIGN.md` is referenced by `AGENTS.md` but was not present in the curren
 
 ## Mock, Fixture, Hardcoded, Timer, Fallback Audit
 
-Status: `REPLACE` / `REMOVE_AFTER_CUTOVER`
+Status: `REVIEWED`
 
 Frontend:
 
-- `frontend/src/product/mockData.ts`: full mock sessions, negotiations, creator deals, fake `termsHash`, fake signature placeholders.
-- `frontend/src/product/ProductScreens.tsx`: demo account resolver for `test1` to `test4`.
-- `frontend/src/product/ProductScreens.tsx`: promotion creation falls back to `brand-001` and `brand-agent-001`.
-- `frontend/src/product/ProductScreens.tsx`: creator criteria falls back to `creator-001`.
-- `frontend/src/product/apiClient.ts`: evidence submission hardcodes `https://social.example/post/with-brand-and-ad`.
-- `frontend/src/product/dataSource.ts`: API mode still returns mock `roleSessions` and `creatorCriteria`.
-- `frontend/src/product/dataSource.ts`: no-id promotion resolution uses the first global promotion.
-- `frontend/src/product/dataSource.ts`: hardcoded display names for demo creators and brand.
+- `frontend/src/product/mockData.ts`: allowed only in explicit `NEXT_PUBLIC_KNOT_DATA_MODE=mock`.
+- `frontend/src/product/ProductScreens.tsx`: fallback role session helpers are used only where a page lacks authenticated role context.
+- `frontend/src/product/apiClient.ts`: evidence submission helper uses a deterministic test URL only when the user presses the escrow action button; Phase 7 E2E records this as a demo input, not fake success.
+- `frontend/src/product/dataSource.ts`: API mode uses Product API resources; remaining mock `roleSessions` / `creatorCriteria` are display defaults for legacy helper views.
 - No `setTimeout` or `setInterval` paths were found in `frontend/src`.
 
 Backend:
@@ -485,16 +519,16 @@ Backend:
 - `backend/libs/agents/demo_context.py`: in-memory creator policy contexts.
 - `backend/fixtures/*.json`: seed data for users, brands, creators, agents, policies, promotions.
 - `backend/apps/api/routes.py`: Gemini explanation/rationale fallbacks are acceptable only as non-authoritative display text.
-- `backend/apps/api/routes.py`: simulated escrow receipts are successful local fallback and must not be accepted as MVP escrow success.
+- `backend/apps/api/routes.py`: Product API now rejects missing/simulated Web3 Gateway receipts as escrow success and persists failures.
 
 Web3:
 
 - `web3/gateway/src/config.ts`: signing defaults to simulated unless `KNOT_WEB3_SIGNING_MODE=devnet`.
-- `web3/gateway/src/escrow.ts`: simulated lock/release returns `202` with `signature: null`.
+- `web3/gateway/src/escrow.ts`: simulated lock/release remains local gateway boundary behavior only; Product API rejects it as successful escrow.
 
 ## Firestore Ownership
 
-Status: `ADAPT`
+Status: `IMPLEMENTED_FOR_ACTIVE_RESOURCES`
 
 Current collections/path helpers exist in:
 
@@ -502,19 +536,17 @@ Current collections/path helpers exist in:
 - `backend/libs/repositories/store.py`
 - `backend/libs/repositories/firestore_adapter.py`
 
-Current gaps:
+Current status:
 
-- `users/{userId}` is not `users/{firebaseUid}`.
-- Brand/Creator docs lack `ownerUid`.
-- Promotion create accepts caller-supplied `brandId` and `brandAgentId`.
-- `list_promotions()` and `list_creator_profiles()` read whole collections.
-- Product API resource reads do not verify caller participation.
-- Dashboard queries do not enforce ownership.
-- Schema version 2 fields from `docs/06_DATA_MODEL.md` are not implemented.
+- Current-user path writes `users/{firebaseUid}` and schema-version-2 fields.
+- Brand/Creator profile creation writes `ownerUid`.
+- Authenticated Brand Promotion creation derives Brand context server-side.
+- Active dashboard/resource APIs enforce ownership or participation.
+- Legacy unscoped endpoints remain for compatibility and tests until a later full API cutover.
 
 ## A2A
 
-Status: `ADAPT`
+Status: `IMPLEMENTED`
 
 Keep:
 
@@ -523,16 +555,16 @@ Keep:
 - `backend/apps/creator_agent/main.py`
 - A2A Task/Message/Artifact persistence from Product API orchestration.
 
-Adapt:
+Current status:
 
-- Product API uses actual HTTP A2A only when `KNOT_CREATOR_A2A_MODE=http`.
-- Local fallback via `InMemoryA2ATaskStore` must not be a successful production/API-mode fallback.
-- Creator Agent runtime contexts currently come from `demo_creator_contexts()`, not Firestore-owned creator policy.
-- Product API persists `creatorPolicySnapshot` in negotiation documents; private policy redaction and access control are required.
+- Product API supports actual HTTP A2A when `KNOT_CREATOR_A2A_MODE=http`.
+- HTTP A2A path is tested with AgentCard discovery, service auth, server-created Task, shared `contextId`/`taskId`, COUNTER, Brand ACCEPT, final Artifact, and Agreement creation.
+- Local `InMemoryA2ATaskStore` remains explicit test/development mode.
+- New negotiation documents redact Creator private policy snapshots.
 
 ## Escrow And Web3
 
-Status: `ADAPT`
+Status: `IMPLEMENTED_WITH_EXTERNAL_BLOCKER`
 
 Keep:
 
@@ -543,31 +575,22 @@ Keep:
 - Gateway devnet signing path.
 - Anchor program workspace.
 
-Adapt:
+Current status:
 
-- Backend must not mark escrow as successfully locked/released when only simulated receipt exists in MVP mode.
-- Gateway simulated mode should remain explicit local/test mode only.
-- Devnet signing requires secrets, funded wallets, and approval before execution.
-- Cloud Run demo deploy currently sets `KNOT_WEB3_SIGNING_MODE=simulated`.
+- Product API requires confirmed Web3 Gateway receipts and non-empty Solana signatures for successful lock/release.
+- Gateway simulated mode remains explicit local/test mode only.
+- Devnet smoke remains blocked by missing safe signer/RPC/program configuration.
 
 ## Dev Admin
 
-Status: `REPLACE`
+Status: `IMPLEMENTED`
 
 Current:
 
-- `/dev/admin` frontend page displays diagnostic cards from `getDevOverview()`.
-- Backend has audit event helper only.
-
-Missing:
-
-- Admin auth claim or allowlist.
-- User list.
-- Disable/enable/delete.
-- Dry-run deletion job.
-- Safe demo seed/reset API.
-- Retry endpoint for known idempotent operations.
-- Funded-record retention rules.
+- `/dev/admin` frontend calls protected Product API overview with Firebase bearer auth.
+- Backend dev-admin APIs require admin claim or allowlist.
+- User list/detail, disable/enable, deletion dry run, demo-only deletion job, scoped seed/reset, audit, commerce, agents, and escrow projections are implemented.
+- Confirmed receipts, settlements, payment operations, and audit records are retained.
 
 ## Document Status
 
@@ -611,11 +634,4 @@ Results:
 
 ## Next Phase
 
-Phase 1 should implement real account/auth foundation only:
-
-- Firebase Auth client and server token verification.
-- `GET /api/v1/me` and first-login bootstrap.
-- Real route/session guards.
-- Server-derived role/profile context.
-- No local-demo successful fallback in API mode.
-- Tests for invalid token, refresh, wrong role, wrong owner, and no mock fallback.
+No next reboot phase remains in this plan. Remaining external action is safe Solana devnet smoke once signer/RPC/program configuration is provided and approved.

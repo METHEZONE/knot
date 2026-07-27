@@ -617,7 +617,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
             <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
             <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
             <Input label="Password" name="password" placeholder="Password" type="password" required />
-            <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "glow-bar-labs" : "mina-studio"} />
+            <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
           {error && <FormError message={error} />}
@@ -756,7 +756,7 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
             <SectionTitle eyebrow="Promotion input" title="협찬할 제품 내용을 추가합니다" />
             <Input label="Product document" name="documentHint" placeholder="PDF 또는 제품 설명 파일 업로드 예정" />
             <Input label="Product name" name="productName" placeholder={product.title} required />
-            <Input label="Product URL" name="productUrl" placeholder="https://glowbar.example/summer-kit" />
+            <Input label="Product URL" name="productUrl" placeholder="https://brand.example/summer-kit" />
             <Input label="Category" name="category" placeholder={product.category} required />
             <TextArea label="Target audience" name="targetAudience" placeholder={product.targetAudience} />
             <TextArea label="Objective" name="objective" placeholder="여름 스킨케어 루틴 인지도와 스토리 링크 전환" />
@@ -1392,7 +1392,7 @@ function RoleJumpCard({ role, title, href }: { role: Role; title: string; href: 
       <div className="flex items-center gap-3">
         <AgentCharacter agentId={`${role}-jump-agent`} side={role} category="wellness" pose="idle" size={64} />
         <div>
-          <Pill>mock session</Pill>
+          <Pill>workspace</Pill>
           <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
         </div>
       </div>
