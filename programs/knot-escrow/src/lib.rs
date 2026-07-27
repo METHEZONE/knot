@@ -103,9 +103,9 @@ pub mod knot_escrow {
         let cpi = CpiContext::new(
             ctx.accounts.token_program.key(),
             Transfer {
-                from: ctx.accounts.brand_token.to_account_info(),
+                from: ctx.accounts.funder_token.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),
-                authority: ctx.accounts.brand.to_account_info(),
+                authority: ctx.accounts.funder.to_account_info(),
             },
         );
         token::transfer(cpi, deposit)?;
@@ -288,8 +288,8 @@ pub struct InitializeConfig<'info> {
 #[derive(Accounts)]
 #[instruction(campaign_id: u64)]
 pub struct InitializeCampaign<'info> {
-    #[account(mut)]
-    pub brand: Signer<'info>,
+    /// CHECK: 브랜드(당사자) 지갑 주소만 저장 + campaign PDA seed
+    pub brand: UncheckedAccount<'info>,
 
     /// CHECK: 크리에이터 지갑 주소만 저장(수취인)
     pub creator: UncheckedAccount<'info>,
@@ -297,21 +297,29 @@ pub struct InitializeCampaign<'info> {
     /// CHECK: 브랜드 에이전트 키(자율 릴리스 서명자)
     pub agent_authority: UncheckedAccount<'info>,
 
+    /// 락을 서명·펀딩하는 주체 = brand(사람) 또는 agent_authority(에이전트). rent payer.
+    /// top-up 모델에선 에이전트가 자기 예산으로 자동 락. cap 초과 딜은 상위(백엔드/UX)에서 brand 서명 유도.
+    #[account(
+        mut,
+        constraint = funder.key() == brand.key() || funder.key() == agent_authority.key() @ EscrowError::Unauthorized,
+    )]
+    pub funder: Signer<'info>,
+
     pub mint: Account<'info, Mint>,
 
     #[account(
         mut,
-        constraint = brand_token.mint == mint.key() @ EscrowError::MintMismatch,
-        constraint = brand_token.owner == brand.key() @ EscrowError::Unauthorized,
+        constraint = funder_token.mint == mint.key() @ EscrowError::MintMismatch,
+        constraint = funder_token.owner == funder.key() @ EscrowError::Unauthorized,
     )]
-    pub brand_token: Account<'info, TokenAccount>,
+    pub funder_token: Account<'info, TokenAccount>,
 
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
 
     #[account(
         init,
-        payer = brand,
+        payer = funder,
         space = 8 + Campaign::MAX_SIZE,
         seeds = [b"campaign", brand.key().as_ref(), &campaign_id.to_le_bytes()],
         bump,
@@ -324,7 +332,7 @@ pub struct InitializeCampaign<'info> {
 
     #[account(
         init,
-        payer = brand,
+        payer = funder,
         seeds = [b"vault", campaign.key().as_ref()],
         bump,
         token::mint = mint,

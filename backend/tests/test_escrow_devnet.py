@@ -113,11 +113,11 @@ async def test_full_milestone_flow() -> None:
     creator = Keypair()
     agent = Keypair()
 
-    # agent funds the reputation account init (payer = signer)
+    # agent(=funder)가 campaign/vault(락 예치) + reputation 계정 rent를 부담하므로 SOL 지급
     await send(
         transfer(
             TransferParams(
-                from_pubkey=payer.pubkey(), to_pubkey=agent.pubkey(), lamports=20_000_000
+                from_pubkey=payer.pubkey(), to_pubkey=agent.pubkey(), lamports=30_000_000
             )
         ),
         [payer],
@@ -157,9 +157,10 @@ async def test_full_milestone_flow() -> None:
         )
 
     mint = token.pubkey
-    brand_token = await _rpc(lambda: token.create_account(brand.pubkey()))
+    # agent = funder: 에이전트 지갑(예산)에서 락을 펀딩 (top-up 모델)
+    agent_token = await _rpc(lambda: token.create_account(agent.pubkey()))
     creator_token = await _rpc(lambda: token.create_account(creator.pubkey()))
-    await _rpc(lambda: token.mint_to(brand_token, payer, total))
+    await _rpc(lambda: token.mint_to(agent_token, payer, total))
 
     # unique per run (brand is fixed = payer) so the campaign PDA never collides
     campaign_id = int.from_bytes(bytes(creator.pubkey())[:8], "little")
@@ -169,7 +170,7 @@ async def test_full_milestone_flow() -> None:
     reputation, _ = pdas.reputation_pda(creator.pubkey())
     terms_hash = hashlib.sha256(b"knot-devnet-test").digest()
 
-    # brand opens the campaign and deposits the full amount into the vault PDA
+    # agent(=funder)가 캠페인을 열고 자기 예산에서 vault로 예치 (사람 없이 자율 락)
     await send(
         Instruction(
             program,
@@ -180,11 +181,12 @@ async def test_full_milestone_flow() -> None:
             + terms_hash
             + _i64(3600),
             [
-                meta(brand.pubkey(), True, True),
+                meta(brand.pubkey(), False, False),   # brand: 당사자 pubkey(비서명)
                 meta(creator.pubkey(), False, False),
-                meta(agent.pubkey(), False, False),
+                meta(agent.pubkey(), False, False),   # agent_authority(저장)
+                meta(agent.pubkey(), True, True),     # funder = agent (서명·펀딩)
                 meta(mint, False, False),
-                meta(brand_token, False, True),
+                meta(agent_token, False, True),       # funder_token
                 meta(cfg, False, False),
                 meta(campaign, False, True),
                 meta(vault_auth, False, False),
@@ -194,7 +196,7 @@ async def test_full_milestone_flow() -> None:
                 meta(rent, False, False),
             ],
         ),
-        [payer],
+        [payer, agent],
     )
 
     # 3) creator submits milestone 0
