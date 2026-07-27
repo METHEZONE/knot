@@ -68,7 +68,7 @@ require_env "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID"
 build_image "infra/cloudbuild/creator-agent.yaml" "${CREATOR_IMAGE}"
 deploy_service "knot-creator-agent" "${CREATOR_IMAGE}" \
   --allow-unauthenticated \
-  --set-env-vars="KNOT_SERVICE_NAME=knot-creator-agent,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},CREATOR_AGENT_BASE_URL=$(service_url "knot-creator-agent")/a2a/v1,KNOT_GEMINI_MODE=vertex,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash" \
+  --set-env-vars="KNOT_SERVICE_NAME=knot-creator-agent,KNOT_REPOSITORY_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},CREATOR_AGENT_BASE_URL=$(service_url "knot-creator-agent")/a2a/v1,KNOT_GEMINI_MODE=vertex,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash" \
   --set-secrets="KNOT_A2A_SERVICE_TOKEN=${A2A_SECRET_NAME}:latest"
 
 CREATOR_URL="$(service_url "knot-creator-agent")/a2a/v1"

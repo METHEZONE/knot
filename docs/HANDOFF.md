@@ -202,6 +202,13 @@ Alternatively set Firebase custom claim `admin: true` for the operator account.
 - External devnet escrow smoke is blocked by missing safe signing configuration.
 - No reboot phase remains incomplete.
 
+## Latest A2A Deployment Fix
+
+- Test accounts exposed that deployed Creator A2A accepted only seed tenants such as `creator-agent-001`.
+- Product API selected real Firestore creator agents, so `/a2a/v1/message:send` returned 409 and no Agreement was created.
+- Creator A2A now resolves unknown tenants through Firestore `creatorProfiles` and `agentPolicies` when `KNOT_REPOSITORY_BACKEND=firestore`.
+- Deployment must set `KNOT_REPOSITORY_BACKEND=firestore` on `knot-creator-agent`.
+
 ## Next Recommended Milestone
 
 Provide safe devnet signer/RPC/program configuration and explicitly approve a single lock/release smoke transaction when ready.

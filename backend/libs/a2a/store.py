@@ -37,6 +37,7 @@ class InMemoryA2ATaskStore:
     def __init__(
         self,
         context_by_tenant: dict[str, CreatorNegotiationContext],
+        context_resolver: Callable[[str], CreatorNegotiationContext | None] | None = None,
         rationale_provider: Callable[
             [CreatorNegotiationContext, NegotiationPayload, CreatorNegotiationDecision],
             object | None,
@@ -44,6 +45,7 @@ class InMemoryA2ATaskStore:
         | None = None,
     ) -> None:
         self._context_by_tenant = context_by_tenant
+        self._context_resolver = context_resolver
         self._tasks: dict[str, A2ATask] = {}
         self._message_results: dict[str, A2ATask] = {}
         self._rationale_provider = rationale_provider
@@ -136,7 +138,13 @@ class InMemoryA2ATaskStore:
         try:
             return self._context_by_tenant[tenant]
         except KeyError as exc:
-            raise A2ATaskError("unknown tenant") from exc
+            if self._context_resolver is None:
+                raise A2ATaskError("unknown tenant") from exc
+            context = self._context_resolver(tenant)
+            if context is None:
+                raise A2ATaskError("unknown tenant") from exc
+            self._context_by_tenant[tenant] = context
+            return context
 
     def _display_rationale(
         self,
