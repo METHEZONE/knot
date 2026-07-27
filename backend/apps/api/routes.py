@@ -122,6 +122,11 @@ def build_api_router(
             "createdAt": now,
             "updatedAt": now,
         }
+        if settings.agent_wallet_provision:
+            from libs.web3.agent_wallet import provision_agent_wallet
+
+            _wallet = provision_agent_wallet(agent_id, project_id=settings.firestore_project_id)
+            agent["walletPubkey"] = _wallet.pubkey
         updated = {
             **user,
             "role": role,
