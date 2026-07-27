@@ -210,14 +210,18 @@ export function SignupScreen() {
 
 export function BrandDashboardScreen({ context }: { context: CurrentUserContext }) {
   const [state, setState] = useDashboardState<BrandDashboard>();
+  const reload = useCallback(
+    () => loadDashboard(() => new ProductApiClient().getBrandDashboard(), setState),
+    [setState],
+  );
 
   useEffect(() => {
-    void loadDashboard(() => new ProductApiClient().getBrandDashboard(), setState);
-  }, [setState]);
+    void reload();
+  }, [reload]);
 
   return (
     <WorkspaceShell role="brand" active="dashboard" title="브랜드 대시보드" session={null}>
-      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getBrandDashboard(), setState)}>
+      <DashboardStatus state={state} retry={reload}>
         {(dashboard) => (
           <div className="grid gap-5">
             <div className="grid gap-3 md:grid-cols-4">
@@ -234,12 +238,14 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
                     {dashboard.activePromotions.map((promotion) => {
                       const product = productSnapshotFromPromotion(promotion);
                       return (
-                        <PromotionSummaryCard
-                          key={promotion.promotionId}
-                          promotion={promotion}
-                          productName={product.name}
-                          productCategory={product.category ?? promotion.category}
-                        />
+                        <div key={promotion.promotionId} className="grid gap-2 rounded border border-border-subtle bg-surface p-2">
+                          <PromotionSummaryCard
+                            promotion={promotion}
+                            productName={product.name}
+                            productCategory={product.category ?? promotion.category}
+                          />
+                          <DeletePromotionButton promotionId={promotion.promotionId} onDeleted={reload} />
+                        </div>
                       );
                     })}
                   </div>
