@@ -2,6 +2,42 @@
 
 Last updated: 2026-07-27
 
+## MVP Frontend Auth Dashboard QA Summary
+
+Status: `COMPLETED`
+
+Implemented:
+
+- Added global frontend auth state helpers for loading, authenticated, and unauthenticated header states.
+- Header now shows login/signup for logged-out users and dashboard/mypage/logout for logged-in users.
+- Dashboard links resolve by verified account role.
+- Route guards preserve a safe redirect path for unauthenticated users.
+- Firebase Google sign-in uses a singleton `GoogleAuthProvider` and `signInWithPopup`.
+- Firebase Auth errors now map to user-facing Korean messages.
+- Added `docs/FIREBASE_AUTH_SETUP.md` for Google provider and authorized-domain setup.
+- Brand dashboard now centers on Promotions instead of Agent lists.
+- Added `/brand/promotions` and `/brand/negotiations/{negotiationId}` resource pages.
+- Added `/creator/offers` and `/creator/agreements` resource pages.
+- Promotion detail separates overview, negotiation records, contracted creators, and escrow/milestone state.
+- Agreement detail shows final terms, escrow amounts, and milestone state from Agreement terms.
+- Creator dashboard separates Agent negotiation history, agreed negotiations, and milestone activity.
+- Added A2A negotiation visualizer driven by stored negotiation messages.
+- Added URL/PDF source analysis contract for Brand Promotion creation; failed API analysis falls back only to an explicit `demo` draft.
+- MVP UI does not expose new Agent creation; one Brand/Creator Agent per account remains the surfaced model.
+
+Verification:
+
+```text
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+```
+
+Current fixture/demo boundaries:
+
+- Brand source analysis uses Product API when available. If unavailable, the frontend marks the generated draft as `demo`.
+- Existing mock data source remains available only when `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is explicitly selected.
+
 ## Phase 0 Audit Summary
 
 This status file records the repository audit from `prompts/00_REPOSITORY_AUDIT.md`.

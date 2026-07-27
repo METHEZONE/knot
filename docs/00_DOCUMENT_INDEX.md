@@ -15,6 +15,7 @@
 11. `05_PAGE_SPEC.md`
 12. `12_MIGRATION_AND_CUTOVER.md`
 13. `13_TEST_AND_ACCEPTANCE.md`
+14. `FIREBASE_AUTH_SETUP.md`
 
 `DESIGN.md` is the visual source of truth only.
 

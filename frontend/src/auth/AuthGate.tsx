@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
@@ -9,6 +9,7 @@ import {
   firebaseConfigured,
   observeFirebaseUser,
 } from "@/auth/firebaseClient";
+import { safeRedirectPath } from "@/auth/authState";
 import { ProductApiClient, ProductApiError, type CurrentUserContext } from "@/product/apiClient";
 
 ProductApiClient.setAuthTokenProvider(currentIdToken);
@@ -29,6 +30,8 @@ export function AuthGate({
   children,
 }: AuthGateProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const configured = firebaseConfigured();
   const [state, setState] = useState<
     | { type: "loading" }
@@ -100,7 +103,11 @@ export function AuthGate({
         title="로그인이 필요합니다"
         body="계정 확인 후 이 페이지로 다시 돌아올 수 있습니다."
         actionLabel="로그인"
-        onAction={() => router.push("/login")}
+        onAction={() => {
+          const query = searchParams.toString();
+          const currentPath = `${pathname}${query ? `?${query}` : ""}`;
+          router.push(`/login?redirect=${encodeURIComponent(safeRedirectPath(currentPath) ?? pathname)}`);
+        }}
       />
     );
   }

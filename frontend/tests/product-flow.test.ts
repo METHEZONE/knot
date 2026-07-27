@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { firebaseAuthErrorMessage } from "../src/auth/firebaseClient";
+import { getDashboardPath, headerMenuForAuth, safeRedirectPath } from "../src/auth/authState";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { createKnotDataSource, resolveDataMode } from "../src/product/dataSource";
 import { ProductApiClient, ProductApiError, type ApiPromotion } from "../src/product/apiClient";
+import {
+  calculateBrandEscrow,
+  calculateCreatorSettlement,
+  mapTaskStateToCreatorStatus,
+  promotionProgress,
+} from "../src/product/mvp";
 
 test("product route surface exposes separated MVP role pages", () => {
   assert.deepEqual(appRoutes, [
@@ -13,8 +21,10 @@ test("product route surface exposes separated MVP role pages", () => {
     "/signup/creator",
     "/brand",
     "/brand/onboarding",
+    "/brand/promotions",
     "/brand/promotions/new",
     "/brand/promotions/[promotionId]",
+    "/brand/negotiations/[negotiationId]",
     "/brand/agreements/[agreementId]",
     "/brand/products/new",
     "/brand/negotiate",
@@ -24,9 +34,11 @@ test("product route surface exposes separated MVP role pages", () => {
     "/brand/settings",
     "/creator",
     "/creator/onboarding",
+    "/creator/offers",
     "/creator/offers/[negotiationId]",
     "/creator/criteria",
     "/creator/result",
+    "/creator/agreements",
     "/creator/agreements/[agreementId]",
     "/creator/me",
     "/creator/settings",
@@ -37,16 +49,95 @@ test("product route surface exposes separated MVP role pages", () => {
 test("workspace nav is menu-like and role-specific", () => {
   assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), [
     "/brand",
-    "/brand/promotions/new",
-    "/brand",
-    "/brand",
+    "/brand/promotions",
+    "/brand/promotions",
+    "/brand/promotions",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
     "/creator",
     "/creator/criteria",
-    "/creator",
-    "/creator",
+    "/creator/offers",
+    "/creator/agreements",
   ]);
+});
+
+test("auth header menu follows loading unauthenticated and authenticated states", () => {
+  assert.deepEqual(headerMenuForAuth("loading", null), ["loading"]);
+  assert.deepEqual(headerMenuForAuth("unauthenticated", null), ["login", "signup"]);
+  assert.deepEqual(headerMenuForAuth("authenticated", "BRAND"), ["dashboard", "mypage", "logout"]);
+  assert.deepEqual(headerMenuForAuth("authenticated", "CREATOR"), ["dashboard", "mypage", "logout"]);
+});
+
+test("auth helpers preserve safe redirects and role dashboard paths", () => {
+  assert.equal(getDashboardPath("BRAND"), "/brand");
+  assert.equal(getDashboardPath("CREATOR"), "/creator");
+  assert.equal(getDashboardPath(null), null);
+  assert.equal(safeRedirectPath("/brand/promotions/promotion-1"), "/brand/promotions/promotion-1");
+  assert.equal(safeRedirectPath("//evil.example"), null);
+  assert.equal(safeRedirectPath("/api/v1/me"), null);
+});
+
+test("Firebase auth errors map to user-facing messages", () => {
+  assert.equal(
+    firebaseAuthErrorMessage({ code: "auth/unauthorized-domain" }),
+    "현재 접속한 도메인이 Firebase 로그인 허용 목록에 등록되지 않았습니다.",
+  );
+  assert.equal(
+    firebaseAuthErrorMessage({ code: "auth/popup-blocked" }),
+    "브라우저가 로그인 팝업을 차단했습니다. 팝업을 허용해주세요.",
+  );
+});
+
+test("A2A task state maps to creator display status", () => {
+  assert.equal(mapTaskStateToCreatorStatus("TASK_STATE_SUBMITTED", "OFFERED"), "제안 도착");
+  assert.equal(mapTaskStateToCreatorStatus("TASK_STATE_WORKING", "WORKING"), "Agent 분석 중");
+  assert.equal(mapTaskStateToCreatorStatus("TASK_STATE_AUTH_REQUIRED", "ESCALATED"), "내 승인 필요");
+  assert.equal(mapTaskStateToCreatorStatus("TASK_STATE_COMPLETED", "AGREED"), "협상 성공");
+  assert.equal(mapTaskStateToCreatorStatus("TASK_STATE_FAILED", "FAILED"), "협상 실패");
+});
+
+test("settlement and promotion selectors keep MVP concepts separated", () => {
+  assert.deepEqual(
+    calculateCreatorSettlement([
+      { status: "RELEASED", amountUsdc: 300 },
+      { status: "VERIFIED", amountUsdc: 200 },
+      { status: "SUBMITTED", amountUsdc: 100 },
+    ]),
+    { paidAmount: 300, availableToClaimAmount: 200, pendingAmount: 100 },
+  );
+  assert.deepEqual(
+    calculateBrandEscrow(
+      {
+        escrowId: "escrow-1",
+        agreementId: "agreement-1",
+        promotionId: "promotion-1",
+        lockedAmountBaseUnits: "1000000000",
+        releasedAmountBaseUnits: "300000000",
+        status: "LOCKED",
+        lockSignature: null,
+        lockReceiptId: "receipt-1",
+      },
+      [{ settlementId: "settlement-1", escrowId: "escrow-1", agreementId: "agreement-1", milestoneId: "content", amountBaseUnits: "300000000", status: "CONFIRMED", signature: "sig" }],
+    ),
+    { lockedAmount: 700, releasableAmount: 0, releasedAmount: 300 },
+  );
+  assert.equal(
+    promotionProgress({
+      promotionId: "promotion-1",
+      brandId: "brand-1",
+      brandAgentId: "agent-1",
+      title: "Promo",
+      objective: "awareness",
+      category: "beauty",
+      targetAudience: ["20s"],
+      budget: { totalUsdc: 1000, maxPerCreatorUsdc: 500 },
+      deliverables: [],
+      postingWindow: { start: "2026-08-01", end: "2026-08-10" },
+      usageRights: "organicOnly",
+      status: "NEGOTIATING",
+    }),
+    38,
+  );
 });
 
 test("account routes are kept out of role workspace menus", () => {
