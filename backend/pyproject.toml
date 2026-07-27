@@ -13,7 +13,8 @@ dependencies = [
   "google-genai>=1.0.0",
   "anchorpy>=0.20",
   "solana>=0.34",
-  "solders>=0.21"
+  "solders>=0.21",
+  "google-cloud-secret-manager>=2.20.0"
 ]
 
 [project.optional-dependencies]

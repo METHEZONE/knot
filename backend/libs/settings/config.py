@@ -52,6 +52,7 @@ class Settings(BaseModel):
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
+    agent_wallet_provision: bool = False
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -88,6 +89,8 @@ def get_settings(service_name: str | None = None) -> Settings:
         paysh_timeout_seconds=int(os.getenv("PAYSH_TIMEOUT_SECONDS", "90")),
         escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
+        agent_wallet_provision=os.getenv("KNOT_AGENT_WALLET_PROVISION", "").lower()
+        in ("1", "true", "yes"),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
