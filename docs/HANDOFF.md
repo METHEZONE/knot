@@ -8,7 +8,7 @@ Last updated: 2026-07-27
 
 ## Latest Completed Milestone
 
-Phase 4 Real HTTP A2A from `prompts/04_REAL_A2A.md`.
+Phase 5 Devnet Escrow from `prompts/05_ESCROW.md`.
 
 Previously completed Auth foundation:
 
@@ -69,6 +69,18 @@ Phase 4 completed:
 - Creator private policy snapshots are redacted in new Negotiation documents.
 - HTTP failure remains honest and does not create a fake Agreement.
 
+Phase 5 completed with external blocker:
+
+- Product API escrow lock/release now requires `KNOT_WEB3_MODE=gateway`.
+- Product API validates that gateway lock/release receipts are `CONFIRMED` and include a non-empty Solana Devnet signature.
+- Receipt validation checks Agreement ID, Escrow ID, milestone ID when applicable, amount, mint, program, network, and `termsHash`.
+- Missing gateway and simulated/non-confirmed gateway receipts no longer create successful escrow or settlement records.
+- Failed gateway execution persists `FAILED` TransactionReceipt and PaymentOperation records.
+- Evidence submission and deterministic verification remain required before milestone release.
+- Lock and release idempotency remain tested.
+- Frontend escrow action copy now states that success requires a confirmed Solana Devnet signature.
+- External devnet smoke was not run because safe signing configuration is missing in the current process.
+
 ## Verification
 
 ```text
@@ -78,6 +90,10 @@ cd backend && ../.venv/bin/python -m ruff check apps libs tests
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_health_apps.py tests/test_api_onboarding.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd backend && ../.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_settlement.py tests/test_domain_models.py tests/test_api_promotions.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd web3/gateway && npm run build
+cd web3/gateway && npm run lint
+cd web3/gateway && npm run test
 cd frontend && npm run typecheck
 cd frontend && npm run lint
 cd frontend && npm run test
@@ -87,7 +103,8 @@ cd frontend && npm run build
 Results:
 
 - Backend Ruff passed.
-- Backend selected pytest passed: 31 passed, 1 Starlette/httpx deprecation warning.
+- Backend selected pytest passed: 39 passed, 1 Starlette/httpx deprecation warning for Phase 5 escrow selection.
+- Web3 Gateway build/lint/tests passed: 9 tests passed, 1 Node `punycode` deprecation warning.
 - Frontend typecheck passed.
 - Frontend lint passed.
 - Frontend tests passed: 12 passed.
@@ -123,6 +140,27 @@ KNOT_A2A_SERVICE_TOKEN=...
 
 Run Creator A2A Service with the same `KNOT_A2A_SERVICE_TOKEN`.
 
+For escrow lock/release, Product API requires:
+
+```text
+KNOT_WEB3_MODE=gateway
+WEB3_GATEWAY_BASE_URL=http://localhost:8082
+```
+
+The Web3 Gateway must return confirmed Solana Devnet receipts. Local simulated-mode gateway responses are allowed only for gateway boundary tests and are rejected by Product API as escrow success.
+
+External devnet smoke remains blocked until safe existing values are provided to the Web3 Gateway process:
+
+```text
+KNOT_WEB3_SIGNING_MODE=devnet
+KNOT_ESCROW_PROGRAM_ID=...
+KNOT_USDC_MINT=...
+SOLANA_RPC_URL=...
+KNOT_BRAND_KEYPAIR_JSON=...
+KNOT_CREATOR_KEYPAIR_JSON=...
+KNOT_AGENT_KEYPAIR_JSON=...
+```
+
 ## Not Done In This Milestone
 
 - Legacy demo endpoints still exist for compatibility.
@@ -130,9 +168,9 @@ Run Creator A2A Service with the same `KNOT_A2A_SERVICE_TOKEN`.
 - Full server-cookie route middleware is not complete; current guards use Firebase client state and `/api/v1/me`.
 - Firestore migration/reset was not run.
 - No GCP IAM, Secret Manager, deployment, wallet funding, program deployment, or on-chain transaction was performed.
-- Escrow lock/release is still Phase 5.
 - Dev Admin backend implementation is still Phase 6.
+- External devnet escrow smoke is blocked by missing safe signing configuration.
 
 ## Next Recommended Milestone
 
-Phase 5 should implement the Solana devnet escrow lock/release path behind the existing Web3 gateway boundary, with external devnet smoke tests only when safe local configuration already exists.
+Phase 6 should implement the protected `/dev/admin` route and backend dev-admin APIs with strict admin authorization, audit events, and safe demo-only reset/deletion behavior.

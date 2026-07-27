@@ -1616,14 +1616,62 @@ def build_api_router(
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
         milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
-        gateway_receipt = _lock_with_web3_gateway(
-            settings=settings,
-            idempotency_key=key,
-            agreement=agreement,
-            escrow_id=escrow_id,
-            locked_amount=locked_amount,
-            milestone_amounts=milestone_amounts,
-        )
+        try:
+            gateway_receipt = _require_confirmed_gateway_receipt(
+                _lock_with_web3_gateway(
+                    settings=settings,
+                    idempotency_key=key,
+                    agreement=agreement,
+                    escrow_id=escrow_id,
+                    locked_amount=locked_amount,
+                    milestone_amounts=milestone_amounts,
+                ),
+                expected={
+                    "agreementId": agreement_id,
+                    "escrowId": escrow_id,
+                    "termsHash": agreement["termsHash"],
+                    "lockedAmountBaseUnits": str(locked_amount),
+                    "mint": settings.usdc_mint,
+                    "programId": settings.escrow_program_id,
+                    "network": settings.escrow_network,
+                },
+            )
+        except HTTPException as exc:
+            receipt = _record_operation(
+                repository,
+                operation_type="ESCROW_LOCK",
+                operation_id=operation_id,
+                receipt_id=receipt_id,
+                escrow_id=escrow_id,
+                agreement_id=agreement_id,
+                idempotency_key=key,
+                now=now,
+                network=settings.escrow_network,
+                receipt=_failed_receipt(
+                    receipt_id=receipt_id,
+                    operation_id=operation_id,
+                    network=settings.escrow_network,
+                    detail=str(exc.detail),
+                    created_at=now,
+                ),
+            )
+            _append_promotion_event(
+                repository,
+                promotion_id=str(agreement["promotionId"]),
+                event_type="ESCROW_LOCK_FAILED",
+                data={
+                    "agreementId": agreement_id,
+                    "escrowId": escrow_id,
+                    "receiptId": receipt["receiptId"],
+                    "receiptStatus": receipt["status"],
+                },
+            )
+            _append_audit(
+                repository,
+                action="ESCROW_LOCK_FAILED",
+                data={"escrowId": escrow_id, "agreementId": agreement_id},
+            )
+            raise
         escrow = {
             "escrowId": escrow_id,
             "agreementId": agreement_id,
@@ -1658,15 +1706,11 @@ def build_api_router(
             idempotency_key=key,
             now=now,
             network=settings.escrow_network,
-            receipt=(
-                receipt_from_gateway(
-                    receipt_id=receipt_id,
-                    operation_id=operation_id,
-                    gateway_receipt=gateway_receipt,
-                    created_at=now,
-                )
-                if gateway_receipt
-                else None
+            receipt=receipt_from_gateway(
+                receipt_id=receipt_id,
+                operation_id=operation_id,
+                gateway_receipt=gateway_receipt,
+                created_at=now,
             ),
         )
         _append_promotion_event(
@@ -1774,15 +1818,65 @@ def build_api_router(
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
         new_released = released + amount
-        gateway_receipt = _release_with_web3_gateway(
-            settings=settings,
-            repository=repository,
-            idempotency_key=key,
-            escrow=escrow,
-            agreement_id=agreement_id,
-            milestone_id=milestone_id,
-            amount=amount,
-        )
+        try:
+            gateway_receipt = _require_confirmed_gateway_receipt(
+                _release_with_web3_gateway(
+                    settings=settings,
+                    repository=repository,
+                    idempotency_key=key,
+                    escrow=escrow,
+                    agreement_id=agreement_id,
+                    milestone_id=milestone_id,
+                    amount=amount,
+                ),
+                expected={
+                    "agreementId": agreement_id,
+                    "escrowId": escrow_id,
+                    "milestoneId": milestone_id,
+                    "termsHash": escrow["termsHash"],
+                    "releasedAmountBaseUnits": str(amount),
+                    "mint": settings.usdc_mint,
+                    "programId": settings.escrow_program_id,
+                    "network": settings.escrow_network,
+                },
+            )
+        except HTTPException as exc:
+            receipt = _record_operation(
+                repository,
+                operation_type="MILESTONE_RELEASE",
+                operation_id=operation_id,
+                receipt_id=receipt_id,
+                escrow_id=escrow_id,
+                agreement_id=agreement_id,
+                idempotency_key=key,
+                now=now,
+                network=settings.escrow_network,
+                extra={"milestoneId": milestone_id},
+                receipt=_failed_receipt(
+                    receipt_id=receipt_id,
+                    operation_id=operation_id,
+                    network=settings.escrow_network,
+                    detail=str(exc.detail),
+                    created_at=now,
+                ),
+            )
+            _append_promotion_event(
+                repository,
+                promotion_id=str(escrow["promotionId"]),
+                event_type="MILESTONE_RELEASE_FAILED",
+                data={
+                    "escrowId": escrow_id,
+                    "milestoneId": milestone_id,
+                    "receiptId": receipt["receiptId"],
+                    "receiptStatus": receipt["status"],
+                },
+            )
+            _append_audit(
+                repository,
+                action="MILESTONE_RELEASE_FAILED",
+                data={"escrowId": escrow_id, "milestoneId": milestone_id},
+            )
+            raise
         settlement = {
             "settlementId": settlement_id,
             "escrowId": escrow_id,
@@ -1790,8 +1884,8 @@ def build_api_router(
             "milestoneId": milestone_id,
             "amountBaseUnits": str(amount),
             "network": settings.escrow_network,
-            "status": gateway_receipt.get("status") if gateway_receipt else "SIMULATED",
-            "signature": gateway_receipt.get("signature") if gateway_receipt else None,
+            "status": gateway_receipt["status"],
+            "signature": gateway_receipt["signature"],
             "receiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -1829,15 +1923,11 @@ def build_api_router(
             now=now,
             network=settings.escrow_network,
             extra={"settlementId": settlement_id, "milestoneId": milestone_id},
-            receipt=(
-                receipt_from_gateway(
-                    receipt_id=receipt_id,
-                    operation_id=operation_id,
-                    gateway_receipt=gateway_receipt,
-                    created_at=now,
-                )
-                if gateway_receipt
-                else None
+            receipt=receipt_from_gateway(
+                receipt_id=receipt_id,
+                operation_id=operation_id,
+                gateway_receipt=gateway_receipt,
+                created_at=now,
             ),
         )
         _append_promotion_event(
@@ -2983,9 +3073,13 @@ def _lock_with_web3_gateway(
     escrow_id: str,
     locked_amount: int,
     milestone_amounts: dict[str, int],
-) -> dict[str, object] | None:
+) -> dict[str, object]:
     if settings.web3_mode != "gateway":
-        return None
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "WEB3_GATEWAY_REQUIRED",
+            "Escrow lock requires the restricted Web3 Gateway.",
+        )
     try:
         return Web3GatewayClient(settings.web3_gateway_base_url).lock_escrow(
             idempotency_key=idempotency_key,
@@ -3022,9 +3116,13 @@ def _release_with_web3_gateway(
     agreement_id: str,
     milestone_id: str,
     amount: int,
-) -> dict[str, object] | None:
+) -> dict[str, object]:
     if settings.web3_mode != "gateway":
-        return None
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "WEB3_GATEWAY_REQUIRED",
+            "Milestone release requires the restricted Web3 Gateway.",
+        )
     lock_context = _lock_context_from_receipt(repository, escrow)
     try:
         payload: dict[str, object] = {
@@ -3054,6 +3152,30 @@ def _release_with_web3_gateway(
         ) from exc
 
 
+def _require_confirmed_gateway_receipt(
+    gateway_receipt: dict[str, object],
+    *,
+    expected: dict[str, object],
+) -> dict[str, object]:
+    mismatches = [
+        key
+        for key, value in expected.items()
+        if gateway_receipt.get(key) != value
+    ]
+    signature = gateway_receipt.get("signature")
+    if gateway_receipt.get("status") != "CONFIRMED":
+        mismatches.append("status")
+    if not isinstance(signature, str) or not signature:
+        mismatches.append("signature")
+    if mismatches:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "WEB3_RECEIPT_INVALID",
+            f"Web3 gateway receipt failed validation: {', '.join(sorted(set(mismatches)))}.",
+        )
+    return gateway_receipt
+
+
 def _lock_context_from_receipt(
     repository: KnotRepository,
     escrow: dict[str, object],
@@ -3070,10 +3192,11 @@ def _lock_context_from_receipt(
     return cast(dict[str, object], lock_context)
 
 
-def _simulated_receipt(
+def _failed_receipt(
     receipt_id: str,
     operation_id: str,
     network: str,
+    detail: str,
     created_at: str,
 ) -> dict[str, object]:
     return {
@@ -3082,8 +3205,8 @@ def _simulated_receipt(
         "network": network,
         "signature": None,
         "explorerUrl": None,
-        "status": "SIMULATED",
-        "detail": "On-chain signing is not wired yet; see docs/INTEGRATION_PLAN.md.",
+        "status": "FAILED",
+        "detail": detail,
         "createdAt": created_at,
     }
 
@@ -3147,11 +3270,10 @@ def _record_operation(
     idempotency_key: str,
     now: str,
     network: str,
+    receipt: dict[str, object],
     extra: dict[str, object] | None = None,
-    receipt: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Persist the transaction receipt and PaymentOperation for a settlement action."""
-    receipt = receipt or _simulated_receipt(receipt_id, operation_id, network, now)
     operation = {
         "operationId": operation_id,
         "operationType": operation_type,

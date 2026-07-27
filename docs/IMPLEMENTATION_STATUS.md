@@ -215,6 +215,60 @@ Remaining after Phase 4:
 - Legacy mock/dead-code cleanup remains Phase 7.
 - `KNOT_CREATOR_A2A_MODE=local` still exists for local tests and development; API mode must use `http` when exercising the real service boundary.
 
+## Phase 5 Devnet Escrow Summary
+
+Status: `COMPLETED_WITH_EXTERNAL_BLOCKERS`
+
+Implemented from `prompts/05_ESCROW.md`:
+
+- Product API escrow lock/release now requires the restricted Web3 Gateway.
+- Product API no longer treats missing gateway or simulated/non-confirmed gateway receipts as successful escrow execution.
+- Lock success requires a `CONFIRMED` gateway receipt with a non-empty Solana signature.
+- Release success requires a `CONFIRMED` gateway receipt with a non-empty Solana signature.
+- Product API validates receipt Agreement ID, Escrow ID, milestone ID when applicable, amount, mint, program, network, and `termsHash`.
+- Gateway unavailable or invalid receipt failures persist `FAILED` TransactionReceipt and PaymentOperation records.
+- Canonical Agreement terms and deterministic `termsHash` remain the lock/release binding.
+- Creator evidence submission and deterministic verification remain the release gate.
+- Duplicate lock and duplicate release remain idempotent.
+- Frontend escrow action copy now states that success requires a confirmed Solana Devnet signature.
+
+Verification:
+
+```text
+cd backend && ../.venv/bin/python -m ruff check apps libs tests
+cd backend && ../.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_settlement.py tests/test_domain_models.py tests/test_api_promotions.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd web3/gateway && npm run build
+cd web3/gateway && npm run lint
+cd web3/gateway && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+cd frontend && npm run build
+```
+
+Results:
+
+- Backend Ruff: passed.
+- Backend selected pytest: 39 passed, 1 Starlette/httpx deprecation warning.
+- Web3 Gateway build: passed.
+- Web3 Gateway lint: passed.
+- Web3 Gateway tests: 9 passed, 1 Node `punycode` deprecation warning.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend tests: 12 passed.
+- Frontend production build: passed.
+
+External blocker:
+
+- Devnet smoke was not run because the current process does not have safe existing devnet signing configuration: `KNOT_WEB3_SIGNING_MODE`, `KNOT_ESCROW_PROGRAM_ID`, `KNOT_USDC_MINT`, `SOLANA_RPC_URL`, `KNOT_BRAND_KEYPAIR_JSON`, `KNOT_CREATOR_KEYPAIR_JSON`, and `KNOT_AGENT_KEYPAIR_JSON` are missing.
+- No wallet funding, Secret Manager, IAM, program deployment, or on-chain transaction was performed.
+
+Remaining after Phase 5:
+
+- Dev Admin remains Phase 6.
+- Final mock/dead-code cleanup and safe E2E remain Phase 7.
+- Web3 Gateway still supports explicit local simulated mode for local boundary tests; Product API rejects that mode as escrow success.
+
 ## Current Product Gap
 
 Target MVP:
@@ -236,7 +290,7 @@ Current implementation is still partially demo-oriented beyond the completed Aut
 - Primary Brand and Creator resource reads are ownership or participation scoped.
 - Legacy step pages redirect, but some unused legacy component code remains until Phase 7 cleanup.
 - Real A2A HTTP negotiation is implemented and tested through an actual localhost service boundary.
-- Escrow gateway has devnet code, but current default/demo mode is simulated.
+- Escrow lock/release requires confirmed gateway receipts; external devnet smoke is blocked by missing safe signing configuration.
 - Dev Admin UI exists as a status panel only; backend admin APIs are missing.
 
 ## Repository Structure

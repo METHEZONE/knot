@@ -1542,8 +1542,8 @@ function SettlementActionPanel({
     <Panel>
       <SectionTitle eyebrow="Action" title="Escrow 실행" />
       <p className="text-sm text-muted">
-        기본 로컬 설정은 SIMULATED receipt를 생성하고, gateway devnet signing mode에서는 Solana signature를
-        반환합니다. 페이지 진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
+        Escrow 성공 처리는 Web3 Gateway가 확인한 Solana Devnet signature가 있을 때만 가능합니다. 페이지
+        진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
       </p>
       {error && <FormError message={error} />}
       <button
