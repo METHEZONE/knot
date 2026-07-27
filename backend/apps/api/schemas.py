@@ -46,6 +46,10 @@ class CurrentUserRoleRequest(DomainModel):
         return normalized
 
 
+class CurrentUserWalletRequest(DomainModel):
+    wallet_address: str = Field(alias="walletAddress")
+
+
 class CurrentUserBrandProfileRequest(DomainModel):
     brand_name: str = Field(alias="brandName")
     website_url: str = Field(alias="websiteUrl")

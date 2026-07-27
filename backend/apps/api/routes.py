@@ -15,6 +15,7 @@ from apps.api.schemas import (
     CurrentUserBrandProfileRequest,
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
+    CurrentUserWalletRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
@@ -142,6 +143,33 @@ def build_api_router(
             data={"uid": auth_user.uid, "role": role, "agentId": agent_id},
         )
         return _ok(_current_user_payload(repository, updated))
+
+    @router.post("/me/wallet")
+    def set_current_user_wallet(
+        payload: CurrentUserWalletRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        updated = {**user, "walletAddress": payload.wallet_address, "updatedAt": _now()}
+        repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
+        _append_audit(
+            repository,
+            action="USER_WALLET_SET",
+            data={"uid": auth_user.uid, "walletAddress": payload.wallet_address},
+        )
+        return _ok(_current_user_payload(repository, updated))
+
+    @router.get("/me/notifications")
+    def list_current_user_notifications(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        items = repository.list_raw_documents(
+            FirestorePaths.user_notifications(auth_user.uid)
+        )
+        items.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+        return _ok({"notifications": items})
 
     @router.post("/me/brand-profile", status_code=status.HTTP_201_CREATED)
     def create_current_brand_profile(
@@ -3781,6 +3809,33 @@ def _failed_receipt(
 
 def _payload_hash(payload: dict[str, object]) -> str:
     return sha256_prefixed(canonical_json(payload))
+
+
+def _emit_notification(
+    repository: KnotRepository,
+    *,
+    uid: str,
+    kind: str,
+    data: dict[str, object],
+) -> str:
+    """유저 알림 발행(예: BUDGET_LEFTOVER / BUDGET_SHORTFALL / DEAL_NEEDS_APPROVAL).
+
+    top-up 자금흐름(docs/WALLET_AND_MONEY_FLOW.md)에서 정산/한도 결과를 유저에게 전달.
+    users/{uid}/notifications/{id} 서브컬렉션에 저장. (트리거 wiring은 정산 라이브 시 연결)
+    """
+    notification_id = f"notif-{uuid4()}"
+    repository.save_raw_document(
+        FirestorePaths.user_notification(uid, notification_id),
+        {
+            "notificationId": notification_id,
+            "uid": uid,
+            "kind": kind,
+            "data": data,
+            "read": False,
+            "createdAt": _now(),
+        },
+    )
+    return notification_id
 
 
 def _append_audit(

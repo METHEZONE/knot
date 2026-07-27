@@ -49,6 +49,7 @@ class FirestoreCollection:
     payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
+    notifications: str = "notifications"
     idempotency_records: str = "idempotencyRecords"
     admin_jobs: str = "adminJobs"
     deletion_jobs: str = "deletionJobs"
@@ -61,6 +62,16 @@ class FirestorePaths:
     @staticmethod
     def user(user_id: str) -> str:
         return document_path(COLLECTIONS.users, user_id)
+
+    @staticmethod
+    def user_notifications(user_id: str) -> str:
+        return f"{document_path(COLLECTIONS.users, user_id)}/{COLLECTIONS.notifications}"
+
+    @staticmethod
+    def user_notification(user_id: str, notification_id: str) -> str:
+        return subcollection_document_path(
+            COLLECTIONS.users, user_id, COLLECTIONS.notifications, notification_id
+        )
 
     @staticmethod
     def brand(brand_id: str) -> str:
