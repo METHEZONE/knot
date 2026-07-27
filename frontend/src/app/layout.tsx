@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Caveat, Gaegu, Geist_Mono } from "next/font/google";
+import { AppFrame } from "@/app/AppFrame";
 import { SquiggleFilters } from "@/components/SquiggleFilters";
-import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +47,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <SquiggleFilters />
-        <TopBar />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-          {children}
-        </main>
+        <AppFrame>{children}</AppFrame>
       </body>
     </html>
   );
