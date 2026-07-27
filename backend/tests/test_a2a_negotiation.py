@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from apps.creator_agent.main import create_app
 from libs.a2a.store import InMemoryA2ATaskStore
 from libs.agents.demo_context import demo_creator_contexts
+from libs.settings.config import Settings
 from tests.test_domain_models import promotion_payload, terms_payload
 
 
@@ -193,3 +194,26 @@ def test_creator_agent_requires_a2a_version_header() -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_creator_agent_requires_service_auth_when_configured() -> None:
+    client = TestClient(create_app(settings=Settings(a2a_service_token="secret")))
+
+    rejected = client.post("/a2a/v1/message:send", json=a2a_request(), headers=headers())
+    accepted_headers = {**headers(), "Authorization": "Bearer secret"}
+    accepted = client.post(
+        "/a2a/v1/message:send",
+        json=a2a_request(message_id="message-auth-001"),
+        headers=accepted_headers,
+    )
+
+    assert rejected.status_code == 401
+    assert accepted.status_code == 200
+
+
+def test_creator_agent_task_reads_require_service_auth_when_configured() -> None:
+    client = TestClient(create_app(settings=Settings(a2a_service_token="secret")))
+
+    response = client.get("/a2a/v1/tasks")
+
+    assert response.status_code == 401

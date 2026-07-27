@@ -8,7 +8,7 @@ Last updated: 2026-07-27
 
 ## Latest Completed Milestone
 
-Phase 3 Resource Routes and Real Data from `prompts/03_RESOURCE_ROUTES_AND_REAL_DATA.md`.
+Phase 4 Real HTTP A2A from `prompts/04_REAL_A2A.md`.
 
 Previously completed Auth foundation:
 
@@ -56,6 +56,19 @@ Phase 3 completed:
 - Legacy demo-step routes now redirect rather than rendering old flow pages.
 - Cross-user Brand Promotion access and Creator participation access are tested.
 
+Phase 4 completed:
+
+- Product API discovers the Creator A2A AgentCard before HTTP negotiation.
+- Product API sends HTTP A2A requests with `A2A-Version: 1.0`, `application/a2a+json`, and bearer service auth when `KNOT_A2A_SERVICE_TOKEN` is configured.
+- Creator A2A message and task APIs enforce the same service token when configured.
+- Product API now supports the real multi-turn golden path:
+  `OFFER -> Creator COUNTER -> Brand policy evaluation -> Brand ACCEPT -> TASK_STATE_COMPLETED -> Agreement Artifact`.
+- The first OFFER has no `taskId`; Creator A2A Service creates the Task.
+- ACCEPT uses the same `contextId` and `taskId`.
+- Negotiation, Messages, Decisions, A2A Task, A2A Artifact, Agreement, Milestones, and sanitized Promotion Activity are persisted.
+- Creator private policy snapshots are redacted in new Negotiation documents.
+- HTTP failure remains honest and does not create a fake Agreement.
+
 ## Verification
 
 ```text
@@ -64,6 +77,7 @@ cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_he
 cd backend && ../.venv/bin/python -m ruff check apps libs tests
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_health_apps.py tests/test_api_onboarding.py
 cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
 cd frontend && npm run typecheck
 cd frontend && npm run lint
 cd frontend && npm run test
@@ -73,7 +87,7 @@ cd frontend && npm run build
 Results:
 
 - Backend Ruff passed.
-- Backend selected pytest passed: 12 passed, 1 Starlette/httpx deprecation warning.
+- Backend selected pytest passed: 31 passed, 1 Starlette/httpx deprecation warning.
 - Frontend typecheck passed.
 - Frontend lint passed.
 - Frontend tests passed: 12 passed.
@@ -99,15 +113,26 @@ KNOT_AUTH_MODE=emulator
 NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
 ```
 
+For real HTTP A2A testing, run Product API with:
+
+```text
+KNOT_CREATOR_A2A_MODE=http
+CREATOR_AGENT_BASE_URL=http://localhost:8081/a2a/v1
+KNOT_A2A_SERVICE_TOKEN=...
+```
+
+Run Creator A2A Service with the same `KNOT_A2A_SERVICE_TOKEN`.
+
 ## Not Done In This Milestone
 
-- Real HTTP A2A is not implemented yet.
 - Legacy demo endpoints still exist for compatibility.
 - Legacy demo-step route files are redirect-only, but some unused legacy components remain until Phase 7 cleanup.
 - Full server-cookie route middleware is not complete; current guards use Firebase client state and `/api/v1/me`.
 - Firestore migration/reset was not run.
 - No GCP IAM, Secret Manager, deployment, wallet funding, program deployment, or on-chain transaction was performed.
+- Escrow lock/release is still Phase 5.
+- Dev Admin backend implementation is still Phase 6.
 
 ## Next Recommended Milestone
 
-Phase 4 should replace local A2A fallback with a real HTTP Creator A2A service boundary and persisted multi-turn negotiation.
+Phase 5 should implement the Solana devnet escrow lock/release path behind the existing Web3 gateway boundary, with external devnet smoke tests only when safe local configuration already exists.

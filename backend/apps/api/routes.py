@@ -992,18 +992,20 @@ def build_api_router(
                 )
             ],
         )
+        creator_context = CreatorNegotiationContext(
+            creatorAgentId=creator_agent_id,
+            policy=agent_policy.creator,
+            today=_policy_today(promotion),
+            currentMonthDeliverables=creator.active_deliverables_this_month,
+            maxRounds=promotion.autonomy.max_negotiation_rounds,
+        )
+        agent_card = _discover_creator_agent_card(settings=settings)
         try:
-            a2a_task = _send_creator_a2a_task(
+            initial_task = _send_creator_a2a_task(
                 settings=settings,
                 creator_agent_id=creator_agent_id,
                 message=offer_message,
-                context=CreatorNegotiationContext(
-                    creatorAgentId=creator_agent_id,
-                    policy=agent_policy.creator,
-                    today=_policy_today(promotion),
-                    currentMonthDeliverables=creator.active_deliverables_this_month,
-                    maxRounds=promotion.autonomy.max_negotiation_rounds,
-                ),
+                context=creator_context,
             )
         except CreatorA2AClientError as exc:
             raise _problem(
@@ -1012,8 +1014,9 @@ def build_api_router(
                 f"Creator A2A negotiation failed: {exc}",
             ) from exc
 
-        task_id = a2a_task.id
-        response_message = a2a_task.status.message
+        a2a_task = initial_task
+        task_id = initial_task.id
+        response_message = initial_task.status.message
         try:
             creator_decision_document = first_part_data(response_message)
         except CreatorA2AClientError as exc:
@@ -1026,13 +1029,162 @@ def build_api_router(
         response_message_id = (
             response_message.message_id if response_message else f"message-{uuid4()}"
         )
-        negotiation_status = _negotiation_status(decision_type)
         response_terms = creator_decision_document.get("terms")
         current_terms = (
             response_terms
             if isinstance(response_terms, dict)
             else payload.terms.model_dump(by_alias=True, mode="json")
         )
+        persisted_messages: list[dict[str, object]] = [
+            {
+                "messageId": offer_message_id,
+                "contextId": context_id,
+                "taskId": task_id,
+                "role": "ROLE_USER",
+                "sequence": 1,
+                "payload": payload.model_dump(by_alias=True, mode="json"),
+                "a2aMessage": offer_message.model_dump(by_alias=True, mode="json"),
+                "createdAt": now,
+            }
+        ]
+        persisted_decisions: list[dict[str, object]] = []
+        if response_message is not None:
+            persisted_messages.append(
+                {
+                    "messageId": response_message_id,
+                    "contextId": context_id,
+                    "taskId": task_id,
+                    "role": "ROLE_AGENT",
+                    "sequence": 2,
+                    "payload": creator_decision_document,
+                    "a2aMessage": response_message.model_dump(by_alias=True, mode="json"),
+                    "createdAt": now,
+                }
+            )
+        persisted_decisions.append(
+            {
+                "decisionId": decision_id,
+                "messageId": response_message_id,
+                "type": decision_type.value,
+                "policyDecision": creator_decision_document.get("policyDecision"),
+                "createdAt": now,
+            }
+        )
+        final_brand_decision = brand_decision
+        if decision_type == NegotiationMessageType.COUNTER:
+            counter_terms = AgreementTerms.model_validate(current_terms)
+            final_brand_decision = validate_brand_terms(
+                promotion,
+                creator,
+                counter_terms,
+                current_round=2,
+            )
+            persisted_decisions.append(
+                {
+                    "decisionId": f"decision-{uuid4()}",
+                    "messageId": response_message_id,
+                    "type": "BRAND_POLICY_EVALUATION",
+                    "policyDecision": final_brand_decision.model_dump(
+                        by_alias=True,
+                        mode="json",
+                    ),
+                    "createdAt": now,
+                }
+            )
+            if final_brand_decision.allowed:
+                accept_payload = NegotiationPayload(
+                    type=NegotiationMessageType.ACCEPT,
+                    round=2,
+                    promotion=promotion,
+                    terms=counter_terms,
+                    changedFields=(
+                        creator_decision_document.get("changedFields")
+                        if isinstance(creator_decision_document.get("changedFields"), list)
+                        else []
+                    ),
+                    rationale="Brand policy accepted Creator counteroffer.",
+                )
+                accept_message_id = f"message-{uuid4()}"
+                accept_message = A2AMessage(
+                    messageId=accept_message_id,
+                    contextId=context_id,
+                    taskId=task_id,
+                    role=A2ARole.USER,
+                    parts=[
+                        A2APart(
+                            mediaType="application/json",
+                            data=accept_payload.model_dump(by_alias=True, mode="json"),
+                        )
+                    ],
+                )
+                try:
+                    a2a_task = _send_creator_a2a_task(
+                        settings=settings,
+                        creator_agent_id=creator_agent_id,
+                        message=accept_message,
+                        context=creator_context,
+                    )
+                except CreatorA2AClientError as exc:
+                    raise _problem(
+                        status.HTTP_502_BAD_GATEWAY,
+                        "A2A_CREATOR_AGENT_UNAVAILABLE",
+                        f"Creator A2A accept failed: {exc}",
+                    ) from exc
+                persisted_messages.append(
+                    {
+                        "messageId": accept_message_id,
+                        "contextId": context_id,
+                        "taskId": task_id,
+                        "role": "ROLE_USER",
+                        "sequence": 3,
+                        "payload": accept_payload.model_dump(by_alias=True, mode="json"),
+                        "a2aMessage": accept_message.model_dump(by_alias=True, mode="json"),
+                        "createdAt": now,
+                    }
+                )
+                response_message = a2a_task.status.message
+                try:
+                    creator_decision_document = first_part_data(response_message)
+                except CreatorA2AClientError as exc:
+                    raise _problem(
+                        status.HTTP_409_CONFLICT,
+                        "INVALID_STATE_TRANSITION",
+                        f"Creator A2A final response is invalid: {exc}",
+                    ) from exc
+                decision_type = _decision_type_from_document(creator_decision_document)
+                response_message_id = (
+                    response_message.message_id if response_message else f"message-{uuid4()}"
+                )
+                response_terms = creator_decision_document.get("terms")
+                current_terms = (
+                    response_terms if isinstance(response_terms, dict) else current_terms
+                )
+                if response_message is not None:
+                    persisted_messages.append(
+                        {
+                            "messageId": response_message_id,
+                            "contextId": context_id,
+                            "taskId": task_id,
+                            "role": "ROLE_AGENT",
+                            "sequence": 4,
+                            "payload": creator_decision_document,
+                            "a2aMessage": response_message.model_dump(
+                                by_alias=True,
+                                mode="json",
+                            ),
+                            "createdAt": now,
+                        }
+                    )
+                persisted_decisions.append(
+                    {
+                        "decisionId": f"decision-{uuid4()}",
+                        "messageId": response_message_id,
+                        "type": decision_type.value,
+                        "policyDecision": creator_decision_document.get("policyDecision"),
+                        "createdAt": now,
+                    }
+                )
+        negotiation_status = _negotiation_status(decision_type)
         artifact = a2a_task.artifacts[0] if a2a_task.artifacts else None
         artifact_id = artifact.artifact_id if artifact else f"artifact-{uuid4()}"
         if decision_type == NegotiationMessageType.ACCEPT and artifact is None:
@@ -1057,14 +1209,14 @@ def build_api_router(
             "contextId": context_id,
             "taskId": task_id,
             "status": negotiation_status,
-            "currentRound": 1,
+            "currentRound": 2 if len(persisted_messages) >= 3 else 1,
             "maxRounds": promotion.autonomy.max_negotiation_rounds,
             "currentTerms": current_terms,
             "brandPolicySnapshot": {
-                "ruleVersion": brand_decision.rule_version,
-                "decision": brand_decision.model_dump(by_alias=True, mode="json"),
+                "ruleVersion": final_brand_decision.rule_version,
+                "decision": final_brand_decision.model_dump(by_alias=True, mode="json"),
             },
-            "creatorPolicySnapshot": agent_policy.model_dump(by_alias=True, mode="json"),
+            "creatorPolicySnapshot": {"redacted": True},
             "lastMessageId": response_message_id,
             "createdAt": now,
             "updatedAt": now,
@@ -1081,43 +1233,22 @@ def build_api_router(
                 "updatedAt": now,
             },
         )
-        repository.save_raw_document(
-            FirestorePaths.negotiation_message(negotiation_id, offer_message_id),
-            {
-                "messageId": offer_message_id,
-                "contextId": context_id,
-                "taskId": task_id,
-                "role": "ROLE_USER",
-                "sequence": 1,
-                "payload": payload.model_dump(by_alias=True, mode="json"),
-                "a2aMessage": offer_message.model_dump(by_alias=True, mode="json"),
-                "createdAt": now,
-            },
-        )
-        if response_message is not None:
+        for message_document in persisted_messages:
             repository.save_raw_document(
-                FirestorePaths.negotiation_message(negotiation_id, response_message_id),
-                {
-                    "messageId": response_message_id,
-                    "contextId": context_id,
-                    "taskId": task_id,
-                    "role": "ROLE_AGENT",
-                    "sequence": 2,
-                    "payload": creator_decision_document,
-                    "a2aMessage": response_message.model_dump(by_alias=True, mode="json"),
-                    "createdAt": now,
-                },
+                FirestorePaths.negotiation_message(
+                    negotiation_id,
+                    _require_document_str(message_document, "messageId"),
+                ),
+                message_document,
             )
-        repository.save_raw_document(
-            FirestorePaths.negotiation_decision(negotiation_id, decision_id),
-            {
-                "decisionId": decision_id,
-                "messageId": response_message_id,
-                "type": decision_type.value,
-                "policyDecision": creator_decision_document.get("policyDecision"),
-                "createdAt": now,
-            },
-        )
+        for decision_document in persisted_decisions:
+            repository.save_raw_document(
+                FirestorePaths.negotiation_decision(
+                    negotiation_id,
+                    _require_document_str(decision_document, "decisionId"),
+                ),
+                decision_document,
+            )
         repository.save_raw_document(
             candidate_path,
             {
@@ -1151,6 +1282,64 @@ def build_api_router(
                 agreement,
             )
             _write_agreement_milestones(repository, agreement)
+        if agent_card is not None:
+            _append_promotion_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="A2A_AGENT_CARD_DISCOVERED",
+                data={
+                    "creatorAgentId": creator_agent_id,
+                    "name": agent_card.get("name"),
+                    "version": agent_card.get("version"),
+                },
+            )
+        _append_promotion_event(
+            repository,
+            promotion_id=promotion_id,
+            event_type="A2A_OFFER_SENT",
+            data={
+                "negotiationId": negotiation_id,
+                "contextId": context_id,
+                "taskId": task_id,
+                "messageId": offer_message_id,
+            },
+        )
+        if any(
+            decision["type"] == NegotiationMessageType.COUNTER.value
+            for decision in persisted_decisions
+        ):
+            _append_promotion_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="A2A_COUNTER_RECEIVED",
+                data={
+                    "negotiationId": negotiation_id,
+                    "contextId": context_id,
+                    "taskId": task_id,
+                },
+            )
+        if len(persisted_messages) >= 3:
+            _append_promotion_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="A2A_ACCEPT_SENT",
+                data={
+                    "negotiationId": negotiation_id,
+                    "contextId": context_id,
+                    "taskId": task_id,
+                },
+            )
+        if agreement is not None:
+            _append_promotion_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="AGREEMENT_CREATED",
+                data={
+                    "negotiationId": negotiation_id,
+                    "agreementId": agreement["agreementId"],
+                    "taskId": task_id,
+                },
+            )
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
@@ -2399,6 +2588,7 @@ def _send_creator_a2a_task(
         return CreatorA2AClient(
             settings.creator_agent_base_url,
             timeout_seconds=settings.creator_a2a_timeout_seconds,
+            service_token=settings.a2a_service_token,
         ).send_message(
             tenant=creator_agent_id,
             message=message,
@@ -2413,6 +2603,23 @@ def _send_creator_a2a_task(
         ),
     )
     return store.send_message(creator_agent_id, message)
+
+
+def _discover_creator_agent_card(*, settings: Settings) -> dict[str, object] | None:
+    if settings.creator_a2a_mode != "http":
+        return None
+    try:
+        return CreatorA2AClient(
+            settings.creator_agent_base_url,
+            timeout_seconds=settings.creator_a2a_timeout_seconds,
+            service_token=settings.a2a_service_token,
+        ).agent_card()
+    except CreatorA2AClientError as exc:
+        raise _problem(
+            status.HTTP_502_BAD_GATEWAY,
+            "A2A_CREATOR_AGENT_UNAVAILABLE",
+            f"Creator A2A AgentCard discovery failed: {exc}",
+        ) from exc
 
 
 def _decision_type_from_document(document: dict[str, object]) -> NegotiationMessageType:

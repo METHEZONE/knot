@@ -290,6 +290,29 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         def __exit__(self, *args: object) -> None:
             return None
 
+        def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+        ) -> FakeHttpResponse:
+            captured["agent_card_url"] = url
+            captured["agent_card_headers"] = headers
+            return FakeHttpResponse(
+                {
+                    "name": "KNOT Creator Negotiation Agent",
+                    "version": "1.0.0",
+                    "supportedInterfaces": [
+                        {
+                            "url": "http://creator-agent.test/a2a/v1",
+                            "protocolBinding": "HTTP+JSON",
+                            "protocolVersion": "1.0",
+                            "tenant": "creator-agent-003",
+                        }
+                    ],
+                }
+            )
+
         def post(
             self,
             url: str,
@@ -373,6 +396,10 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
 
     assert response.status_code == 201, response.text
     body = response.json()["data"]
+    assert captured["agent_card_url"] == (
+        "http://creator-agent.test/a2a/v1/.well-known/agent-card.json"
+    )
+    assert captured["agent_card_headers"] == {"A2A-Version": "1.0"}
     assert captured["url"] == "http://creator-agent.test/a2a/v1/message:send"
     assert captured["headers"] == {
         "A2A-Version": "1.0",
@@ -381,6 +408,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
     assert captured["timeout"] == 60
     assert captured["request"]["tenant"] == "creator-agent-003"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
+    assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"
     messages = client.get(
         f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
@@ -398,6 +426,11 @@ def test_start_negotiation_http_failure_does_not_create_fake_agreement(monkeypat
 
         def __exit__(self, *args: object) -> None:
             return None
+
+        def get(self, *args: object, **kwargs: object) -> object:
+            import httpx
+
+            raise httpx.ConnectError("creator unavailable")
 
         def post(self, *args: object, **kwargs: object) -> object:
             import httpx
@@ -419,8 +452,10 @@ def test_start_negotiation_http_failure_does_not_create_fake_agreement(monkeypat
     assert repository.list_raw_documents(COLLECTIONS.agreements) == []
 
 
-def test_start_negotiation_counter_a2a_task_does_not_materialize_agreement(monkeypatch) -> None:
+def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypatch) -> None:
     class CounterHttpClient:
+        post_count = 0
+
         def __init__(self, *args: object, **kwargs: object) -> None:
             return None
 
@@ -430,6 +465,22 @@ def test_start_negotiation_counter_a2a_task_does_not_materialize_agreement(monke
         def __exit__(self, *args: object) -> None:
             return None
 
+        def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+        ) -> object:
+            assert url == "http://creator-agent.test/a2a/v1/.well-known/agent-card.json"
+            assert headers == {"A2A-Version": "1.0"}
+            return FakeHttpResponse(
+                {
+                    "name": "KNOT Creator Negotiation Agent",
+                    "version": "1.0.0",
+                    "supportedInterfaces": [],
+                }
+            )
+
         def post(
             self,
             url: str,
@@ -437,15 +488,80 @@ def test_start_negotiation_counter_a2a_task_does_not_materialize_agreement(monke
             headers: dict[str, str],
             json: dict[str, object],
         ) -> object:
+            CounterHttpClient.post_count += 1
             message = json["message"]
             assert isinstance(message, dict)
             data = message["parts"][0]["data"]  # type: ignore[index]
             assert isinstance(data, dict)
+            terms = dict(data["terms"])  # type: ignore[arg-type]
+            compensation = dict(terms["compensation"])  # type: ignore[index]
+            compensation["baseAmountUsdc"] = 650
+            terms["compensation"] = compensation
+
+            if CounterHttpClient.post_count == 2:
+                assert message["taskId"] == "task-http-counter"
+                assert message["contextId"]
+                assert data["type"] == "ACCEPT"
+                agreement_terms = AgreementTerms.model_validate(terms)
+                decision = {
+                    "schema": "knot.negotiation.v1",
+                    "type": "ACCEPT",
+                    "round": 2,
+                    "terms": terms,
+                    "changedFields": ["compensation.baseAmountUsdc"],
+                    "rationale": "Creator accepted Brand policy-approved counter.",
+                    "policyDecision": {
+                        "allowed": True,
+                        "ruleVersion": "creator-policy-v1",
+                        "violations": [],
+                    },
+                    "agreementId": "agreement-http-counter",
+                    "termsHash": terms_hash(agreement_terms),
+                }
+                response_message = {
+                    "messageId": "message-http-agent-final",
+                    "contextId": message["contextId"],
+                    "taskId": "task-http-counter",
+                    "role": "ROLE_AGENT",
+                    "parts": [{"mediaType": "application/json", "data": decision}],
+                }
+                artifact = {
+                    "artifactId": "artifact-http-counter",
+                    "name": "Negotiation Result",
+                    "parts": [
+                        {
+                            "mediaType": "application/json",
+                            "data": {
+                                "schema": "knot.term-sheet.v1",
+                                "result": "AGREED",
+                                "agreementId": "agreement-http-counter",
+                                "terms": terms,
+                                "termsHash": decision["termsHash"],
+                                "rationale": decision["rationale"],
+                            },
+                        }
+                    ],
+                }
+                return FakeHttpResponse(
+                    {
+                        "task": {
+                            "id": "task-http-counter",
+                            "contextId": message["contextId"],
+                            "status": {
+                                "state": "TASK_STATE_COMPLETED",
+                                "message": response_message,
+                            },
+                            "artifacts": [artifact],
+                            "history": [],
+                        }
+                    }
+                )
+
             decision = {
                 "schema": "knot.negotiation.v1",
                 "type": "COUNTER",
                 "round": 1,
-                "terms": data["terms"],
+                "terms": terms,
                 "changedFields": ["compensation.baseAmountUsdc"],
                 "rationale": "Counter through Creator A2A HTTP.",
                 "policyDecision": {
@@ -494,9 +610,19 @@ def test_start_negotiation_counter_a2a_task_does_not_materialize_agreement(monke
 
     assert response.status_code == 201, response.text
     body = response.json()["data"]
-    assert body["negotiation"]["status"] == "COUNTERED"
-    assert body["agreement"] is None
-    assert repository.list_raw_documents(COLLECTIONS.agreements) == []
+    assert body["negotiation"]["status"] == "AGREED"
+    assert body["negotiation"]["currentRound"] == 2
+    assert body["agreement"]["agreementId"] == "agreement-http-counter"
+    assert len(repository.list_raw_documents(COLLECTIONS.agreements)) == 1
+    messages = client.get(
+        f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
+    ).json()["data"]["messages"]
+    assert [message["role"] for message in messages] == [
+        "ROLE_USER",
+        "ROLE_AGENT",
+        "ROLE_USER",
+        "ROLE_AGENT",
+    ]
 
 
 def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:

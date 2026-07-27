@@ -36,6 +36,7 @@ class Settings(BaseModel):
     creator_agent_base_url: str = "http://localhost:8081/a2a/v1"
     creator_a2a_mode: str = "local"
     creator_a2a_timeout_seconds: int = 30
+    a2a_service_token: str | None = None
     web3_gateway_base_url: str = "http://localhost:8082"
     web3_mode: str = "local"
     repository_backend: str = "memory"
@@ -66,6 +67,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         ),
         creator_a2a_mode=os.getenv("KNOT_CREATOR_A2A_MODE", "local"),
         creator_a2a_timeout_seconds=int(os.getenv("CREATOR_A2A_TIMEOUT_SECONDS", "30")),
+        a2a_service_token=os.getenv("KNOT_A2A_SERVICE_TOKEN"),
         web3_gateway_base_url=os.getenv("WEB3_GATEWAY_BASE_URL", "http://localhost:8082"),
         web3_mode=os.getenv("KNOT_WEB3_MODE", "local"),
         repository_backend=os.getenv("KNOT_REPOSITORY_BACKEND", "memory"),

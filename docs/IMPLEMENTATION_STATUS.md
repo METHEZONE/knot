@@ -169,6 +169,52 @@ Remaining after Phase 3:
 - Escrow execution is still Phase 5.
 - Some old component code remains unused and will be removed during Phase 7 cleanup.
 
+## Phase 4 Real HTTP A2A Summary
+
+Status: `COMPLETED`
+
+Implemented from `prompts/04_REAL_A2A.md`:
+
+- Product API discovers the Creator A2A AgentCard before HTTP negotiation.
+- Product API sends A2A HTTP requests with `A2A-Version: 1.0`, `application/a2a+json`, and bearer service auth when `KNOT_A2A_SERVICE_TOKEN` is configured.
+- Creator A2A message and task APIs enforce the same service token when configured.
+- Initial Brand OFFER is sent without `taskId`.
+- Creator A2A Service creates the Task and returns `taskId`.
+- Creator COUNTER responses are evaluated by deterministic Brand policy.
+- If Brand policy allows the COUNTER, Product API sends ACCEPT on the same `contextId` and `taskId`.
+- Creator completes the Task and returns an Agreement Artifact.
+- Product API persists Negotiation, Messages, Decisions, A2A Task, A2A Artifact, Agreement, Milestones, and sanitized Promotion Activity.
+- New Negotiation documents redact Creator private policy snapshots instead of persisting raw Creator policy values.
+- HTTP failure returns an honest error and does not create a fake Agreement.
+
+Verification:
+
+```text
+cd backend && ../.venv/bin/python -m ruff check apps libs tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py
+cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
+cd backend && ../.venv/bin/python -m ruff check apps libs tests
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run test
+cd frontend && npm run build
+```
+
+Results:
+
+- Backend Ruff: passed.
+- Backend selected pytest: 31 passed, 1 Starlette/httpx deprecation warning.
+- Frontend typecheck: passed.
+- Frontend lint: passed.
+- Frontend tests: 12 passed.
+- Frontend production build: passed.
+
+Remaining after Phase 4:
+
+- Escrow lock/release remains Phase 5.
+- Dev Admin remains Phase 6.
+- Legacy mock/dead-code cleanup remains Phase 7.
+- `KNOT_CREATOR_A2A_MODE=local` still exists for local tests and development; API mode must use `http` when exercising the real service boundary.
+
 ## Current Product Gap
 
 Target MVP:
@@ -186,10 +232,10 @@ Real authentication
 Current implementation is still partially demo-oriented beyond the completed Auth foundation:
 
 - Login/signup use Firebase Auth and `/api/v1/me` for account context.
-- Full protected-page route guards are not complete beyond login/signup current-user redirects.
-- Business data reads are not ownership scoped.
-- Active frontend routes still include legacy step pages.
-- Real A2A HTTP code exists, but local/in-memory A2A remains a configured fallback.
+- Current primary Brand and Creator dashboards and resource pages use authenticated route guards.
+- Primary Brand and Creator resource reads are ownership or participation scoped.
+- Legacy step pages redirect, but some unused legacy component code remains until Phase 7 cleanup.
+- Real A2A HTTP negotiation is implemented and tested through an actual localhost service boundary.
 - Escrow gateway has devnet code, but current default/demo mode is simulated.
 - Dev Admin UI exists as a status panel only; backend admin APIs are missing.
 
