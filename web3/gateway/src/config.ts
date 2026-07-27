@@ -14,6 +14,7 @@ export type GatewayConfig = {
   creatorKeypairJson?: string;
   agentKeypairPath?: string;
   agentKeypairJson?: string;
+  gcpProjectId?: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -34,6 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     creatorKeypairPath: env.KNOT_CREATOR_KEYPAIR_PATH,
     creatorKeypairJson: env.KNOT_CREATOR_KEYPAIR_JSON,
     agentKeypairPath: env.KNOT_AGENT_KEYPAIR_PATH,
-    agentKeypairJson: env.KNOT_AGENT_KEYPAIR_JSON
+    agentKeypairJson: env.KNOT_AGENT_KEYPAIR_JSON,
+    gcpProjectId: env.GOOGLE_CLOUD_PROJECT ?? env.GCP_PROJECT_ID
   };
 }
