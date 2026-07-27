@@ -32,7 +32,8 @@ export const lockRequestSchema = z.object({
   programId: z.string().min(1),
   network: z.literal("solanaDevnet"),
   brandAuthority: z.string().min(1),
-  creatorDestination: z.string().min(1)
+  creatorDestination: z.string().min(1),
+  agentId: z.string().min(1).optional()
 });
 
 export const releaseRequestSchema = z.object({
@@ -152,7 +153,8 @@ export class EscrowLockService {
           termsHash: result.data.termsHash,
           expectedAmountBaseUnits: result.data.expectedAmountBaseUnits,
           milestoneIds,
-          milestoneAmountsBaseUnits: milestoneAmounts
+          milestoneAmountsBaseUnits: milestoneAmounts,
+          agentId: result.data.agentId
         });
         const receipt: GatewayReceipt = {
           status: live.receipt.status,
