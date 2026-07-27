@@ -27,6 +27,7 @@ import {
   type CurrentUserContext,
 } from "./apiClient";
 import { A2ANegotiationVisualizer } from "./A2AVisualizer";
+import { usePhantomWallet } from "@/features/wallet/usePhantomWallet";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import {
   agreementMilestones,
@@ -1609,6 +1610,7 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
 
 export function RoleSettingsScreen({ role, session }: { role: Role; session?: RoleSession }) {
   const roleSession = session ?? fallbackRoleSession(role);
+  const wallet = usePhantomWallet();
   return (
     <WorkspaceShell role={role} active="settings" title="설정" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-3">
@@ -1625,8 +1627,25 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
-          <Input label="Wallet address" placeholder={roleSession.walletAddress} />
+          <InfoBox label="Wallet address" value={wallet.address ?? roleSession.walletAddress} />
           <InfoBox label="Network" value="Solana Devnet" />
+          <button
+            type="button"
+            onClick={() => {
+              void wallet.connect();
+            }}
+            disabled={wallet.status === "connecting" || wallet.status === "saving"}
+            className="mt-4 inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {wallet.status === "connecting"
+              ? "연결 중..."
+              : wallet.status === "saving"
+                ? "저장 중..."
+                : wallet.address
+                  ? "Phantom 재연결"
+                  : "Phantom 연결"}
+          </button>
+          {wallet.error && <p className="mt-2 text-sm text-muted">{wallet.error}</p>}
         </Panel>
       </div>
     </WorkspaceShell>
