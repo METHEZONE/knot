@@ -57,12 +57,6 @@ export function TopBar() {
             </span>
 
             <div className="flex items-center gap-2 text-sm">
-              <Link href={`/${role}/me`} className="text-muted hover:text-foreground">
-                My
-              </Link>
-              <Link href={`/${role}/settings`} className="text-muted hover:text-foreground">
-                Settings
-              </Link>
               <button
                 type="button"
                 onClick={() => {

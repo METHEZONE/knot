@@ -34,16 +34,18 @@ test("route surface is the seven-screen journey (docs/24)", () => {
     "/creator/connect",
     "/creator/rules",
     "/creator",
+    "/creator/settings",
     "/brand/product",
     "/brand/mood",
     "/brand",
+    "/brand/settings",
     "/dev/admin",
   ]);
 });
 
 test("each role's nav is just its own chat home", () => {
-  assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand"]);
-  assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator"]);
+  assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand", "/brand/settings"]);
+  assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator", "/creator/settings"]);
   assert.equal(roleEntry("brand"), "/brand/product");
   assert.equal(roleEntry("creator"), "/creator/connect");
 });
