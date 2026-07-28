@@ -15,6 +15,7 @@ from apps.api.schemas import (
     CurrentUserBrandProfileRequest,
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
+    CurrentUserWalletRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
@@ -122,6 +123,11 @@ def build_api_router(
             "createdAt": now,
             "updatedAt": now,
         }
+        if settings.agent_wallet_provision:
+            from libs.web3.agent_wallet import provision_agent_wallet
+
+            _wallet = provision_agent_wallet(agent_id, project_id=settings.firestore_project_id)
+            agent["walletPubkey"] = _wallet.pubkey
         updated = {
             **user,
             "role": role,
@@ -137,6 +143,56 @@ def build_api_router(
             data={"uid": auth_user.uid, "role": role, "agentId": agent_id},
         )
         return _ok(_current_user_payload(repository, updated))
+
+    @router.post("/me/wallet")
+    def set_current_user_wallet(
+        payload: CurrentUserWalletRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        updated = {**user, "walletAddress": payload.wallet_address, "updatedAt": _now()}
+        repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
+        _append_audit(
+            repository,
+            action="USER_WALLET_SET",
+            data={"uid": auth_user.uid, "walletAddress": payload.wallet_address},
+        )
+        result = _current_user_payload(repository, updated)
+        faucet = _fund_local_wallet(settings, payload.wallet_address)
+        if faucet is not None:
+            result["faucet"] = faucet
+        return _ok(result)
+
+    @router.get("/me/wallet/balance")
+    def get_current_user_wallet_balance(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """연결된 지갑의 SOL/USDC 잔고. 마이페이지에서 top-up 가능 여부를 눈으로 확인하는 용도."""
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        address = user.get("walletAddress")
+        if not isinstance(address, str) or not address:
+            return _ok({"connected": False})
+        try:
+            balance = Web3GatewayClient(settings.web3_gateway_base_url).wallet_balance(
+                address=address
+            )
+        except Web3GatewayError as exc:
+            # 잔고는 부가 정보다 — 게이트웨이가 죽어도 화면이 깨지지 않게 사유만 싣는다.
+            return _ok({"connected": True, "address": address, "error": str(exc)[:200]})
+        return _ok({"connected": True, **balance})
+
+    @router.get("/me/notifications")
+    def list_current_user_notifications(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        items = repository.list_raw_documents(
+            FirestorePaths.user_notifications(auth_user.uid)
+        )
+        items.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
+        return _ok({"notifications": items})
 
     @router.post("/me/brand-profile", status_code=status.HTTP_201_CREATED)
     def create_current_brand_profile(
@@ -3058,6 +3114,14 @@ def _current_user_payload(
                 "displayName": creator.get("displayName"),
                 "agentId": user.get("agentId") or user.get("creatorAgentId"),
             }
+    agent_id = user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId")
+    # 에이전트 지갑(수탁, Secret Manager) 공개키는 read-only 표시용 — docs/WALLET_AND_MONEY_FLOW §6
+    agent_wallet_pubkey = None
+    if isinstance(agent_id, str) and agent_id:
+        agent = repository.get_raw_document(FirestorePaths.agent(agent_id))
+        if agent is not None:
+            pubkey = agent.get("walletPubkey")
+            agent_wallet_pubkey = pubkey if isinstance(pubkey, str) else None
     account = {
         "uid": user.get("uid") or user.get("userId"),
         "userId": user.get("uid") or user.get("userId"),
@@ -3069,7 +3133,10 @@ def _current_user_payload(
         "status": user.get("status") or "ACTIVE",
         "brandId": user.get("brandId"),
         "creatorId": user.get("creatorId"),
-        "agentId": user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId"),
+        "agentId": agent_id,
+        # 유저 지갑(Phantom): 저장한 값을 되읽어야 새로고침 후에도 표시된다
+        "walletAddress": user.get("walletAddress"),
+        "agentWalletPubkey": agent_wallet_pubkey,
         "schemaVersion": user.get("schemaVersion") or 2,
     }
     return {
@@ -3715,6 +3782,27 @@ def _release_with_web3_gateway(
         ) from exc
 
 
+def _fund_local_wallet(settings: Settings, address: str) -> dict[str, object] | None:
+    """로컬 밸리데이터에서만: 연결한 Phantom 지갑에 SOL(+테스트 USDC)을 채운다.
+
+    유저 지갑이 딜 서명 시 에스크로에 직접 예치하려면 수수료용 SOL 과 예치용 USDC 가 필요한데,
+    로컬 체인에는 둘 다 없다. 게이트웨이 faucet 은 RPC 가 루프백이 아니면 스스로 거부하므로
+    devnet/mainnet 에서는 이 경로가 열리지 않는다.
+
+    편의 기능이라 실패해도 지갑 저장 자체를 깨뜨리지 않는다.
+    """
+    if settings.local_faucet_sol <= 0:
+        return None
+    try:
+        return Web3GatewayClient(settings.web3_gateway_base_url).airdrop_local(
+            address=address,
+            sol=settings.local_faucet_sol,
+            usdc=settings.local_faucet_usdc,
+        )
+    except Web3GatewayError as exc:
+        return {"error": str(exc)[:200]}
+
+
 def _require_confirmed_gateway_receipt(
     gateway_receipt: dict[str, object],
     *,
@@ -3776,6 +3864,33 @@ def _failed_receipt(
 
 def _payload_hash(payload: dict[str, object]) -> str:
     return sha256_prefixed(canonical_json(payload))
+
+
+def _emit_notification(
+    repository: KnotRepository,
+    *,
+    uid: str,
+    kind: str,
+    data: dict[str, object],
+) -> str:
+    """유저 알림 발행(예: BUDGET_LEFTOVER / BUDGET_SHORTFALL / DEAL_NEEDS_APPROVAL).
+
+    top-up 자금흐름(docs/WALLET_AND_MONEY_FLOW.md)에서 정산/한도 결과를 유저에게 전달.
+    users/{uid}/notifications/{id} 서브컬렉션에 저장. (트리거 wiring은 정산 라이브 시 연결)
+    """
+    notification_id = f"notif-{uuid4()}"
+    repository.save_raw_document(
+        FirestorePaths.user_notification(uid, notification_id),
+        {
+            "notificationId": notification_id,
+            "uid": uid,
+            "kind": kind,
+            "data": data,
+            "read": False,
+            "createdAt": _now(),
+        },
+    )
+    return notification_id
 
 
 def _append_audit(

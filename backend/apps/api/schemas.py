@@ -46,6 +46,10 @@ class CurrentUserRoleRequest(DomainModel):
         return normalized
 
 
+class CurrentUserWalletRequest(DomainModel):
+    wallet_address: str = Field(alias="walletAddress")
+
+
 class CurrentUserBrandProfileRequest(DomainModel):
     brand_name: str = Field(alias="brandName")
     website_url: str = Field(alias="websiteUrl")
@@ -187,6 +191,12 @@ class BrandPromotionCreateRequest(DomainModel):
     usage_rights: UsageRights = Field(alias="usageRights")
     deadline: date
     prohibited_claims: list[str] = Field(default_factory=list, alias="prohibitedClaims")
+    # 에이전트 자율 정산 위임 — auto_accept_ceiling(cap) 이내에서 사람 승인 없이 락/릴리즈.
+    # cap 하이브리드(docs/WALLET_AND_MONEY_FLOW.md §9): 이내는 자동, 초과는 정책이 막고 사람 승인.
+    # 기본 True: 이전엔 하드코딩 False 라서 앱에서 만든 프로모션은 ESCROW_LOCK 이 영구 차단됐다
+    # (POLICY_VIOLATION). 승인 0회가 제품 전제이므로 기본을 위임으로 두고, 상한은 cap 이 지킨다.
+    auto_escrow: bool = Field(default=True, alias="autoEscrow")
+    auto_release: bool = Field(default=True, alias="autoRelease")
 
     @field_validator("categories")
     @classmethod
@@ -224,8 +234,8 @@ class BrandPromotionCreateRequest(DomainModel):
             ),
             autonomy=PromotionAutonomy(
                 maxNegotiationRounds=self.maximum_rounds,
-                autoEscrow=False,
-                autoRelease=False,
+                autoEscrow=self.auto_escrow,
+                autoRelease=self.auto_release,
             ),
             status="DRAFT",
             createdAt=now,

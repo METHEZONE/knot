@@ -1,6 +1,8 @@
 import express, { type Request, type Response } from "express";
 import { loadConfig, type GatewayConfig } from "./config.js";
 import { EscrowLockService } from "./escrow.js";
+import { airdrop } from "./faucet.js";
+import { walletBalance } from "./balance.js";
 
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 
@@ -48,6 +50,18 @@ export function createApp(
       buildTime: config.buildTime,
       schemaVersion: config.schemaVersion
     });
+  });
+
+  // 지갑 잔고 조회(읽기 전용) — 마이페이지에서 연결된 지갑의 USDC 를 보여주는 데 쓴다.
+  app.get("/internal/v1/wallets/:address/balance", async (request: Request, response: Response) => {
+    const result = await walletBalance(config, firstParam(request.params.address));
+    response.status(result.statusCode).json(result.body);
+  });
+
+  // 로컬 밸리데이터 전용 faucet — 사람이 Phantom 을 연결하면 그 주소에 SOL 을 채운다.
+  app.post("/internal/v1/faucet:airdrop", async (request: Request, response: Response) => {
+    const result = await airdrop(config, request.body);
+    response.status(result.statusCode).json(result.body);
   });
 
   app.post("/internal/v1/escrows:lock", async (request: Request, response: Response) => {

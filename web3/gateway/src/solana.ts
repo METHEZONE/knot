@@ -12,8 +12,8 @@ import {
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
-  createAccount,
   getAccount,
+  getOrCreateAssociatedTokenAccount,
   mintTo
 } from "@solana/spl-token";
 import type { GatewayConfig } from "./config.js";
@@ -23,6 +23,7 @@ type LockInput = {
   escrowId: string;
   termsHash: string;
   expectedAmountBaseUnits: string;
+  agentId?: string;
   milestoneIds: string[];
   milestoneAmountsBaseUnits: string[];
 };
@@ -41,6 +42,7 @@ export type LiveLockContext = {
   agentAuthority: string;
   treasuryToken: string;
   mint: string;
+  agentId?: string;
   milestoneIds: string[];
   milestoneAmountsBaseUnits: string[];
 };
@@ -61,7 +63,7 @@ export async function submitEscrowLock(
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
   const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
   const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
-  const agent = loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
+  const agent = await loadAgentKeypair(config, input.agentId);
   const programId = new PublicKey(config.allowedProgramId);
   const configPda = pda(["config"], programId);
   const allowedMint = new PublicKey(config.allowedMint);
@@ -89,14 +91,19 @@ export async function submitEscrowLock(
   );
   const deposit = total + brandFeeTotal;
 
-  const brandToken = await createAccount(connection, brand, mint, brand.publicKey);
-  await mintTo(connection, brand, mint, brandToken, brand, deposit);
+  // funder = agent: 에이전트 토큰계정에 예산 확보(데모는 자체 민팅; 실제론 유저 top-up으로 이미 채워짐)
+  // 에이전트 지갑은 딜마다 재사용되므로 반드시 멱등하게 확보해야 한다 —
+  // createAccount 는 이미 존재하면 "Provided owner is not allowed" 로 실패해서 두 번째 락이 깨졌다.
+  const agentToken = (
+    await getOrCreateAssociatedTokenAccount(connection, brand, mint, agent.publicKey)
+  ).address;
+  await mintTo(connection, brand, mint, agentToken, brand, deposit);
   await sendIx(
     connection,
     SystemProgram.transfer({
       fromPubkey: brand.publicKey,
       toPubkey: agent.publicKey,
-      lamports: 20_000_000
+      lamports: 30_000_000
     }),
     [brand]
   );
@@ -112,8 +119,9 @@ export async function submitEscrowLock(
       brand: brand.publicKey,
       creator: creator.publicKey,
       agentAuthority: agent.publicKey,
+      funder: agent.publicKey,
       mint,
-      brandToken,
+      funderToken: agentToken,
       config: configPda,
       campaign,
       vaultAuthority,
@@ -123,7 +131,7 @@ export async function submitEscrowLock(
       autoApproveCap: BigInt(input.expectedAmountBaseUnits),
       termsHash: input.termsHash
     }),
-    [brand]
+    [agent]
   );
 
   return {
@@ -133,10 +141,13 @@ export async function submitEscrowLock(
       campaignId,
       campaign: campaign.toBase58(),
       creator: creator.publicKey.toBase58(),
-      creatorToken: (await createAccount(connection, brand, mint, creator.publicKey)).toBase58(),
+      creatorToken: (
+        await getOrCreateAssociatedTokenAccount(connection, brand, mint, creator.publicKey)
+      ).address.toBase58(),
       agentAuthority: agent.publicKey.toBase58(),
       treasuryToken: treasuryToken.toBase58(),
       mint: mint.toBase58(),
+      agentId: input.agentId,
       milestoneIds: input.milestoneIds,
       milestoneAmountsBaseUnits: input.milestoneAmountsBaseUnits
     }
@@ -155,7 +166,7 @@ export async function submitMilestoneRelease(
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
   const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
   const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
-  const agent = loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
+  const agent = await loadAgentKeypair(config, context.agentId);
   const programId = new PublicKey(config.allowedProgramId);
   const campaign = new PublicKey(context.campaign);
   await sendIx(
@@ -205,6 +216,25 @@ function loadKeypair(jsonValue: string | undefined, filePath: string | undefined
   return Keypair.fromSecretKey(Uint8Array.from(secret));
 }
 
+// per-agent 키: agentId + gcpProjectId 있으면 Secret Manager(knot-agent-key-{agentId})에서 로드,
+// 없으면 config의 고정 agent 키로 폴백. (백엔드 provision과 동일한 number[] JSON 포맷)
+async function loadAgentKeypair(config: GatewayConfig, agentId?: string): Promise<Keypair> {
+  if (agentId && config.gcpProjectId) {
+    const secret = await fetchAgentSecret(config.gcpProjectId, agentId);
+    return Keypair.fromSecretKey(Uint8Array.from(secret));
+  }
+  return loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
+}
+
+async function fetchAgentSecret(projectId: string, agentId: string): Promise<number[]> {
+  const { SecretManagerServiceClient } = await import("@google-cloud/secret-manager");
+  const client = new SecretManagerServiceClient();
+  const name = `projects/${projectId}/secrets/knot-agent-key-${agentId}/versions/latest`;
+  const [version] = await client.accessSecretVersion({ name });
+  const payload = version.payload?.data?.toString() ?? "[]";
+  return JSON.parse(payload) as number[];
+}
+
 async function sendIx(
   connection: Connection,
   instruction: TransactionInstruction,
@@ -219,8 +249,9 @@ function initializeCampaignIx(input: {
   brand: PublicKey;
   creator: PublicKey;
   agentAuthority: PublicKey;
+  funder: PublicKey;
   mint: PublicKey;
-  brandToken: PublicKey;
+  funderToken: PublicKey;
   config: PublicKey;
   campaign: PublicKey;
   vaultAuthority: PublicKey;
@@ -230,14 +261,16 @@ function initializeCampaignIx(input: {
   autoApproveCap: bigint;
   termsHash: string;
 }): TransactionInstruction {
+  // funder 모델(agent-funded): brand는 비서명 pubkey, funder(=agent)가 서명·펀딩.
   return new TransactionInstruction({
     programId: input.programId,
     keys: [
-      { pubkey: input.brand, isSigner: true, isWritable: true },
+      { pubkey: input.brand, isSigner: false, isWritable: false },
       { pubkey: input.creator, isSigner: false, isWritable: false },
       { pubkey: input.agentAuthority, isSigner: false, isWritable: false },
+      { pubkey: input.funder, isSigner: true, isWritable: true },
       { pubkey: input.mint, isSigner: false, isWritable: false },
-      { pubkey: input.brandToken, isSigner: false, isWritable: true },
+      { pubkey: input.funderToken, isSigner: false, isWritable: true },
       { pubkey: input.config, isSigner: false, isWritable: false },
       { pubkey: input.campaign, isSigner: false, isWritable: true },
       { pubkey: input.vaultAuthority, isSigner: false, isWritable: false },
