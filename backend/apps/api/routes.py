@@ -158,7 +158,11 @@ def build_api_router(
             action="USER_WALLET_SET",
             data={"uid": auth_user.uid, "walletAddress": payload.wallet_address},
         )
-        return _ok(_current_user_payload(repository, updated))
+        result = _current_user_payload(repository, updated)
+        faucet = _fund_local_wallet(settings, payload.wallet_address)
+        if faucet is not None:
+            result["faucet"] = faucet
+        return _ok(result)
 
     @router.get("/me/notifications")
     def list_current_user_notifications(
@@ -3757,6 +3761,27 @@ def _release_with_web3_gateway(
             "WEB3_GATEWAY_UNAVAILABLE",
             f"Web3 gateway release failed: {exc}",
         ) from exc
+
+
+def _fund_local_wallet(settings: Settings, address: str) -> dict[str, object] | None:
+    """로컬 밸리데이터에서만: 연결한 Phantom 지갑에 SOL(+테스트 USDC)을 채운다.
+
+    유저 지갑이 딜 서명 시 에스크로에 직접 예치하려면 수수료용 SOL 과 예치용 USDC 가 필요한데,
+    로컬 체인에는 둘 다 없다. 게이트웨이 faucet 은 RPC 가 루프백이 아니면 스스로 거부하므로
+    devnet/mainnet 에서는 이 경로가 열리지 않는다.
+
+    편의 기능이라 실패해도 지갑 저장 자체를 깨뜨리지 않는다.
+    """
+    if settings.local_faucet_sol <= 0:
+        return None
+    try:
+        return Web3GatewayClient(settings.web3_gateway_base_url).airdrop_local(
+            address=address,
+            sol=settings.local_faucet_sol,
+            usdc=settings.local_faucet_usdc,
+        )
+    except Web3GatewayError as exc:
+        return {"error": str(exc)[:200]}
 
 
 def _require_confirmed_gateway_receipt(

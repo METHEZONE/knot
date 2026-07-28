@@ -211,7 +211,10 @@ def write_env(info: dict[str, str]) -> None:
         f"KNOT_CREATOR_KEYPAIR_PATH={info['creator']}\n"
         f"KNOT_AGENT_KEYPAIR_PATH={info['agent']}\n"
         "# 게이트웨이가 agentId 기반 Secret Manager 조회를 하지 않도록 비움(현재 계정은 읽기 권한 없음)\n"
-        "GCP_PROJECT_ID=\n",
+        "GCP_PROJECT_ID=\n"
+        "# Phantom 연결 시 그 지갑에 채워줄 SOL / 테스트 USDC (루프백 RPC 에서만 동작)\n"
+        "KNOT_LOCAL_FAUCET_SOL=100\n"
+        "KNOT_LOCAL_FAUCET_USDC=2000\n",
         encoding="utf-8",
     )
     print(f"\n✅ 정산 배선 완료 → {ENV_OUT}")

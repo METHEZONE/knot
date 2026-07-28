@@ -38,6 +38,29 @@ class Web3GatewayClient:
             payload=payload,
         )
 
+    def airdrop_local(self, *, address: str, sol: int, usdc: int = 0) -> dict[str, object]:
+        """로컬 밸리데이터 전용 faucet. 게이트웨이가 루프백 RPC 가 아니면 403 으로 막는다.
+
+        지갑 연결 편의 기능이라 에스크로 경로와 달리 응답 봉투(data)가 없다.
+        """
+        try:
+            with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds) as client:
+                response = client.post(
+                    "/internal/v1/faucet:airdrop",
+                    json={"address": address, "sol": sol, "usdc": usdc},
+                )
+                response.raise_for_status()
+                body = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise Web3GatewayError(
+                f"{exc.response.status_code}: {exc.response.text[:200]}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise Web3GatewayError(str(exc)) from exc
+        if not isinstance(body, dict):
+            raise Web3GatewayError("Faucet response is not an object")
+        return cast(dict[str, object], body)
+
     def _post(
         self,
         path: str,
