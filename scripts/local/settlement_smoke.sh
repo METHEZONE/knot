@@ -49,7 +49,12 @@ else
   AGREEMENT_JSON=$(curl -fsS -X POST "$API/api/v1/match-runs/$MATCH:start-negotiation")
   AGREEMENT=$(printf '%s' "$AGREEMENT_JSON" | jqp "d['data']['agreement']['agreementId']")
   CREATOR_AGENT=$(printf '%s' "$AGREEMENT_JSON" | jqp "d['data']['agreement']['creatorAgentId']")
+  NEGOTIATION=$(printf '%s' "$AGREEMENT_JSON" | jqp "d['data']['negotiation']['negotiationId']")
+  ROUNDS=$(curl -fsS "$API/api/v1/negotiations/$NEGOTIATION/messages" | jqp "len(d['data']['messages'])")
   echo "   agreement=$AGREEMENT"
+  echo "   negotiation=$NEGOTIATION  (A2A 메시지 ${ROUNDS}건 — 에이전트끼리 이미 주고받고 끝났다)"
+  echo "   협상 화면(브랜드):     http://127.0.0.1:3000/brand/negotiations/$NEGOTIATION"
+  echo "   협상 화면(크리에이터): http://127.0.0.1:3000/creator/offers/$NEGOTIATION"
 fi
 echo "   확인 URL: http://127.0.0.1:3000/brand/agreements/$AGREEMENT"
 
