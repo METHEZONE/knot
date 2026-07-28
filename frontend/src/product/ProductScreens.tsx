@@ -1604,6 +1604,7 @@ export function CreatorBrandDetailScreen({ deal }: { deal: CreatorDeal }) {
 export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSession }) {
   const serverSession = useServerRoleSession(role);
   const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
+  const balance = useWalletBalance(roleSession.walletAddress);
   return (
     <WorkspaceShell role={role} active="me" title="마이페이지" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
@@ -1622,6 +1623,8 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <InfoBox label="User" value={roleSession.userLabel} />
             <InfoBox label="Wallet" value={roleSession.walletAddress} />
+            <InfoBox label="USDC 잔고" value={balance.usdcLabel} />
+            <InfoBox label="SOL 잔고" value={balance.solLabel} />
           </div>
         </Panel>
       </div>
@@ -2683,6 +2686,40 @@ function useServerRoleSession(role: Role): RoleSession | null {
   }, [load]);
 
   return state.type === "ready" ? state.data : null;
+}
+
+/**
+ * 연결된 지갑의 온체인 잔고(USDC/SOL). 주소가 없으면 호출하지 않는다.
+ * 게이트웨이가 죽어 있어도 화면이 깨지지 않도록 실패는 문구로만 표시한다.
+ */
+function useWalletBalance(walletAddress: string) {
+  const [state, setState] = useDashboardState<{ usdc: number | null; sol: number | null }>();
+  const connected = Boolean(walletAddress) && walletAddress !== "not-connected";
+  const load = useCallback(
+    () =>
+      loadDashboard(async () => {
+        const data = await new ProductApiClient().getMyWalletBalance();
+        return {
+          usdc: typeof data.usdc === "number" ? data.usdc : null,
+          sol: typeof data.sol === "number" ? data.sol : null,
+        };
+      }, setState),
+    [setState],
+  );
+
+  useEffect(() => {
+    if (connected) void load();
+  }, [connected, load]);
+
+  const format = (value: number | null, unit: string) =>
+    value === null ? "조회 실패" : `${value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })} ${unit}`;
+
+  if (!connected) return { usdcLabel: "지갑 미연결", solLabel: "지갑 미연결" };
+  if (state.type !== "ready") return { usdcLabel: "조회 중...", solLabel: "조회 중..." };
+  return {
+    usdcLabel: format(state.data.usdc, "USDC"),
+    solLabel: format(state.data.sol, "SOL"),
+  };
 }
 
 function fallbackRoleSession(role: Role): RoleSession {

@@ -465,6 +465,18 @@ export class ProductApiClient {
     });
   }
 
+  async getMyWalletBalance() {
+    return this.request<{
+      connected: boolean;
+      address?: string;
+      sol?: number;
+      usdc?: number;
+      mint?: string;
+      cluster?: string;
+      error?: string;
+    }>("/api/v1/me/wallet/balance");
+  }
+
   async listMyNotifications() {
     const response = await this.request<{ notifications: ApiUserNotification[] }>(
       "/api/v1/me/notifications",

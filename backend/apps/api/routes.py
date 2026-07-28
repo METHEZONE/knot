@@ -164,6 +164,25 @@ def build_api_router(
             result["faucet"] = faucet
         return _ok(result)
 
+    @router.get("/me/wallet/balance")
+    def get_current_user_wallet_balance(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """연결된 지갑의 SOL/USDC 잔고. 마이페이지에서 top-up 가능 여부를 눈으로 확인하는 용도."""
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        address = user.get("walletAddress")
+        if not isinstance(address, str) or not address:
+            return _ok({"connected": False})
+        try:
+            balance = Web3GatewayClient(settings.web3_gateway_base_url).wallet_balance(
+                address=address
+            )
+        except Web3GatewayError as exc:
+            # 잔고는 부가 정보다 — 게이트웨이가 죽어도 화면이 깨지지 않게 사유만 싣는다.
+            return _ok({"connected": True, "address": address, "error": str(exc)[:200]})
+        return _ok({"connected": True, **balance})
+
     @router.get("/me/notifications")
     def list_current_user_notifications(
         authorization: str | None = Header(default=None, alias="Authorization"),
