@@ -54,7 +54,7 @@
 | Evidence URL | VERIFIED | Negotiation Detail submits user-entered Evidence URL and verifies via Product API |
 | Milestone release | VERIFIED | Negotiation Detail releases milestone only after verified evidence and API escrow state |
 | Explorer receipt | IMPLEMENTED | UI displays API receipt signature/explorer only when returned; no fake URL generated |
-| E2E | BLOCKED | Unit/build/full backend/web3 checks passed; browser screenshot/E2E artifact blocked by missing headless browser tooling |
+| E2E | BLOCKED | Unit/build/full backend/web3 checks and unauthenticated visual screenshots passed; authenticated browser E2E requires Firebase credentials/test users |
 | Deployment | BLOCKED | Deployment requires explicit approval; no deploy/IAM/Secret/mainnet action performed |
 
 ---
@@ -66,15 +66,10 @@ No operational blocker yet. Implementation is proceeding phase-by-phase on `feat
 Current risks:
 
 ```text
-RISK: Phase 1 screenshot capture is pending.
-IMPACT: Visual reference is identified in code but not yet image-captured.
-EVIDENCE: `npm run build` generated routes; `curl` returned HTML for UI routes; local CLI has no `chromium`, `google-chrome`, or `playwright`.
-NEXT ACTION: Install/use a browser screenshot tool or capture manually before Phase 2 UI changes.
-
-RISK: Browser screenshot and E2E artifact capture is still pending.
-IMPACT: Code and build are verified, but visual regression evidence is not image-captured from this machine.
-EVIDENCE: docs/V2_BRANCH_AND_API_AUDIT.md section 4 and 5.
-NEXT ACTION: Install/use Playwright or another browser capture tool, then record screenshots for the current branch.
+RISK: Authenticated browser E2E is still pending.
+IMPACT: Code, build, backend, web3, and unauthenticated visual surfaces are verified, but full logged-in two-user browser automation has not run.
+EVIDENCE: Headless Chrome screenshots exist for landing, login, and signup; Firebase credentials/test users were not configured in this environment.
+NEXT ACTION: Run authenticated two-window E2E after providing a Firebase test environment.
 
 RISK: Live Firebase sign-in was not smoke-tested with real credentials.
 IMPACT: Static and unit verification pass, but an environment-specific Firebase configuration issue may only appear in a configured dev session.
@@ -92,7 +87,7 @@ NEXT ACTION: Request explicit approval before deployment or live devnet actions.
 ## 4. Latest Verified Build
 
 ```text
-Commit: eccc259 feat: connect agreement escrow and settlement; pending Phase 9 commit
+Commit: f33fbc1 test: remove frontend mock flow and verify build; pending screenshot evidence commit
 Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, Negotiation, Escrow, Evidence, Settlement, and mock-removal changes
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
@@ -367,9 +362,13 @@ Results:
 - Web3 gateway tests: 12 passed.
 - Web3 gateway build: passed.
 - Frontend production-code mock search: no legacy mock data source, fake Instagram generator, fake termsHash fixture, session role store, local journey, or local deal board references remain. Two `setTimeout` calls remain only to clear MyPage saved-state UI messages.
+- Headless Chrome screenshots generated:
+  - `.agent/screenshots/phase9-landing.png`
+  - `.agent/screenshots/phase9-login.png`
+  - `.agent/screenshots/phase9-signup.png`
 
 Not performed:
-- Browser E2E/screenshot capture: blocked by missing headless browser tooling.
+- Authenticated browser E2E: requires Firebase credentials/test users.
 - Deployment: requires explicit user approval.
 - Live devnet on-chain smoke: requires explicit user approval.
 

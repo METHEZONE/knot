@@ -231,4 +231,4 @@ Exit:
 - [x] Phase 6 promotion/candidates/lists.
 - [x] Phase 7 A2A detail.
 - [x] Phase 8 Agreement/Escrow/Evidence/Settlement.
-- [x] Phase 9 cleanup/build verification; browser E2E screenshots and deployment remain approval/tooling gated.
+- [x] Phase 9 cleanup/build verification and unauthenticated screenshots; authenticated E2E, deployment, and live devnet smoke remain approval/environment gated.
