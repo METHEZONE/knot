@@ -4,8 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/auth/AuthProvider";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "@/product/flow";
-import { ROLE_LABEL } from "@/product/session";
 import type { Role } from "@/product/types";
+
+const ROLE_LABEL: Record<Role, { org: string; who: string }> = {
+  brand: { org: "Brand", who: "Brand owner" },
+  creator: { org: "Creator", who: "Creator" },
+};
 
 /**
  * 상단바는 현재 창이 누구로 로그인했는지에 따라 달라진다.

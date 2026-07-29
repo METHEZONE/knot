@@ -20,7 +20,7 @@ type ProductDraft = {
 
 export function BrandProduct() {
   const router = useRouter();
-  const [url, setUrl] = useState("https://demo-skincare.example.com/spf-daily");
+  const [url, setUrl] = useState("https://glowbar.example.com/spf-daily");
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState<ProductDraft | null>(null);
   const [name, setName] = useState("");

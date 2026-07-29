@@ -54,8 +54,8 @@
 | Evidence URL | VERIFIED | Negotiation Detail submits user-entered Evidence URL and verifies via Product API |
 | Milestone release | VERIFIED | Negotiation Detail releases milestone only after verified evidence and API escrow state |
 | Explorer receipt | IMPLEMENTED | UI displays API receipt signature/explorer only when returned; no fake URL generated |
-| E2E | NOT_STARTED | |
-| Deployment | NOT_STARTED | |
+| E2E | BLOCKED | Unit/build/full backend/web3 checks passed; browser screenshot/E2E artifact blocked by missing headless browser tooling |
+| Deployment | BLOCKED | Deployment requires explicit approval; no deploy/IAM/Secret/mainnet action performed |
 
 ---
 
@@ -71,20 +71,20 @@ IMPACT: Visual reference is identified in code but not yet image-captured.
 EVIDENCE: `npm run build` generated routes; `curl` returned HTML for UI routes; local CLI has no `chromium`, `google-chrome`, or `playwright`.
 NEXT ACTION: Install/use a browser screenshot tool or capture manually before Phase 2 UI changes.
 
-RISK: UI branch uses sessionStorage/localStorage and setTimeout demo flows.
-IMPACT: Must not be treated as production business state or real success.
+RISK: Browser screenshot and E2E artifact capture is still pending.
+IMPACT: Code and build are verified, but visual regression evidence is not image-captured from this machine.
 EVIDENCE: docs/V2_BRANCH_AND_API_AUDIT.md section 4 and 5.
-NEXT ACTION: Remaining dashboard/deal/evidence fixtures are Phase 4-9 removal targets. Phase 3 onboarding saves role/profile through Product API.
+NEXT ACTION: Install/use Playwright or another browser capture tool, then record screenshots for the current branch.
 
 RISK: Live Firebase sign-in was not smoke-tested with real credentials.
 IMPACT: Static and unit verification pass, but an environment-specific Firebase configuration issue may only appear in a configured dev session.
 EVIDENCE: Frontend Firebase client/provider are ported; Product API auth tests pass; no secret or credential changes were made.
 NEXT ACTION: Run a local configured browser smoke after Phase 3 onboarding endpoints are wired.
 
-RISK: Frontend unit tests still exercise deterministic Instagram/deal fixtures.
-IMPACT: These tests are not production data-path proof and must not justify live metrics, hashes, signatures, or success states.
-EVIDENCE: `frontend/tests/product-flow.test.ts` still covers legacy journey helpers while UI onboarding no longer displays fake Instagram metrics.
-NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
+RISK: Deployment and live devnet smoke are approval-gated.
+IMPACT: Local tests verify code paths, but production Cloud Run and live devnet receipts are not updated.
+EVIDENCE: No deployment, IAM, Secret, wallet funding, or on-chain transaction command was run.
+NEXT ACTION: Request explicit approval before deployment or live devnet actions.
 ```
 
 ---
@@ -92,12 +92,12 @@ NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ## 4. Latest Verified Build
 
 ```text
-Commit: c2619a6 feat: connect real A2A conversation; pending Phase 8 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, Negotiation, Escrow, Evidence, and Settlement adapters
+Commit: eccc259 feat: connect agreement escrow and settlement; pending Phase 9 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, Negotiation, Escrow, Evidence, Settlement, and mock-removal changes
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 8 tests
+Verified at: 2026-07-30 Phase 9 tests
 Verifier: Codex
 ```
 
@@ -336,6 +336,42 @@ Devnet note:
 
 Screenshot status:
 - Pending for the same local browser tooling reason recorded in Phase 1.
+
+---
+
+## 14. Phase 9 Mock Removal, E2E, Deploy Gate
+
+Changes:
+- Removed frontend production mock data source, mock data fixtures, legacy session role store, local deal board, local journey engine, and unused chat simulation entry files.
+- Rewrote `ProductScreens.tsx` to expose only real Firebase login and Product API role selection surfaces.
+- Replaced `/dev/admin` mock overview with Product API dev-admin overview loading.
+- Removed deterministic Instagram/product generator helpers and fake frontend termsHash fixtures.
+- Frontend route tests now cover route surface and auth routing invariants rather than deterministic fixture negotiations.
+
+Commands run:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run build
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest
+cd web3/gateway && npm run test
+cd web3/gateway && npm run build
+```
+
+Results:
+- Frontend tests: 4 passed.
+- Frontend typecheck: passed.
+- Frontend production build: passed.
+- Backend full test suite: 98 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
+- Web3 gateway tests: 12 passed.
+- Web3 gateway build: passed.
+- Frontend production-code mock search: no legacy mock data source, fake Instagram generator, fake termsHash fixture, session role store, local journey, or local deal board references remain. Two `setTimeout` calls remain only to clear MyPage saved-state UI messages.
+
+Not performed:
+- Browser E2E/screenshot capture: blocked by missing headless browser tooling.
+- Deployment: requires explicit user approval.
+- Live devnet on-chain smoke: requires explicit user approval.
 
 ---
 

@@ -5,20 +5,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { readBoard, writeBoard } from "@/product/dealBoard";
-import type { CreatorSetup } from "@/product/setupStore";
+import type { BlockedCategory } from "@/product/setupStore";
 
 type CreatorDraft = {
   handle: string;
   snsUrl: string;
   creatorName: string;
+  minUsdc: number;
+  blocked: BlockedCategory[];
 };
+
+const DRAFT_KEY = "knot.draft.creator";
+type CreatorPreview = Omit<CreatorDraft, "minUsdc" | "blocked">;
 
 export function CreatorConnect() {
   const router = useRouter();
-  const [handle, setHandle] = useState("@demobeauty");
+  const [handle, setHandle] = useState("@mina.studio");
   const [creatorName, setCreatorName] = useState("Mina Studio");
-  const [found, setFound] = useState<CreatorDraft | null>(null);
+  const [found, setFound] = useState<CreatorPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const analyze = () => {
@@ -37,20 +41,10 @@ export function CreatorConnect() {
 
   const next = () => {
     if (!found) return;
-    const setup: CreatorSetup = {
-      handle: found.handle,
-      snsUrl: found.snsUrl,
-      creatorName: found.creatorName,
-      followers: 0,
-      avgViews: 0,
-      engagementRate: 0,
-      reelShare: 0,
-      toneKeywords: [],
-      capturedAt: "",
-      minUsdc: 300,
-      blocked: ["gambling", "loanCrypto", "dietSupplement"],
-    };
-    writeBoard({ creator: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
+    window.sessionStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...found, minUsdc: 300, blocked: ["gambling", "loanCrypto", "dietSupplement"] }),
+    );
     router.push("/creator/rules");
   };
 

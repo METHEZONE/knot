@@ -231,4 +231,4 @@ Exit:
 - [x] Phase 6 promotion/candidates/lists.
 - [x] Phase 7 A2A detail.
 - [x] Phase 8 Agreement/Escrow/Evidence/Settlement.
-- [ ] Phase 9 cleanup/E2E/deploy.
+- [x] Phase 9 cleanup/build verification; browser E2E screenshots and deployment remain approval/tooling gated.

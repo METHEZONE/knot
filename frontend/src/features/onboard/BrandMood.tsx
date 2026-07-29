@@ -14,8 +14,6 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "@/auth/AuthProvider";
 import { ProductApiClient } from "@/product/apiClient";
-import { readBoard, writeBoard } from "@/product/dealBoard";
-import type { BrandSetup } from "@/product/setupStore";
 
 const DRAFT_KEY = "knot.draft.product";
 
@@ -86,7 +84,7 @@ export function BrandMood() {
     if (!draft) return;
     setSaving(true);
     setError(null);
-    const setup: BrandSetup = {
+    const setup = {
       productUrl: String(draft.productUrl ?? ""),
       productName: String(draft.productName ?? "제품"),
       priceKrw: Number(draft.priceKrw ?? 0),
@@ -113,7 +111,6 @@ export function BrandMood() {
         },
         idempotencyKey("brand-profile"),
       );
-      writeBoard({ brand: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
       window.sessionStorage.removeItem(DRAFT_KEY);
       await refresh();
       router.push("/brand");

@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/auth/AuthProvider";
 import { ProductApiClient } from "@/product/apiClient";
-import { readBoard, useBoard, writeBoard } from "@/product/dealBoard";
 import {
   BLOCKED_CATEGORY_LABEL,
   type BlockedCategory,
@@ -21,18 +20,29 @@ const ALL: BlockedCategory[] = [
   "adult",
 ];
 
+const DRAFT_KEY = "knot.draft.creator";
+
+type CreatorDraft = {
+  handle: string;
+  snsUrl: string;
+  creatorName: string;
+  minUsdc: number;
+  blocked: BlockedCategory[];
+};
+
 export function CreatorRules() {
   const router = useRouter();
-  const { board, ready } = useBoard();
-  const creator = board.creator;
+  const [creator] = useState<CreatorDraft | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = window.sessionStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as CreatorDraft) : null;
+  });
 
-  // 보드에서 온 값은 폼의 초기값일 뿐이다. effect로 세우면 렌더가 연쇄되므로
-  // 값이 도착한 시점을 key로 삼아 폼을 새로 만든다(아래 CreatorRulesForm).
   useEffect(() => {
-    if (ready && !creator) router.replace("/creator/connect");
-  }, [ready, creator, router]);
+    if (!creator) router.replace("/creator/onboarding");
+  }, [creator, router]);
 
-  if (!ready || !creator) {
+  if (!creator) {
     return <div className="py-24 text-center text-muted">불러오는 중…</div>;
   }
 
@@ -43,7 +53,7 @@ function CreatorRulesForm({
   creator,
   router,
 }: {
-  creator: NonNullable<ReturnType<typeof useBoard>["board"]["creator"]>;
+  creator: CreatorDraft;
   router: ReturnType<typeof useRouter>;
 }) {
   const { refresh } = useAuth();
@@ -60,7 +70,6 @@ function CreatorRulesForm({
   const done = async () => {
     setSaving(true);
     setError(null);
-    const updated = { ...creator, minUsdc: min, blocked };
     try {
       await new ProductApiClient().createMyCreatorProfile(
         {
@@ -73,11 +82,7 @@ function CreatorRulesForm({
         },
         idempotencyKey("creator-profile"),
       );
-      writeBoard({
-        creator: updated,
-        evidenceUrl: null,
-        epoch: readBoard().epoch + 1,
-      });
+      window.sessionStorage.removeItem(DRAFT_KEY);
       await refresh();
       router.push("/creator");
     } catch (caught) {

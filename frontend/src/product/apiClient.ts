@@ -186,7 +186,7 @@ export type BrandSourceField<T> = {
 };
 
 export type BrandSourceAnalysisDraft = {
-  mode: "api" | "demo";
+  mode: "api";
   brand: {
     name: BrandSourceField<string>;
   };
