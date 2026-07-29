@@ -9,9 +9,12 @@ dependencies = [
   "pydantic>=2.11.0",
   "uvicorn[standard]>=0.35.0",
   "httpx>=0.28.0",
+  "firebase-admin>=6.5.0",
+  "google-genai>=1.0.0",
   "anchorpy>=0.20",
   "solana>=0.34",
-  "solders>=0.21"
+  "solders>=0.21",
+  "google-cloud-secret-manager>=2.20.0"
 ]
 
 [project.optional-dependencies]

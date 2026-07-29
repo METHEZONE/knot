@@ -1,3 +1,4 @@
+from libs.domain.categories import category_matches
 from libs.domain.models import AgreementTerms, CreatorProfile, Promotion
 from libs.policies.decision import PolicyDecision, Violation, allow, block
 
@@ -16,8 +17,8 @@ def validate_brand_terms(
     violations: list[Violation] = []
     base_amount = terms.compensation.base_amount_usdc
 
-    required_categories = set(promotion.constraints.required_categories or [promotion.category])
-    if not required_categories.intersection(creator.categories):
+    required_categories = promotion.constraints.required_categories or [promotion.category]
+    if not category_matches(required_categories, creator.categories):
         violations.append(
             Violation(
                 code="BRAND_REQUIRED_CATEGORY_MISSING",
@@ -26,7 +27,7 @@ def validate_brand_terms(
             )
         )
 
-    if promotion.category in creator.prohibited_industries:
+    if category_matches([promotion.category], creator.prohibited_industries):
         violations.append(
             Violation(
                 code="BRAND_CREATOR_PROHIBITED_INDUSTRY",

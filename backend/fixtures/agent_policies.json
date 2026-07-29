@@ -23,7 +23,7 @@
       "blockedIndustries": ["gambling", "cryptoTrading"],
       "maxDeliverablesPerMonth": 4,
       "minDaysToPost": 5,
-      "allowedUsageRights": ["organicOnly"],
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
       "maxRevisionRounds": 1,
       "maxExclusivityDays": 0
     },
@@ -39,6 +39,36 @@
       "maxDeliverablesPerMonth": 4,
       "minDaysToPost": 7,
       "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "agent-creator-1",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 300,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 4,
+      "minDaysToPost": 5,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "agent-creator-2",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 300,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 5,
+      "minDaysToPost": 7,
+      "allowedUsageRights": ["organicOnly"],
       "maxRevisionRounds": 1,
       "maxExclusivityDays": 0
     },

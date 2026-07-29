@@ -26,6 +26,7 @@ def subcollection_document_path(
 
 @dataclass(frozen=True)
 class FirestoreCollection:
+    users: str = "users"
     brands: str = "brands"
     creator_profiles: str = "creatorProfiles"
     agents: str = "agents"
@@ -48,13 +49,30 @@ class FirestoreCollection:
     payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
+    notifications: str = "notifications"
     idempotency_records: str = "idempotencyRecords"
+    admin_jobs: str = "adminJobs"
+    deletion_jobs: str = "deletionJobs"
 
 
 COLLECTIONS = FirestoreCollection()
 
 
 class FirestorePaths:
+    @staticmethod
+    def user(user_id: str) -> str:
+        return document_path(COLLECTIONS.users, user_id)
+
+    @staticmethod
+    def user_notifications(user_id: str) -> str:
+        return f"{document_path(COLLECTIONS.users, user_id)}/{COLLECTIONS.notifications}"
+
+    @staticmethod
+    def user_notification(user_id: str, notification_id: str) -> str:
+        return subcollection_document_path(
+            COLLECTIONS.users, user_id, COLLECTIONS.notifications, notification_id
+        )
+
     @staticmethod
     def brand(brand_id: str) -> str:
         return document_path(COLLECTIONS.brands, brand_id)
@@ -181,3 +199,11 @@ class FirestorePaths:
     @staticmethod
     def idempotency_record(key: str) -> str:
         return document_path(COLLECTIONS.idempotency_records, key)
+
+    @staticmethod
+    def admin_job(job_id: str) -> str:
+        return document_path(COLLECTIONS.admin_jobs, job_id)
+
+    @staticmethod
+    def deletion_job(job_id: str) -> str:
+        return document_path(COLLECTIONS.deletion_jobs, job_id)

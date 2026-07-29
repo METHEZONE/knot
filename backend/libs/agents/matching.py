@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from libs.domain.categories import category_matches, category_set
 from libs.domain.models import CreatorProfile, Promotion
 
 MATCHING_WEIGHTS_VERSION = "matching-v1"
@@ -70,15 +71,15 @@ def score_creator(promotion: Promotion, creator: CreatorProfile) -> MatchResult:
 
 def hard_filter_creator(promotion: Promotion, creator: CreatorProfile) -> list[str]:
     reasons: list[str] = []
-    required_categories = set(promotion.constraints.required_categories or [promotion.category])
     requested_formats = {deliverable.format for deliverable in promotion.deliverables}
     deliverable_count = sum(deliverable.count for deliverable in promotion.deliverables)
+    required_categories = promotion.constraints.required_categories or [promotion.category]
 
     if not creator.active:
         reasons.append("CREATOR_INACTIVE")
-    if not required_categories.intersection(creator.categories):
+    if not category_matches(required_categories, creator.categories):
         reasons.append("CATEGORY_MISMATCH")
-    if promotion.category in creator.prohibited_industries:
+    if category_matches([promotion.category], creator.prohibited_industries):
         reasons.append("PROHIBITED_INDUSTRY")
     if creator.rate_card.min_base_usdc > promotion.budget.max_per_creator_usdc:
         reasons.append("RATE_EXCEEDS_MAX_PER_CREATOR")
@@ -94,10 +95,12 @@ def hard_filter_creator(promotion: Promotion, creator: CreatorProfile) -> list[s
 
 
 def _category_score(promotion: Promotion, creator: CreatorProfile) -> float:
-    required_categories = set(promotion.constraints.required_categories or [promotion.category])
+    required_categories = category_set(
+        promotion.constraints.required_categories or [promotion.category]
+    )
     if not required_categories:
         return 1.0
-    matches = len(required_categories.intersection(creator.categories))
+    matches = len(required_categories.intersection(category_set(creator.categories)))
     return matches / len(required_categories)
 
 

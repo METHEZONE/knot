@@ -1,0 +1,174 @@
+[
+  {
+    "negotiationId": "negotiation-brand1-creator1",
+    "matchRunId": "match-lip-balm",
+    "matchCandidateId": "candidate-lip-balm-creator1",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-1",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-1",
+    "contextId": "context-brand1-creator1",
+    "taskId": "task-brand1-creator1",
+    "status": "AGREED",
+    "currentRound": 4,
+    "maxRounds": 3,
+    "initialAmountUsdc": 400,
+    "currentAmountUsdc": 500,
+    "resultLabel": "체결 성공",
+    "timelineSummary": [
+      "Brand Agent OFFER 400",
+      "Creator Agent COUNTER 550",
+      "Brand Agent COUNTER 500",
+      "Creator Agent ACCEPT",
+      "Agreement 생성"
+    ],
+    "currentTerms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 500
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 1,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "plan",
+          "trigger": "contentPlanApproved",
+          "releasePct": 20
+        },
+        {
+          "id": "upload",
+          "trigger": "contentLiveVerified",
+          "releasePct": 50
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 30
+        }
+      ]
+    },
+    "createdAt": "2026-07-27T01:00:00Z",
+    "updatedAt": "2026-07-27T01:30:00Z"
+  },
+  {
+    "negotiationId": "negotiation-brand1-creator2",
+    "matchRunId": "match-lip-balm",
+    "matchCandidateId": "candidate-lip-balm-creator2",
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-1",
+    "creatorAgentId": "agent-creator-2",
+    "contextId": "context-brand1-creator2",
+    "taskId": "task-brand1-creator2",
+    "status": "AGREED",
+    "currentRound": 3,
+    "maxRounds": 3,
+    "initialAmountUsdc": 300,
+    "currentAmountUsdc": 400,
+    "resultLabel": "체결 성공",
+    "currentTerms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 400
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 3,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "plan",
+          "trigger": "contentPlanSubmitted",
+          "releasePct": 25
+        },
+        {
+          "id": "upload",
+          "trigger": "contentLiveVerified",
+          "releasePct": 50
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 25
+        }
+      ]
+    },
+    "createdAt": "2026-07-27T02:00:00Z",
+    "updatedAt": "2026-07-27T02:20:00Z"
+  },
+  {
+    "negotiationId": "negotiation-brand2-creator2",
+    "matchRunId": "match-snack",
+    "matchCandidateId": "candidate-snack-creator2",
+    "promotionId": "promotion-snack",
+    "brandId": "brand-2",
+    "creatorId": "creator-2",
+    "brandAgentId": "agent-brand-2",
+    "creatorAgentId": "agent-creator-2",
+    "contextId": "context-brand2-creator2",
+    "taskId": "task-brand2-creator2",
+    "status": "AGREED",
+    "currentRound": 3,
+    "maxRounds": 3,
+    "initialAmountUsdc": 350,
+    "currentAmountUsdc": 450,
+    "resultLabel": "체결 성공",
+    "currentTerms": {
+      "compensation": {
+        "structure": "flat",
+        "baseAmountUsdc": 450
+      },
+      "deliverables": [
+        {
+          "format": "reel",
+          "count": 3,
+          "postWindow": {
+            "start": "2026-08-01",
+            "end": "2026-08-26"
+          },
+          "revisionRounds": 1
+        }
+      ],
+      "usageRights": "organicOnly",
+      "milestones": [
+        {
+          "id": "concept",
+          "trigger": "contentConceptApproved",
+          "releasePct": 22
+        },
+        {
+          "id": "review",
+          "trigger": "contentLiveVerified",
+          "releasePct": 56
+        },
+        {
+          "id": "performance",
+          "trigger": "performanceSubmitted",
+          "releasePct": 22
+        }
+      ]
+    },
+    "createdAt": "2026-07-27T03:00:00Z",
+    "updatedAt": "2026-07-27T03:20:00Z"
+  }
+]

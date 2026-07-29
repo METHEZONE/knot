@@ -3,8 +3,17 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  authConfigurationError,
+  firebaseAuthErrorMessage,
+  firebaseConfigured,
+  signInWithEmail,
+  signInWithGoogle,
+} from "@/auth/firebaseClient";
+import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import { AgentCharacter } from "@/components/AgentCharacter";
+import { ProductApiClient } from "@/product/apiClient";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import { ROLE_ENTRY, ROLE_LABEL, signIn } from "./session";
 import type {
@@ -31,49 +40,74 @@ type WorkspacePage =
   | "settings";
 
 export function LoginScreen() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState<string | null>(null);
+  const configured = firebaseConfigured();
+  const redirect = safeRedirectPath(searchParams.get("redirect"));
+
+  async function submit(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    try {
+      if (!configured) throw new Error(authConfigurationError());
+      await signInWithEmail(String(formData.get("email") ?? ""), String(formData.get("password") ?? ""));
+      const account = await new ProductApiClient().getMe();
+      router.push(postLoginPath(account.account, account.dashboardTarget, redirect));
+    } catch (caught) {
+      setError(firebaseAuthErrorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
+  async function google() {
+    setStatus("saving");
+    setError(null);
+    try {
+      if (!configured) throw new Error(authConfigurationError());
+      await signInWithGoogle();
+      const account = await new ProductApiClient().getMe();
+      router.push(postLoginPath(account.account, account.dashboardTarget, redirect));
+    } catch (caught) {
+      setError(firebaseAuthErrorMessage(caught));
+      setStatus("idle");
+    }
+  }
+
   return (
     <AuthFrame
       eyebrow="Sign in"
-      title="어느 쪽으로 로그인할까요?"
-      body="로그인은 이 창에만 적용됩니다. 창을 두 개 띄워 한쪽은 브랜드로, 다른 쪽은 크리에이터로 로그인하면 두 사용자가 서로 협상하는 걸 나란히 볼 수 있어요."
+      title="계정으로 로그인"
+      body="창을 두 개 열어 한쪽은 브랜드, 다른 쪽은 크리에이터로 로그인하면 두 Agent의 협상을 나란히 볼 수 있어요."
     >
       <Panel>
-        <div className="grid gap-4">
-          <Input label="Email" placeholder="you@company.com" type="email" />
-          <Input label="Password" placeholder="Password" type="password" />
+        <form action={submit} className="grid gap-4">
+          <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
+          <Input label="Password" name="password" placeholder="Password" type="password" minLength={6} required />
           <button
-            type="button"
-            disabled
-            className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
+            type="submit"
+            disabled={status === "saving" || !configured}
+            className="sketch-pill bg-accent px-5 py-3 text-sm font-semibold text-background disabled:opacity-50"
           >
-            이메일 로그인 · 준비 중
+            {status === "saving" ? "확인 중..." : "이메일 로그인"}
           </button>
           <button
             type="button"
-            disabled
-            className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted"
+            onClick={google}
+            disabled={status === "saving" || !configured}
+            className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted disabled:opacity-50"
           >
-            Continue with Google · Coming soon
+            Continue with Google
           </button>
-        </div>
+          {!configured && <FormError message={authConfigurationError()} />}
+          {error && <FormError message={error} />}
+        </form>
         <p className="mt-5 text-sm text-muted">
-          이메일·구글·솔라나 지갑 로그인은 이후에 붙습니다. 지금은 아래에서 역할을
-          골라 들어가세요. 계정을 새로 만들려면{" "}
+          로그인 후 Product API가 검증한 role과 onboarding 상태에 맞춰 이동합니다. 계정을 새로 만들려면{" "}
           <Link className="font-semibold text-foreground" href="/signup">회원가입</Link>.
         </p>
       </Panel>
-      <div className="grid gap-4 md:grid-cols-2">
-        <RoleSignInCard
-          role="brand"
-          title="브랜드로 로그인"
-          body="제품 제안서를 올리고, Brand Agent가 크리에이터를 찾아 협상합니다."
-        />
-        <RoleSignInCard
-          role="creator"
-          title="크리에이터로 로그인"
-          body="협상 기준만 정해두면, Creator Agent가 들어온 제안을 선별합니다."
-        />
-      </div>
     </AuthFrame>
   );
 }
@@ -848,12 +882,41 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
-function Input({ label, placeholder, type = "text" }: { label: string; placeholder: string; type?: string }) {
+function Input({
+  label,
+  placeholder,
+  type = "text",
+  name,
+  required,
+  minLength,
+}: {
+  label: string;
+  placeholder: string;
+  type?: string;
+  name?: string;
+  required?: boolean;
+  minLength?: number;
+}) {
   return (
     <label className="mt-4 block">
       <span className="text-sm font-semibold">{label}</span>
-      <input type={type} className="mt-2 w-full sketch-alt ink border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent" placeholder={placeholder} />
+      <input
+        type={type}
+        name={name}
+        required={required}
+        minLength={minLength}
+        className="mt-2 w-full sketch-alt ink border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
+        placeholder={placeholder}
+      />
     </label>
+  );
+}
+
+function FormError({ message }: { message: string }) {
+  return (
+    <div className="sketch-alt ink border border-caution/50 bg-caution/10 px-4 py-3 text-sm text-muted">
+      {message}
+    </div>
   );
 }
 

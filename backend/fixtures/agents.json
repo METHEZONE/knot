@@ -49,5 +49,63 @@
     "active": true,
     "createdAt": "2026-07-24T00:00:00Z",
     "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "agentId": "agent-brand-1",
+    "agentType": "BRAND",
+    "ownerUid": "user-brand-1",
+    "ownerId": "brand-1",
+    "ownerType": "BRAND",
+    "displayName": "루미에르 브랜드 에이전트",
+    "service": "knot-api",
+    "status": "ACTIVE",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "agentId": "agent-brand-2",
+    "agentType": "BRAND",
+    "ownerUid": "user-brand-2",
+    "ownerId": "brand-2",
+    "ownerType": "BRAND",
+    "displayName": "바삭데이 브랜드 에이전트",
+    "service": "knot-api",
+    "status": "ACTIVE",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "agentId": "agent-creator-1",
+    "agentType": "CREATOR",
+    "ownerUid": "user-creator-1",
+    "ownerId": "creator-1",
+    "ownerType": "CREATOR",
+    "displayName": "민지의 크리에이터 에이전트",
+    "service": "knot-creator-agent",
+    "a2aEndpoint": "/a2a/v1",
+    "status": "ACTIVE",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "agentId": "agent-creator-2",
+    "agentType": "CREATOR",
+    "ownerUid": "user-creator-2",
+    "ownerId": "creator-2",
+    "ownerType": "CREATOR",
+    "displayName": "하루한입 크리에이터 에이전트",
+    "service": "knot-creator-agent",
+    "a2aEndpoint": "/a2a/v1",
+    "status": "ACTIVE",
+    "demoNamespace": "knot-demo-v1",
+    "active": true,
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
   }
 ]

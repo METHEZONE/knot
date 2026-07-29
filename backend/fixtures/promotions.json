@@ -37,5 +37,103 @@
     "status": "DRAFT",
     "createdAt": "2026-07-24T00:00:00Z",
     "updatedAt": "2026-07-24T00:00:00Z"
+  },
+  {
+    "promotionId": "promotion-lip-balm",
+    "brandId": "brand-1",
+    "brandAgentId": "agent-brand-1",
+    "ownerUid": "user-brand-1",
+    "title": "글로우 립밤 크리에이터 프로모션",
+    "objective": "제품 인지도 및 콘텐츠 확보",
+    "category": "beauty",
+    "targetAudience": ["20-30대 뷰티 관심 고객"],
+    "productName": "글로우 립밤",
+    "productSnapshot": {
+      "name": "글로우 립밤",
+      "category": "beauty",
+      "summary": "데일리 립 케어와 자연스러운 광채 표현을 위한 립밤"
+    },
+    "budget": {
+      "totalUsdc": 1000,
+      "maxPerCreatorUsdc": 500
+    },
+    "deliverables": [
+      {
+        "format": "reel",
+        "count": 1
+      }
+    ],
+    "postingWindow": {
+      "start": "2026-08-26",
+      "end": "2026-08-26"
+    },
+    "usageRights": "organicOnly",
+    "constraints": {
+      "requiredDisclosures": ["ad"],
+      "prohibitedClaims": ["의학적 효능 과장"],
+      "requiredCategories": ["beauty"],
+      "prohibitedCategories": [],
+      "maxPerformancePct": 0
+    },
+    "autonomy": {
+      "maxNegotiationRounds": 3,
+      "autoEscrow": false,
+      "autoRelease": false
+    },
+    "status": "ACTIVE",
+    "activeNegotiationCount": 0,
+    "agreedCreatorCount": 2,
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
+  },
+  {
+    "promotionId": "promotion-snack",
+    "brandId": "brand-2",
+    "brandAgentId": "agent-brand-2",
+    "ownerUid": "user-brand-2",
+    "title": "허니버터 스낵 크리에이터 프로모션",
+    "objective": "제품 인지도 및 콘텐츠 확보",
+    "category": "food",
+    "targetAudience": ["라이프스타일과 푸드 리뷰 시청자"],
+    "productName": "허니버터 스낵",
+    "productSnapshot": {
+      "name": "허니버터 스낵",
+      "category": "food",
+      "summary": "가벼운 리뷰 콘텐츠에 적합한 달콤하고 바삭한 스낵"
+    },
+    "budget": {
+      "totalUsdc": 1200,
+      "maxPerCreatorUsdc": 500
+    },
+    "deliverables": [
+      {
+        "format": "reel",
+        "count": 1
+      }
+    ],
+    "postingWindow": {
+      "start": "2026-08-26",
+      "end": "2026-08-26"
+    },
+    "usageRights": "organicOnly",
+    "constraints": {
+      "requiredDisclosures": ["ad"],
+      "prohibitedClaims": ["건강 기능성 단정"],
+      "requiredCategories": ["food", "lifestyle"],
+      "prohibitedCategories": [],
+      "maxPerformancePct": 0
+    },
+    "autonomy": {
+      "maxNegotiationRounds": 3,
+      "autoEscrow": false,
+      "autoRelease": false
+    },
+    "status": "ACTIVE",
+    "activeNegotiationCount": 0,
+    "agreedCreatorCount": 1,
+    "demoNamespace": "knot-demo-v1",
+    "createdAt": "2026-07-27T00:00:00Z",
+    "updatedAt": "2026-07-27T00:00:00Z"
   }
 ]

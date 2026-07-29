@@ -25,7 +25,7 @@
     "categories": ["fitness"],
     "prohibitedIndustries": [],
     "supportedDeliverableFormats": ["reel"],
-    "allowedUsageRights": ["organicOnly"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
     "minDaysToPost": 5,
     "availableFrom": "2026-08-01",
     "monthlyCapacity": 4,
@@ -55,5 +55,51 @@
       "maxBaseUsdc": 600
     },
     "active": true
+  },
+  {
+    "creatorId": "creator-1",
+    "creatorAgentId": "agent-creator-1",
+    "ownerUid": "user-creator-1",
+    "displayName": "민지의 뷰티룸",
+    "profileImageUrl": "",
+    "categories": ["beauty"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "story"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 5,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 4,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 18,
+    "rateCard": {
+      "minBaseUsdc": 300,
+      "maxBaseUsdc": 700
+    },
+    "primaryPlatform": "Instagram",
+    "demoNamespace": "knot-demo-v1",
+    "active": false
+  },
+  {
+    "creatorId": "creator-2",
+    "creatorAgentId": "agent-creator-2",
+    "ownerUid": "user-creator-2",
+    "displayName": "하루한입",
+    "profileImageUrl": "",
+    "categories": ["lifestyle", "food"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "story", "review"],
+    "allowedUsageRights": ["organicOnly"],
+    "minDaysToPost": 7,
+    "availableFrom": "2026-08-03",
+    "monthlyCapacity": 5,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 7,
+    "rateCard": {
+      "minBaseUsdc": 300,
+      "maxBaseUsdc": 600
+    },
+    "primaryPlatform": "Instagram",
+    "demoNamespace": "knot-demo-v1",
+    "active": false
   }
 ]

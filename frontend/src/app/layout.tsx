@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
+import { AuthProvider } from "@/auth/AuthProvider";
 import { SquiggleFilters } from "@/components/SquiggleFilters";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
@@ -44,11 +45,13 @@ export default function RootLayout({
       className={`${hand.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
-        <SquiggleFilters />
-        <TopBar />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-          {children}
-        </main>
+        <AuthProvider>
+          <SquiggleFilters />
+          <TopBar />
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+            {children}
+          </main>
+        </AuthProvider>
       </body>
     </html>
   );
