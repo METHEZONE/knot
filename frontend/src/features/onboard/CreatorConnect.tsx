@@ -5,30 +5,49 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { lookupInstagram, type CreatorSetup } from "@/product/setupStore";
 import { readBoard, writeBoard } from "@/product/dealBoard";
-import { suggestedMinUsdc } from "@/product/setupStore";
+import type { CreatorSetup } from "@/product/setupStore";
+
+type CreatorDraft = {
+  handle: string;
+  snsUrl: string;
+  creatorName: string;
+};
 
 export function CreatorConnect() {
   const router = useRouter();
   const [handle, setHandle] = useState("@demobeauty");
-  const [busy, setBusy] = useState(false);
-  const [found, setFound] = useState<ReturnType<typeof lookupInstagram> | null>(null);
+  const [creatorName, setCreatorName] = useState("Mina Studio");
+  const [found, setFound] = useState<CreatorDraft | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const analyze = () => {
-    setBusy(true);
-    // 사전 수집된 결과를 불러오는 연출. 라이브 스크래핑이 아니다.
-    window.setTimeout(() => {
-      setFound(lookupInstagram(handle));
-      setBusy(false);
-    }, 1400);
+    setError(null);
+    const clean = handle.trim().replace(/^@/, "");
+    if (!clean) {
+      setError("Instagram 사용자이름을 입력해주세요.");
+      return;
+    }
+    setFound({
+      handle: `@${clean}`,
+      snsUrl: `https://instagram.com/${clean}`,
+      creatorName: creatorName.trim() || clean,
+    });
   };
 
   const next = () => {
     if (!found) return;
     const setup: CreatorSetup = {
-      ...found,
-      minUsdc: suggestedMinUsdc(found.followers, found.engagementRate),
+      handle: found.handle,
+      snsUrl: found.snsUrl,
+      creatorName: found.creatorName,
+      followers: 0,
+      avgViews: 0,
+      engagementRate: 0,
+      reelShare: 0,
+      toneKeywords: [],
+      capturedAt: "",
+      minUsdc: 300,
       blocked: ["gambling", "loanCrypto", "dietSupplement"],
     };
     writeBoard({ creator: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
@@ -55,12 +74,23 @@ export function CreatorConnect() {
         <button
           type="button"
           onClick={analyze}
-          disabled={busy}
-          className="sketch-pill bg-accent px-5 py-3 text-background disabled:opacity-50"
+          className="sketch-pill bg-accent px-5 py-3 text-background"
         >
-          {busy ? "보는 중…" : "분석"}
+          확인
         </button>
       </div>
+      <input
+        value={creatorName}
+        onChange={(e) => setCreatorName(e.target.value)}
+        placeholder="Creator display name"
+        className="sketch-alt ink border border-border-subtle bg-surface-raised px-4 py-3 text-lg outline-none"
+      />
+
+      {error ? (
+        <div className="sketch-alt ink border border-caution/50 bg-caution/10 p-4 text-sm text-muted">
+          {error}
+        </div>
+      ) : null}
 
       {found ? (
         <motion.div
@@ -71,31 +101,13 @@ export function CreatorConnect() {
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-2xl">{found.handle}</h2>
             <span className="sketch-pill ink border border-border-subtle bg-surface-raised px-2.5 py-1 font-mono text-[10px]">
-              {found.capturedAt} 수집
+              URL 확인
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="팔로워" value={found.followers.toLocaleString()} />
-            <Stat label="평균 조회" value={found.avgViews.toLocaleString()} />
-            <Stat label="참여율" value={`${(found.engagementRate * 100).toFixed(1)}%`} />
-            <Stat label="릴스 비중" value={`${found.reelShare}%`} />
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {found.toneKeywords.map((k) => (
-              <span
-                key={k}
-                className="sketch-pill ink border border-border-subtle bg-surface-raised px-2.5 py-0.5 text-sm"
-              >
-                {k}
-              </span>
-            ))}
-          </div>
-
-          <p className="mt-4 text-xs text-muted">
-            숫자는 수집된 게시물에서 계산했고, 문장만 AI가 씁니다.
-          </p>
+          <p className="mt-4 text-sm text-muted">{found.creatorName}</p>
+          <p className="mt-2 font-mono text-sm text-muted">{found.snsUrl}</p>
+          <p className="mt-4 text-xs text-muted">팔로워·조회수·참여율은 실제 수집 연동 전까지 표시하지 않습니다.</p>
 
           <button
             type="button"
@@ -106,15 +118,6 @@ export function CreatorConnect() {
           </button>
         </motion.div>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs text-muted">{label}</div>
-      <div className="font-mono text-xl">{value}</div>
     </div>
   );
 }

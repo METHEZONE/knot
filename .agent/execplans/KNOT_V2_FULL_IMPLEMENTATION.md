@@ -223,9 +223,9 @@ Exit:
 - [x] New worktree created from `origin/feat/two-user-session`.
 - [x] Documentation commit applied to `feat/knot-v2-product-flow`.
 - [x] Branch/API audit written.
-- [ ] Phase 1 UI reference screenshots.
-- [ ] Phase 2 Firebase Auth and role.
-- [ ] Phase 3 onboarding API connection.
+- [x] Phase 1 UI reference baseline captured; screenshot artifact remains pending because no headless browser is available.
+- [x] Phase 2 Firebase Auth and role.
+- [x] Phase 3 onboarding API connection.
 - [ ] Phase 4 `/mypage`.
 - [ ] Phase 5 dashboards.
 - [ ] Phase 6 promotion/candidates/lists.

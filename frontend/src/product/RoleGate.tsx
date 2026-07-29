@@ -15,8 +15,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ROLE_ENTRY } from "./session";
-import { useSessionRole } from "./useSessionRole";
+import { useAuth } from "@/auth/AuthProvider";
+import { getDashboardPath } from "@/auth/authState";
 import type { Role } from "./types";
 
 export function RoleGate({
@@ -27,23 +27,33 @@ export function RoleGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { role: active, ready } = useSessionRole();
+  const { status, context, error } = useAuth();
+  const expected = role === "brand" ? "BRAND" : "CREATOR";
+  const active = context?.account.role ?? null;
 
   useEffect(() => {
-    if (!ready) return;
-    if (active === null) {
-      router.replace("/login");
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace(`/login?redirect=/${role}`);
       return;
     }
-    if (active !== role) {
-      router.replace(ROLE_ENTRY[active]);
+    if (!active) {
+      router.replace("/signup");
+      return;
     }
-  }, [ready, active, role, router]);
+    if (active !== expected) {
+      router.replace(getDashboardPath(active) ?? "/signup");
+    }
+  }, [active, expected, role, router, status]);
 
-  if (!ready || active !== role) {
+  if (status === "loading" || active !== expected) {
     return (
       <div className="py-24 text-center text-muted">
-        {ready && active !== null ? "내 워크스페이스로 이동합니다…" : "세션 확인 중…"}
+        {status === "unauthenticated"
+          ? error ?? "로그인 화면으로 이동합니다..."
+          : active
+            ? "내 워크스페이스로 이동합니다..."
+            : "계정 확인 중..."}
       </div>
     );
   }

@@ -12,6 +12,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthProvider";
+import { ProductApiClient } from "@/product/apiClient";
 import { readBoard, writeBoard } from "@/product/dealBoard";
 import type { BrandSetup } from "@/product/setupStore";
 
@@ -35,10 +37,13 @@ const REELS: Reel[] = [
 
 export function BrandMood() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<string[]>([]);
   const [total, setTotal] = useState(2000);
   const [perDeal, setPerDeal] = useState(800);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   // 드래프트는 마운트 시점에 한 번 읽으면 되는 값이라 lazy initial state로 둔다 —
   // effect에서 setState하면 렌더가 연쇄된다.
   const [draft] = useState<Record<string, unknown> | null>(() => {
@@ -77,8 +82,10 @@ export function BrandMood() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const finish = () => {
+  const finish = async () => {
     if (!draft) return;
+    setSaving(true);
+    setError(null);
     const setup: BrandSetup = {
       productUrl: String(draft.productUrl ?? ""),
       productName: String(draft.productName ?? "제품"),
@@ -89,8 +96,31 @@ export function BrandMood() {
       totalUsdc: total,
       maxPerDealUsdc: perDeal,
     };
-    writeBoard({ brand: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
-    router.push("/brand");
+    try {
+      await new ProductApiClient().createMyBrandProfile(
+        {
+          brandName: String(draft.brandName ?? setup.productName),
+          websiteUrl: setup.productUrl,
+          categories: [setup.category],
+          targetAudience: moodTags.length ? moodTags.join(", ") : "브랜드가 직접 확정",
+          description: [
+            setup.summary,
+            `제품명: ${setup.productName}`,
+            `총 예산: ${setup.totalUsdc} USDC`,
+            `딜당 한도: ${setup.maxPerDealUsdc} USDC`,
+          ].join("\n"),
+          restrictedClaims: [],
+        },
+        idempotencyKey("brand-profile"),
+      );
+      writeBoard({ brand: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
+      window.sessionStorage.removeItem(DRAFT_KEY);
+      await refresh();
+      router.push("/brand");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSaving(false);
+    }
   };
 
   const done = index >= REELS.length;
@@ -212,12 +242,25 @@ export function BrandMood() {
           <button
             type="button"
             onClick={finish}
-            className="sketch-pill self-start bg-accent px-6 py-3 text-lg text-background"
+            disabled={saving}
+            className="sketch-pill self-start bg-accent px-6 py-3 text-lg text-background disabled:opacity-50"
           >
-            매니저 붙이기
+            {saving ? "연결 중..." : "매니저 붙이기"}
           </button>
+          {error ? (
+            <div className="sketch-alt ink border border-caution/50 bg-caution/10 p-3 text-sm text-muted">
+              {error}
+            </div>
+          ) : null}
         </motion.div>
       ) : null}
     </div>
   );
+}
+
+function idempotencyKey(action: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `frontend-${action}-${crypto.randomUUID()}`;
+  }
+  return `frontend-${action}-${Date.now()}`;
 }

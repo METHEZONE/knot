@@ -11,11 +11,12 @@ import {
   signInWithEmail,
   signInWithGoogle,
 } from "@/auth/firebaseClient";
+import { useAuth } from "@/auth/AuthProvider";
 import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { ProductApiClient } from "@/product/apiClient";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
-import { ROLE_ENTRY, ROLE_LABEL, signIn } from "./session";
+import { ROLE_ENTRY } from "./session";
 import type {
   AgentTask,
   BrandProduct,
@@ -113,6 +114,73 @@ export function LoginScreen() {
 }
 
 export function SignupScreen() {
+  const router = useRouter();
+  const { status: authStatus, context, error: authError, refresh } = useAuth();
+  const [status, setStatus] = useState<"idle" | "saving">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function chooseRole(role: Role) {
+    setStatus("saving");
+    setError(null);
+    try {
+      await new ProductApiClient().selectMyRole(
+        role === "brand" ? "BRAND" : "CREATOR",
+        idempotencyKey(`select-role-${role}`),
+      );
+      await refresh();
+      router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setStatus("idle");
+    }
+  }
+
+  if (authStatus === "loading") {
+    return (
+      <AuthFrame eyebrow="Create account" title="계정 확인 중" body="Firebase session과 Product API account context를 확인하고 있습니다.">
+        <Panel>
+          <p className="text-sm text-muted">잠시만 기다려주세요.</p>
+        </Panel>
+      </AuthFrame>
+    );
+  }
+
+  if (authStatus === "unauthenticated") {
+    return (
+      <AuthFrame eyebrow="Create account" title="먼저 로그인하세요" body="역할 선택은 Firebase Auth 계정에 연결됩니다. 로그인 후 이 화면으로 돌아와 Brand 또는 Creator 역할을 고르세요.">
+        <Panel>
+          <p className="text-sm text-muted">{authError ?? "이메일 또는 Google 계정으로 로그인할 수 있습니다."}</p>
+          <Link href="/login?redirect=%2Fsignup" className="sketch-pill mt-5 inline-flex bg-accent px-5 py-3 text-sm font-semibold text-background">
+            로그인
+          </Link>
+        </Panel>
+      </AuthFrame>
+    );
+  }
+
+  const account = context?.account;
+  if (account?.role) {
+    const onboardingHref =
+      account.role === "BRAND"
+        ? account.onboardingStatus === "COMPLETED"
+          ? "/brand"
+          : "/brand/onboarding"
+        : account.onboardingStatus === "COMPLETED"
+          ? "/creator"
+          : "/creator/onboarding";
+    return (
+      <AuthFrame eyebrow="Create account" title="역할이 이미 연결됐습니다" body="현재 계정의 role과 onboarding 상태에 맞는 화면으로 이동할 수 있습니다.">
+        <Panel>
+          <Pill>{account.role}</Pill>
+          <p className="mt-3 text-sm text-muted">상태: {account.onboardingStatus}</p>
+          <Link href={onboardingHref} className="sketch-pill mt-5 inline-flex bg-accent px-5 py-3 text-sm font-semibold text-background">
+            계속하기
+          </Link>
+        </Panel>
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame
       eyebrow="Create account"
@@ -125,14 +193,19 @@ export function SignupScreen() {
           title="브랜드로 시작"
           body="브랜드 정보와 제품 제안서를 만들고, Brand Agent가 크리에이터를 찾아 협상합니다."
           href="/signup/brand"
+          busy={status === "saving"}
+          onSelect={() => chooseRole("brand")}
         />
         <RoleChoiceCard
           role="creator"
           title="크리에이터로 시작"
           body="SNS URL을 분석하고 협상 기준을 정하면, Creator Agent가 제안을 선별합니다."
           href="/signup/creator"
+          busy={status === "saving"}
+          onSelect={() => chooseRole("creator")}
         />
       </div>
+      {error && <FormError message={error} />}
     </AuthFrame>
   );
 }
@@ -163,7 +236,6 @@ export function RoleSignupScreen({ role, session }: { role: Role; session: RoleS
         <div className="mt-6">
           <PrimaryAction
             onClick={() => {
-              signIn(role);
               router.push(nextHref);
             }}
           >
@@ -575,8 +647,20 @@ function WorkspaceShell({
   );
 }
 
-function RoleChoiceCard({ role, title, body, href }: { role: Role; title: string; body: string; href: string }) {
-  const router = useRouter();
+function RoleChoiceCard({
+  role,
+  title,
+  body,
+  busy,
+  onSelect,
+}: {
+  role: Role;
+  title: string;
+  body: string;
+  href: string;
+  busy: boolean;
+  onSelect: () => void;
+}) {
   return (
     <Panel>
       <div className="flex items-center gap-4">
@@ -589,43 +673,15 @@ function RoleChoiceCard({ role, title, body, href }: { role: Role; title: string
       <p className="mt-4 text-muted">{body}</p>
       <div className="mt-6">
         <PrimaryAction
+          disabled={busy}
           onClick={() => {
-            signIn(role);
-            router.push(href);
+            onSelect();
           }}
         >
-          선택
+          {busy ? "연결 중..." : "선택"}
         </PrimaryAction>
       </div>
     </Panel>
-  );
-}
-
-/**
- * 이 창을 해당 역할로 로그인시킨다. 세션은 창 단위(sessionStorage)라서, 창을
- * 두 개 띄워 한쪽은 브랜드로 한쪽은 크리에이터로 로그인하면 두 유저가 된다.
- */
-function RoleSignInCard({ role, title, body }: { role: Role; title: string; body: string }) {
-  const router = useRouter();
-  const label = ROLE_LABEL[role];
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        signIn(role);
-        router.push(ROLE_ENTRY[role]);
-      }}
-      className="sketch ink block w-full border border-border-subtle bg-surface p-5 text-left hover:bg-surface-raised"
-    >
-      <div className="flex items-center gap-3">
-        <AgentCharacter agentId={`${role}-jump-agent`} side={role} category="wellness" pose="idle" size={64} />
-        <div>
-          <Pill>{label.org}</Pill>
-          <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
-        </div>
-      </div>
-      <p className="mt-3 text-sm text-muted">{body}</p>
-    </button>
   );
 }
 
@@ -920,6 +976,13 @@ function FormError({ message }: { message: string }) {
   );
 }
 
+function idempotencyKey(action: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `frontend-${action}-${crypto.randomUUID()}`;
+  }
+  return `frontend-${action}-${Date.now()}`;
+}
+
 function TextArea({ label, placeholder }: { label: string; placeholder: string }) {
   return (
     <label className="mt-4 block">
@@ -976,9 +1039,22 @@ function Pill({ children }: { children: ReactNode }) {
   return <span className="sketch-pill ink inline-flex border border-border-subtle bg-surface-raised px-3 py-1 font-mono text-xs uppercase text-muted">{children}</span>;
 }
 
-function PrimaryAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+function PrimaryAction({
+  onClick,
+  children,
+  disabled,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" onClick={onClick} className="inline-flex sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex sketch-pill bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+    >
       {children}
     </button>
   );

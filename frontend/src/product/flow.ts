@@ -4,10 +4,15 @@ import type { Role } from "./types";
 export const appRoutes = [
   "/",
   "/login",
+  "/signup",
+  "/onboarding/creator",
+  "/creator/onboarding",
   "/creator/connect",
   "/creator/rules",
   "/creator",
   "/creator/settings",
+  "/onboarding/brand",
+  "/brand/onboarding",
   "/brand/product",
   "/brand/mood",
   "/brand",
@@ -17,7 +22,7 @@ export const appRoutes = [
 
 /** 로그인 직후 각 역할이 시작하는 곳. */
 export function roleEntry(role: Role) {
-  return role === "brand" ? "/brand/product" : "/creator/connect";
+  return role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
 }
 
 /** 상단바에 노출할 것 — 홈(채팅창) 하나면 충분하다. */

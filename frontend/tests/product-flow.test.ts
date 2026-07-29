@@ -27,14 +27,19 @@ const brand = (maxPerDealUsdc: number): BrandSetup => ({
   maxPerDealUsdc,
 });
 
-test("route surface is the seven-screen journey (docs/24)", () => {
+test("route surface includes v2 onboarding entries and UI reference routes", () => {
   assert.deepEqual(appRoutes, [
     "/",
     "/login",
+    "/signup",
+    "/onboarding/creator",
+    "/creator/onboarding",
     "/creator/connect",
     "/creator/rules",
     "/creator",
     "/creator/settings",
+    "/onboarding/brand",
+    "/brand/onboarding",
     "/brand/product",
     "/brand/mood",
     "/brand",
@@ -46,8 +51,8 @@ test("route surface is the seven-screen journey (docs/24)", () => {
 test("each role's nav is just its own chat home", () => {
   assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand", "/brand/settings"]);
   assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator", "/creator/settings"]);
-  assert.equal(roleEntry("brand"), "/brand/product");
-  assert.equal(roleEntry("creator"), "/creator/connect");
+  assert.equal(roleEntry("brand"), "/brand/onboarding");
+  assert.equal(roleEntry("creator"), "/creator/onboarding");
 });
 
 test("instagram lookup is deterministic and carries a capture date", () => {

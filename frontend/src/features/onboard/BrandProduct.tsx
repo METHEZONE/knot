@@ -5,25 +5,40 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { extractProduct } from "@/product/setupStore";
+import { ProductApiClient, type BrandSourceAnalysisDraft } from "@/product/apiClient";
 
 const DRAFT_KEY = "knot.draft.product";
+
+type ProductDraft = {
+  brandName: string;
+  productName: string;
+  productUrl: string;
+  priceKrw: number | null;
+  summary: string;
+  category: string;
+};
 
 export function BrandProduct() {
   const router = useRouter();
   const [url, setUrl] = useState("https://demo-skincare.example.com/spf-daily");
   const [busy, setBusy] = useState(false);
-  const [found, setFound] = useState<ReturnType<typeof extractProduct> | null>(null);
+  const [found, setFound] = useState<ProductDraft | null>(null);
   const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const extract = () => {
+  const extract = async () => {
     setBusy(true);
-    window.setTimeout(() => {
-      const p = extractProduct(url);
-      setFound(p);
-      setName(p.productName);
+    setError(null);
+    try {
+      const draft = await new ProductApiClient().analyzeBrandSource({ productUrl: url });
+      const product = toProductDraft(draft, url);
+      setFound(product);
+      setName(product.productName);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
       setBusy(false);
-    }, 1200);
+    }
   };
 
   const next = () => {
@@ -61,6 +76,12 @@ export function BrandProduct() {
         </button>
       </div>
 
+      {error ? (
+        <div className="sketch-alt ink border border-caution/50 bg-caution/10 p-4 text-sm text-muted">
+          {error}
+        </div>
+      ) : null}
+
       {found ? (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -78,7 +99,9 @@ export function BrandProduct() {
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs text-muted">가격</div>
-              <div className="font-mono text-lg">{found.priceKrw.toLocaleString()}원</div>
+              <div className="font-mono text-lg">
+                {found.priceKrw ? `${found.priceKrw.toLocaleString()}원` : "직접 확인"}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted">카테고리</div>
@@ -87,7 +110,7 @@ export function BrandProduct() {
           </div>
           <p className="mt-3 text-sm text-muted">{found.summary}</p>
           <p className="mt-3 text-xs text-muted">
-            안 고쳐도 그대로 넘어갈 수 있어요.
+            API가 출처와 신뢰도를 붙인 초안입니다. 제품명은 저장 전에 직접 고칠 수 있어요.
           </p>
           <button
             type="button"
@@ -100,4 +123,15 @@ export function BrandProduct() {
       ) : null}
     </div>
   );
+}
+
+function toProductDraft(draft: BrandSourceAnalysisDraft, productUrl: string): ProductDraft {
+  return {
+    brandName: draft.brand.name.value,
+    productName: draft.product.name.value,
+    productUrl,
+    priceKrw: null,
+    summary: draft.product.summary.value,
+    category: draft.product.category.value,
+  };
 }

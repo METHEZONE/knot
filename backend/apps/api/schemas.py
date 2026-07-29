@@ -101,6 +101,22 @@ class CurrentUserCreatorProfileRequest(DomainModel):
         return categories
 
 
+class BrandSourceAnalysisRequest(DomainModel):
+    website_url: str | None = Field(default=None, alias="websiteUrl")
+    product_url: str | None = Field(default=None, alias="productUrl")
+    pdf_file_ref: str | None = Field(default=None, alias="pdfFileRef")
+
+    @field_validator("website_url", "product_url")
+    @classmethod
+    def validate_source_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        cleaned = value.strip()
+        if not cleaned.startswith(("https://", "http://")):
+            raise ValueError("source URL must use http or https")
+        return cleaned
+
+
 class BrandOnboardingRequest(DomainModel):
     user_id: str | None = Field(default=None, alias="userId")
     brand_name: str = Field(alias="brandName")

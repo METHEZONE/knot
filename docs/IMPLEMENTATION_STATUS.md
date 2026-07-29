@@ -35,9 +35,9 @@
 | Feature | Status | Test/Commit/URL |
 |---|---|---|
 | Firebase per-tab login | VERIFIED | Frontend `npm run typecheck`, `npm run test`, `npm run build`; backend `pytest tests/test_api_auth.py tests/test_health_apps.py` |
-| Brand onboarding | NOT_STARTED | |
-| Creator onboarding | NOT_STARTED | |
-| Manager connect | NOT_STARTED | |
+| Brand onboarding | VERIFIED | Frontend `npm run typecheck`, `npm run test`, `npm run build`; backend `pytest tests/test_api_auth.py tests/test_api_onboarding.py` |
+| Creator onboarding | VERIFIED | Frontend `npm run typecheck`, `npm run test`, `npm run build`; backend `pytest tests/test_api_auth.py tests/test_api_onboarding.py` |
+| Manager connect | VERIFIED | `/me/role`, `/me/brand-profile`, `/me/creator-profile` create/activate role Agent without starting negotiation; Creator receiving offers defaults OFF |
 | MyPage unified | NOT_STARTED | |
 | Creator dashboard | NOT_STARTED | |
 | Brand dashboard | NOT_STARTED | |
@@ -74,12 +74,17 @@ NEXT ACTION: Install/use a browser screenshot tool or capture manually before Ph
 RISK: UI branch uses sessionStorage/localStorage and setTimeout demo flows.
 IMPACT: Must not be treated as production business state or real success.
 EVIDENCE: docs/V2_BRANCH_AND_API_AUDIT.md section 4 and 5.
-NEXT ACTION: Replace with Product API ViewModels during Phases 2-4.
+NEXT ACTION: Remaining dashboard/deal/evidence fixtures are Phase 4-9 removal targets. Phase 3 onboarding saves role/profile through Product API.
 
 RISK: Live Firebase sign-in was not smoke-tested with real credentials.
 IMPACT: Static and unit verification pass, but an environment-specific Firebase configuration issue may only appear in a configured dev session.
 EVIDENCE: Frontend Firebase client/provider are ported; Product API auth tests pass; no secret or credential changes were made.
 NEXT ACTION: Run a local configured browser smoke after Phase 3 onboarding endpoints are wired.
+
+RISK: Frontend unit tests still exercise deterministic Instagram/deal fixtures.
+IMPACT: These tests are not production data-path proof and must not justify live metrics, hashes, signatures, or success states.
+EVIDENCE: `frontend/tests/product-flow.test.ts` still covers legacy journey helpers while UI onboarding no longer displays fake Instagram metrics.
+NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ```
 
 ---
@@ -87,12 +92,12 @@ NEXT ACTION: Run a local configured browser smoke after Phase 3 onboarding endpo
 ## 4. Latest Verified Build
 
 ```text
-Commit: pending Phase 2 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API adapter changes
+Commit: b62f0b6 feat: port firebase auth and stable service baseline; pending Phase 3 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding adapter changes
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 2 tests
+Verified at: 2026-07-30 Phase 3 tests
 Verifier: Codex
 ```
 
@@ -151,6 +156,38 @@ Warnings:
 - `npm install` left existing audit findings: frontend 12 high severity findings; web3 gateway 15 findings.
 - Web3 Solana packages warn that the current Node v20.13.0 is below their preferred `>=20.18.0`.
 - No deployment, secret mutation, wallet funding, or on-chain transaction was performed.
+
+---
+
+## 8. Phase 3 Two-Window Onboarding API Connection
+
+Changes:
+- `/signup` now renders actual role selection for authenticated Firebase users instead of redirecting back to `/login`.
+- Role selection calls `POST /api/v1/me/role` with an idempotency key, refreshes Auth context, and routes to `/brand/onboarding` or `/creator/onboarding`.
+- `/brand/**` and `/creator/**` layout guards now use Firebase/Product API account context instead of `sessionStorage`.
+- Added v2 onboarding routes: `/brand/onboarding`, `/creator/onboarding`, `/onboarding/brand`, `/onboarding/creator`.
+- Brand `읽어오기` calls `POST /api/v1/onboarding/brand/analyze-source`; no successful local fallback is used.
+- Brand `매니저 붙이기` calls `POST /api/v1/me/brand-profile`.
+- Creator onboarding no longer displays deterministic fake Instagram metrics.
+- Creator `매니저 붙이기` calls `POST /api/v1/me/creator-profile`; API stores `receivingOffers=false`, `acceptingOffers=false`, `availability=OFFLINE`.
+
+Commands run:
+
+```text
+cd frontend && npm run typecheck
+cd frontend && npm run test
+cd frontend && npm run build
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_onboarding.py
+```
+
+Results:
+- Frontend typecheck: passed.
+- Frontend tests: 8 passed.
+- Frontend production build: passed; 19 app routes generated including `/brand/onboarding`, `/creator/onboarding`, `/onboarding/brand`, `/onboarding/creator`.
+- Backend auth/onboarding tests: 9 passed, 1 Starlette/httpx deprecation warning.
+
+Screenshot status:
+- Pending for the same local browser tooling reason recorded in Phase 1.
 
 ---
 

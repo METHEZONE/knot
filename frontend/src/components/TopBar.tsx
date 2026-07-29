@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/auth/AuthProvider";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "@/product/flow";
-import { ROLE_LABEL, signOut } from "@/product/session";
-import { useSessionRole } from "@/product/useSessionRole";
+import { ROLE_LABEL } from "@/product/session";
+import type { Role } from "@/product/types";
 
 /**
  * 상단바는 현재 창이 누구로 로그인했는지에 따라 달라진다.
@@ -17,14 +18,22 @@ import { useSessionRole } from "@/product/useSessionRole";
 export function TopBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { role, ready } = useSessionRole();
+  const { status, context, logout } = useAuth();
+  const role = toUiRole(context?.account.role);
+  const ready = status !== "loading";
 
   const workspace = role === "brand" ? brandWorkspaceRoutes : creatorWorkspaceRoutes;
+  const homeHref =
+    role && context?.account.onboardingStatus !== "COMPLETED"
+      ? `/${role}/onboarding`
+      : role
+        ? `/${role}`
+        : "/";
 
   return (
     <header className="sticky top-0 z-50 border-b border-border-subtle bg-background/85 backdrop-blur">
       <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2">
-        <Link href={role ? `/${role}/onboarding` : "/"} className="flex items-baseline gap-2">
+        <Link href={homeHref} className="flex items-baseline gap-2">
           <span className="display text-2xl leading-none">knot</span>
           <span className="hidden text-sm text-muted sm:inline">
             크리에이터 × 브랜드, 에이전트끼리
@@ -59,8 +68,8 @@ export function TopBar() {
             <div className="flex items-center gap-2 text-sm">
               <button
                 type="button"
-                onClick={() => {
-                  signOut();
+                onClick={async () => {
+                  await logout();
                   router.push("/login");
                 }}
                 className="text-muted hover:text-foreground"
@@ -85,4 +94,10 @@ export function TopBar() {
       </div>
     </header>
   );
+}
+
+function toUiRole(role: "BRAND" | "CREATOR" | null | undefined): Role | null {
+  if (role === "BRAND") return "brand";
+  if (role === "CREATOR") return "creator";
+  return null;
 }

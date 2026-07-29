@@ -120,6 +120,71 @@ def test_brand_profile_uses_verified_uid_as_owner() -> None:
     assert stored_brand["ownerUid"] == "brand-owner"
 
 
+def test_brand_source_analysis_requires_brand_role_and_returns_provenance() -> None:
+    client, _ = client_and_repository()
+    headers = auth_headers(uid="brand-source-owner", email="brand-source@example.com")
+    client.get("/api/v1/me", headers=headers)
+
+    unauthorized = client.post(
+        "/api/v1/onboarding/brand/analyze-source",
+        headers=headers,
+        json={"productUrl": "https://demo-skincare.example.com/spf-daily"},
+    )
+    assert unauthorized.status_code == 403
+
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "brand-source-role-key"},
+        json={"role": "BRAND"},
+    )
+    response = client.post(
+        "/api/v1/onboarding/brand/analyze-source",
+        headers=headers,
+        json={"productUrl": "https://demo-skincare.example.com/spf-daily"},
+    )
+
+    assert response.status_code == 200
+    draft = response.json()["data"]
+    assert draft["mode"] == "api"
+    assert draft["product"]["name"]["value"] == "Spf Daily"
+    assert draft["product"]["name"]["source"] == "USER_INPUT"
+    assert "price" not in draft["product"]
+
+
+def test_creator_profile_starts_with_receiving_offers_disabled() -> None:
+    client, repository = client_and_repository()
+    headers = auth_headers(uid="creator-owner", email="creator@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-role-key"},
+        json={"role": "CREATOR"},
+    )
+
+    response = client.post(
+        "/api/v1/me/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-profile-key"},
+        json={
+            "creatorName": "Creator One",
+            "snsUrl": "https://instagram.com/creator.one",
+            "categories": ["beauty"],
+            "minimumUsdc": 500,
+            "blockedDomains": ["담배"],
+            "preferredContent": ["Instagram Reels"],
+        },
+    )
+
+    assert response.status_code == 201
+    creator = response.json()["data"]["creator"]
+    stored_creator = repository.get_raw_document(
+        FirestorePaths.creator_profile(creator["creatorId"])
+    )
+    assert stored_creator is not None
+    assert stored_creator["receivingOffers"] is False
+    assert stored_creator["acceptingOffers"] is False
+    assert stored_creator["availability"] == "OFFLINE"
+
+
 def test_creator_profile_rejects_wrong_role() -> None:
     client, _ = client_and_repository()
     headers = auth_headers(uid="brand-owner", email="brand@example.com")

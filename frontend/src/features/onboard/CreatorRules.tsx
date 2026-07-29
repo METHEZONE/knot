@@ -4,10 +4,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/auth/AuthProvider";
+import { ProductApiClient } from "@/product/apiClient";
 import { readBoard, useBoard, writeBoard } from "@/product/dealBoard";
 import {
   BLOCKED_CATEGORY_LABEL,
-  suggestedMinUsdc,
   type BlockedCategory,
 } from "@/product/setupStore";
 
@@ -45,21 +46,44 @@ function CreatorRulesForm({
   creator: NonNullable<ReturnType<typeof useBoard>["board"]["creator"]>;
   router: ReturnType<typeof useRouter>;
 }) {
+  const { refresh } = useAuth();
   const [min, setMin] = useState(
-    creator.minUsdc || suggestedMinUsdc(creator.followers, creator.engagementRate),
+    creator.minUsdc || 300,
   );
   const [blocked, setBlocked] = useState<BlockedCategory[]>(creator.blocked);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggle = (c: BlockedCategory) =>
     setBlocked((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
-  const done = () => {
-    writeBoard({
-      creator: { ...creator, minUsdc: min, blocked },
-      evidenceUrl: null,
-      epoch: readBoard().epoch + 1,
-    });
-    router.push("/creator");
+  const done = async () => {
+    setSaving(true);
+    setError(null);
+    const updated = { ...creator, minUsdc: min, blocked };
+    try {
+      await new ProductApiClient().createMyCreatorProfile(
+        {
+          creatorName: creator.creatorName ?? creator.handle.replace(/^@/, ""),
+          snsUrl: creator.snsUrl ?? `https://instagram.com/${creator.handle.replace(/^@/, "")}`,
+          categories: ["beauty"],
+          minimumUsdc: min,
+          blockedDomains: blocked.map((item) => BLOCKED_CATEGORY_LABEL[item]),
+          preferredContent: ["Instagram Reels"],
+        },
+        idempotencyKey("creator-profile"),
+      );
+      writeBoard({
+        creator: updated,
+        evidenceUrl: null,
+        epoch: readBoard().epoch + 1,
+      });
+      await refresh();
+      router.push("/creator");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSaving(false);
+    }
   };
 
   return (
@@ -114,10 +138,23 @@ function CreatorRulesForm({
       <button
         type="button"
         onClick={done}
-        className="sketch-pill self-start bg-accent px-6 py-3 text-lg text-background"
+        disabled={saving}
+        className="sketch-pill self-start bg-accent px-6 py-3 text-lg text-background disabled:opacity-50"
       >
-        매니저 붙이기
+        {saving ? "연결 중..." : "매니저 붙이기"}
       </button>
+      {error ? (
+        <div className="sketch-alt ink border border-caution/50 bg-caution/10 p-3 text-sm text-muted">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function idempotencyKey(action: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `frontend-${action}-${crypto.randomUUID()}`;
+  }
+  return `frontend-${action}-${Date.now()}`;
 }

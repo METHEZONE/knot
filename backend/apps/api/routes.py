@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from subprocess import TimeoutExpired
 from typing import cast
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Header, HTTPException, status
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 from apps.api.schemas import (
     BrandOnboardingRequest,
     BrandPromotionCreateRequest,
+    BrandSourceAnalysisRequest,
     CreatorCriteriaRequest,
     CreatorOnboardingRequest,
     CurrentUserBrandProfileRequest,
@@ -194,6 +196,28 @@ def build_api_router(
         items.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
         return _ok({"notifications": items})
 
+    @router.post("/onboarding/brand/analyze-source")
+    def analyze_current_brand_source(
+        payload: BrandSourceAnalysisRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        _require_role(repository, auth_user, "BRAND")
+        source_url = payload.product_url or payload.website_url
+        if not source_url:
+            raise _problem(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "VALIDATION_ERROR",
+                "websiteUrl or productUrl is required.",
+            )
+        draft = _brand_source_analysis_draft(source_url)
+        _append_audit(
+            repository,
+            action="BRAND_SOURCE_ANALYZED",
+            data={"uid": auth_user.uid, "sourceUrl": source_url},
+        )
+        return _ok(draft)
+
     @router.post("/me/brand-profile", status_code=status.HTTP_201_CREATED)
     def create_current_brand_profile(
         payload: CurrentUserBrandProfileRequest,
@@ -336,7 +360,9 @@ def build_api_router(
                 "maximum": max(payload.minimum_usdc, 800),
             },
             "walletAddress": payload.wallet_address,
-            "receivingOffers": True,
+            "receivingOffers": False,
+            "availability": "OFFLINE",
+            "acceptingOffers": False,
             "status": "ACTIVE",
             "createdAt": now,
             "updatedAt": now,
@@ -3163,6 +3189,57 @@ def _dashboard_target(account: dict[str, object]) -> str:
     if role == "CREATOR":
         return "/creator/onboarding" if status_value != "COMPLETED" else "/creator"
     return "/signup"
+
+
+def _brand_source_analysis_draft(source_url: str) -> dict[str, object]:
+    parsed = urlparse(source_url)
+    host = parsed.netloc.removeprefix("www.") or "brand"
+    path_name = parsed.path.rstrip("/").split("/")[-1].replace("-", " ").replace("_", " ")
+    product_name = path_name.title() if path_name else "제품명 입력 필요"
+    brand_name = host.split(".")[0].replace("-", " ").title()
+    category = _infer_brand_category(source_url)
+    return {
+        "mode": "api",
+        "brand": {
+            "name": _source_field(brand_name, "USER_INPUT", 0.7),
+        },
+        "product": {
+            "name": _source_field(product_name, "USER_INPUT", 0.6),
+            "category": _source_field(category, "AI_INFERENCE", 0.45),
+            "summary": _source_field(
+                "URL에서 확인한 출처를 바탕으로 사람이 검수해야 하는 제품 초안입니다.",
+                "AI_INFERENCE",
+                0.4,
+            ),
+            "features": [
+                _source_field("제품 상세 페이지 검수 필요", "USER_INPUT", 0.5),
+            ],
+            "targetAudience": [
+                _source_field("브랜드가 다음 단계에서 직접 확정", "USER_INPUT", 0.5),
+            ],
+            "keywords": [_source_field(category, "AI_INFERENCE", 0.45)],
+        },
+        "recommendations": {
+            "objectives": ["인지도", "제품 리뷰", "전환 전 콘텐츠"],
+            "channels": ["Instagram Reels"],
+            "deliverables": ["shortFormVideo"],
+        },
+    }
+
+
+def _source_field(value: object, source: str, confidence: float) -> dict[str, object]:
+    return {"value": value, "source": source, "confidence": confidence}
+
+
+def _infer_brand_category(source_url: str) -> str:
+    lowered = source_url.lower()
+    if any(token in lowered for token in ("skin", "beauty", "cosmetic", "spf")):
+        return "beauty"
+    if any(token in lowered for token in ("food", "snack", "drink")):
+        return "food"
+    if any(token in lowered for token in ("fashion", "wear", "apparel")):
+        return "fashion"
+    return "lifestyle"
 
 
 def _account_label(user: dict[str, object]) -> str:

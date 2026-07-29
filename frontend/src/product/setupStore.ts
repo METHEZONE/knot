@@ -24,6 +24,8 @@ export const BLOCKED_CATEGORY_LABEL: Record<BlockedCategory, string> = {
 
 export type CreatorSetup = {
   handle: string;
+  snsUrl?: string;
+  creatorName?: string;
   followers: number;
   avgViews: number;
   engagementRate: number;
