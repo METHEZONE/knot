@@ -28,9 +28,7 @@ export function RoleDashboard({ role }: { role: Role }) {
     const request = role === "brand" ? client.getBrandDashboard() : client.getCreatorDashboard();
     setState((current) => current.status === "ready" ? current : { status: "loading", data: null, error: null });
     request
-      .then((data) => {
-        setState({ status: "ready", data, error: null });
-      })
+      .then((data) => setState({ status: "ready", data, error: null }))
       .catch((caught) => {
         setState({
           status: "error",
@@ -45,11 +43,11 @@ export function RoleDashboard({ role }: { role: Role }) {
   }, [loadDashboard]);
 
   if (state.status === "loading") {
-    return <DashboardShell role={role} title="Dashboard"><EmptyState text="Dashboard를 불러오는 중..." /></DashboardShell>;
+    return <DashboardShell role={role}><EmptyState text="Dashboard를 불러오는 중..." /></DashboardShell>;
   }
 
   if (state.status === "error") {
-    return <DashboardShell role={role} title="Dashboard"><EmptyState text={state.error} /></DashboardShell>;
+    return <DashboardShell role={role}><EmptyState text={state.error} /></DashboardShell>;
   }
 
   return role === "brand" ? (
@@ -60,212 +58,214 @@ export function RoleDashboard({ role }: { role: Role }) {
 }
 
 function BrandDashboardView({ dashboard }: { dashboard: BrandDashboard }) {
-  const brandName = text(dashboard.brand.displayName) || text(dashboard.brand.name) || "Brand";
+  const results = brandResults(dashboard);
+  const settlementHref = firstResultHref(results);
+
   return (
-    <DashboardShell role="brand" title="Brand Dashboard">
-      <ManagerCard role="brand" title="Glow Agent" body={`${brandName}의 제안 준비와 협상 상태를 관리합니다.`} status="ACTIVE" />
-      <SummaryGrid
+    <DashboardShell role="brand">
+      <ActionGrid
         items={[
-          ["진행 중 Promotion", String(dashboard.summary.activePromotions)],
-          ["협상 중", String(dashboard.summary.negotiationsInProgress)],
-          ["Agreement", String(dashboard.summary.agreements)],
-          ["Escrow 잠김", formatUsdcBaseUnits(dashboard.summary.lockedEscrowBaseUnits)],
+          {
+            title: "정산하기",
+            body: settlementHref ? "합의된 건의 Escrow, Evidence, Settlement를 확인합니다." : "정산 가능한 에이전트 결과가 아직 없습니다.",
+            href: settlementHref ?? "/brand/agent",
+            disabled: !settlementHref,
+          },
+          {
+            title: "에이전트 켜기",
+            body: "Glow Agent 대화방으로 이동해 후보 탐색과 협상 상태를 봅니다.",
+            href: "/brand/agent",
+            primary: true,
+          },
+          {
+            title: "에이전트 결과",
+            body: `${results.length}건의 협상 결과를 확인합니다.`,
+            href: settlementHref ?? "/brand/promotions/new",
+          },
         ]}
       />
-      <ActionPanel
-        title="해야 할 일"
-        body="Promotion을 만들고 Creator 후보를 탐색합니다. 협상 시작은 후보 확인 후 명시적으로 진행합니다."
-        action={<Link href="/brand/promotions/new" className="sketch-pill inline-flex bg-accent px-4 py-2 text-sm text-background">협찬 제안하기</Link>}
-      />
-      <ListSection title="진행 중 목록" empty="진행 중인 Promotion이 없습니다.">
-        {dashboard.activePromotions.map((promotion) => (
-          <PromotionRow key={promotion.promotionId} promotion={promotion} />
-        ))}
-      </ListSection>
-      <ActivitySection activity={dashboard.recentAgentActivity} />
+      <ResultSection title="에이전트 결과" empty="아직 협상 결과가 없습니다. 에이전트를 켜서 Promotion을 시작하세요.">
+        {results.map((item) => <ResultRow key={item.key} item={item} />)}
+      </ResultSection>
     </DashboardShell>
   );
 }
 
 function CreatorDashboardView({ dashboard, onReload }: { dashboard: CreatorDashboard; onReload: () => void }) {
-  const creatorName = text(dashboard.creator.displayName) || "Creator";
-  const accepting = dashboard.creator.acceptingOffers === true || dashboard.creator.receivingOffers === true;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const results = creatorResults(dashboard);
+  const settlementHref = firstResultHref(results);
+  const accepting = dashboard.creator.acceptingOffers === true || dashboard.creator.receivingOffers === true;
 
-  async function toggleAvailability() {
+  async function enableAgent() {
     setSaving(true);
     setError(null);
     try {
-      await new ProductApiClient().updateCreatorAvailability(!accepting);
-      onReload();
+      if (!accepting) {
+        await new ProductApiClient().updateCreatorAvailability(true);
+        onReload();
+      }
+      window.location.assign("/creator/agent");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
       setSaving(false);
     }
   }
 
   return (
-    <DashboardShell role="creator" title="Creator Dashboard">
-      <ManagerCard role="creator" title="Mina Agent" body={`${creatorName}의 신규 제안과 정산 상태를 관리합니다.`} status={accepting ? "RECEIVING" : "OFFLINE"} />
-      <SummaryGrid
+    <DashboardShell role="creator">
+      <ActionGrid
         items={[
-          ["새 제안", String(dashboard.summary.newOffers)],
-          ["Agent 협상", String(dashboard.summary.agentNegotiations)],
-          ["진행 중 협찬", String(dashboard.summary.activeSponsorships)],
-          ["지급 대기", formatUsdcBaseUnits(dashboard.summary.pendingPayoutBaseUnits)],
+          {
+            title: "정산하기",
+            body: settlementHref ? "합의된 협찬의 정산 상태를 확인합니다." : "정산 가능한 에이전트 결과가 아직 없습니다.",
+            href: settlementHref ?? "/creator/agent",
+            disabled: !settlementHref,
+          },
+          {
+            title: saving ? "에이전트 켜는 중" : "에이전트 켜기",
+            body: accepting ? "Mina Agent 대화방으로 이동합니다." : "신규 제안 수신을 켜고 Mina Agent 대화방으로 이동합니다.",
+            onClick: enableAgent,
+            primary: true,
+          },
+          {
+            title: "에이전트 결과",
+            body: `${results.length}건의 협상 결과를 확인합니다.`,
+            href: settlementHref ?? "/creator/agent",
+          },
         ]}
       />
-      <ActionPanel
-        title="해야 할 일"
-        body={accepting ? "신규 제안 수신이 켜져 있습니다." : "협찬 받기를 켜면 Brand의 신규 제안 대상이 됩니다."}
-        action={
-          <div className="flex flex-col items-start gap-2">
-            <button
-              type="button"
-              onClick={toggleAvailability}
-              disabled={saving}
-              className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
-            >
-              {saving ? "저장 중..." : accepting ? "협찬 받기 끄기" : "협찬 받기"}
-            </button>
-            {error ? <span className="text-sm text-muted">{error}</span> : null}
-          </div>
-        }
-      />
-      <ListSection title="진행 중 목록" empty="현재 받은 제안이 없습니다.">
-        {dashboard.offers.map((offer) => (
-          <GenericRow key={text(offer.negotiationId) || JSON.stringify(offer)} item={offer} />
-        ))}
-      </ListSection>
-      <ActivitySection activity={dashboard.recentAgentActivity} />
+      {error ? <EmptyState text={error} /> : null}
+      <ResultSection title="에이전트 결과" empty="아직 받은 제안이나 협상 결과가 없습니다. 에이전트를 켜면 Brand 제안 수신 대상이 됩니다.">
+        {results.map((item) => <ResultRow key={item.key} item={item} />)}
+      </ResultSection>
     </DashboardShell>
   );
 }
 
-function DashboardShell({ role, title, children }: { role: Role; title: string; children: React.ReactNode }) {
+function DashboardShell({ role, children }: { role: Role; children: React.ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 py-8">
-      <div>
-        <p className="font-mono text-xs uppercase text-muted">KNOT v2</p>
-        <h1 className="mt-1 text-4xl">{title}</h1>
-      </div>
+      <section className="flex flex-wrap items-center gap-4">
+        <AgentCharacter agentId={`${role}-dashboard-agent`} side={role} category="beauty" pose="greet" size={88} />
+        <div>
+          <p className="font-mono text-xs uppercase text-muted">KNOT v2</p>
+          <h1 className="mt-1 text-4xl">{role === "brand" ? "Brand Dashboard" : "Creator Dashboard"}</h1>
+        </div>
+      </section>
       {children}
-      <div className="flex justify-end">
-        <Link href="/mypage" className="text-sm font-semibold text-muted hover:text-foreground">
-          마이페이지
-        </Link>
-      </div>
     </div>
   );
 }
 
-function ManagerCard({ role, title, body, status }: { role: Role; title: string; body: string; status: string }) {
+type ActionItem = {
+  title: string;
+  body: string;
+  href?: string;
+  onClick?: () => void;
+  primary?: boolean;
+  disabled?: boolean;
+};
+
+function ActionGrid({ items }: { items: ActionItem[] }) {
   return (
-    <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <div className="flex flex-wrap items-center gap-5">
-        <AgentCharacter agentId={`${role}-dashboard-agent`} side={role} category="beauty" pose="greet" size={96} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-3xl">{title}</h2>
-            <span className="sketch-pill ink border border-border-subtle bg-surface-raised px-2.5 py-0.5 font-mono text-xs text-muted">
-              {status}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-muted">{body}</p>
-        </div>
+    <section className="grid gap-3 md:grid-cols-3">
+      {items.map((item) => <ActionTile key={item.title} item={item} />)}
+    </section>
+  );
+}
+
+function ActionTile({ item }: { item: ActionItem }) {
+  const className = `sketch ink flex min-h-40 flex-col justify-between border p-5 ${
+    item.primary ? "border-accent bg-accent/10" : "border-border-subtle bg-surface"
+  } ${item.disabled ? "opacity-60" : ""}`;
+  const content = (
+    <>
+      <div>
+        <h2 className="text-3xl">{item.title}</h2>
+        <p className="mt-2 text-sm text-muted">{item.body}</p>
       </div>
-    </section>
+      <span className="sketch-pill mt-4 inline-flex self-start bg-accent px-4 py-2 text-sm text-background">
+        열기
+      </span>
+    </>
   );
+  if (item.onClick) {
+    return <button type="button" onClick={item.onClick} className={`${className} text-left`}>{content}</button>;
+  }
+  return <Link href={item.href ?? "#"} className={className}>{content}</Link>;
 }
 
-function SummaryGrid({ items }: { items: Array<[string, string]> }) {
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {items.map(([label, value]) => (
-        <div key={label} className="sketch-alt ink border border-border-subtle bg-background p-4">
-          <div className="text-xs text-muted">{label}</div>
-          <div className="mt-1 break-words font-mono text-xl">{value}</div>
-        </div>
-      ))}
-    </section>
-  );
-}
+type ResultItem = {
+  key: string;
+  title: string;
+  status: string;
+  href: string;
+};
 
-function ActionPanel({ title, body, action }: { title: string; body: string; action: React.ReactNode }) {
-  return (
-    <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <h2 className="text-2xl">{title}</h2>
-      <p className="mt-2 text-sm text-muted">{body}</p>
-      <div className="mt-4">{action}</div>
-    </section>
-  );
-}
-
-function ListSection({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {
+function ResultSection({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {
   const items = useMemo(() => flattenChildren(children), [children]);
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
       <h2 className="text-2xl">{title}</h2>
-      <div className="mt-4 grid gap-3">{items.length ? items : <EmptyState text={empty} />}</div>
+      <div className="mt-4 grid gap-3">
+        {items.length ? items : <EmptyState text={empty} />}
+      </div>
     </section>
   );
 }
 
-function PromotionRow({ promotion }: { promotion: ApiPromotion }) {
+function ResultRow({ item }: { item: ResultItem }) {
   return (
-    <Link
-      href={`/brand/promotions/${promotion.promotionId}`}
-      className="sketch-alt ink border border-border-subtle bg-background p-4 hover:bg-surface-raised"
-    >
+    <Link href={item.href} className="sketch-alt ink border border-border-subtle bg-background p-4 hover:bg-surface-raised">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold">{promotion.title}</span>
-        <span className="font-mono text-xs text-muted">{promotion.status}</span>
+        <span className="font-semibold">{item.title}</span>
+        <span className="font-mono text-xs text-muted">{item.status}</span>
       </div>
-      <p className="mt-2 text-sm text-muted">{promotion.objective}</p>
+      <p className="mt-2 text-sm text-muted">상세보기</p>
     </Link>
   );
 }
 
-function GenericRow({ item }: { item: Record<string, unknown> }) {
-  const id = text(item.negotiationId) || text(item.id) || "item";
-  const content = (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-sm">{id}</span>
-        <span className="font-mono text-xs text-muted">{text(item.status) || "ACTIVE"}</span>
-      </div>
-    </>
-  );
-  if (text(item.negotiationId)) {
-    return (
-      <Link
-        href={`/negotiations/${text(item.negotiationId)}`}
-        className="sketch-alt ink border border-border-subtle bg-background p-4 hover:bg-surface-raised"
-      >
-        {content}
-      </Link>
-    );
-  }
-  return (
-    <div className="sketch-alt ink border border-border-subtle bg-background p-4">
-      {content}
-    </div>
-  );
+function brandResults(dashboard: BrandDashboard): ResultItem[] {
+  const promotions = dashboard.activePromotions.map((promotion: ApiPromotion) => ({
+    key: promotion.promotionId,
+    title: promotion.title || promotion.objective || promotion.promotionId,
+    status: promotion.status,
+    href: `/brand/promotions/${promotion.promotionId}`,
+  }));
+  const activities = dashboard.recentAgentActivity
+    .map((item, index) => {
+      const negotiationId = nestedText(item, "negotiationId");
+      if (!negotiationId) return null;
+      return {
+        key: `activity-${negotiationId}-${index}`,
+        title: "협상 결과",
+        status: text(item.type) || "A2A",
+        href: `/negotiations/${negotiationId}`,
+      };
+    })
+    .filter(Boolean) as ResultItem[];
+  return dedupeResults([...activities, ...promotions]);
 }
 
-function ActivitySection({ activity }: { activity: Array<Record<string, unknown>> }) {
-  return (
-    <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <h2 className="text-2xl">최근 활동</h2>
-      <div className="mt-4 grid gap-3">
-        {activity.length ? activity.slice(0, 5).map((item, index) => (
-          <GenericRow key={`${text(item.eventId) || text(item.id) || "activity"}-${index}`} item={item} />
-        )) : <EmptyState text="최근 활동이 없습니다." />}
-      </div>
-    </section>
-  );
+function creatorResults(dashboard: CreatorDashboard): ResultItem[] {
+  const rows = [...dashboard.offers, ...dashboard.activeSponsorships].map((item, index) => {
+    const negotiationId = nestedText(item, "negotiationId");
+    const agreementId = nestedText(item, "agreementId");
+    return {
+      key: negotiationId || agreementId || `creator-result-${index}`,
+      title: text(item.title) || text(item.productName) || text(item.promotionTitle) || "협상 결과",
+      status: text(item.status) || "ACTIVE",
+      href: negotiationId ? `/negotiations/${negotiationId}` : "/creator/agent",
+    };
+  });
+  return dedupeResults(rows);
+}
+
+function firstResultHref(results: ResultItem[]) {
+  return results[0]?.href ?? null;
 }
 
 function EmptyState({ text: value }: { text: string }) {
@@ -276,19 +276,23 @@ function text(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function nestedText(item: Record<string, unknown>, key: string) {
+  const direct = text(item[key]);
+  if (direct) return direct;
+  const data = item.data;
+  if (data && typeof data === "object") return text((data as Record<string, unknown>)[key]);
+  return "";
+}
+
 function flattenChildren(children: React.ReactNode) {
   return Array.isArray(children) ? children.filter(Boolean) : children ? [children] : [];
 }
 
-function formatUsdcBaseUnits(value: string) {
-  try {
-    const baseUnits = BigInt(value || "0");
-    const scale = BigInt(1000000);
-    const whole = baseUnits / scale;
-    const fraction = baseUnits % scale;
-    if (fraction === BigInt(0)) return `${whole.toString()} USDC`;
-    return `${whole.toString()}.${fraction.toString().padStart(6, "0").replace(/0+$/, "")} USDC`;
-  } catch {
-    return "0 USDC";
-  }
+function dedupeResults(items: ResultItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.key)) return false;
+    seen.add(item.key);
+    return true;
+  });
 }

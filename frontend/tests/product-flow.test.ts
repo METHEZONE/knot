@@ -19,6 +19,7 @@ test("route surface includes v2 product flow entries", () => {
     "/creator/connect",
     "/creator/rules",
     "/creator",
+    "/creator/agent",
     "/creator/settings",
     "/onboarding/brand",
     "/brand/onboarding",
@@ -26,6 +27,7 @@ test("route surface includes v2 product flow entries", () => {
     "/brand/mood",
     "/brand/promotions/new",
     "/brand",
+    "/brand/agent",
     "/brand/settings",
     "/negotiations/[negotiationId]",
     "/dev/admin",
@@ -33,8 +35,8 @@ test("route surface includes v2 product flow entries", () => {
 });
 
 test("workspace nav points to dashboard and unified mypage", () => {
-  assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), ["/brand", "/mypage"]);
-  assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), ["/creator", "/mypage"]);
+  assert.deepEqual(brandWorkspaceRoutes.map((route) => route.href), ["/brand", "/brand/agent", "/mypage"]);
+  assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), ["/creator", "/creator/agent", "/mypage"]);
   assert.equal(roleEntry("brand"), "/brand/onboarding");
   assert.equal(roleEntry("creator"), "/creator/onboarding");
 });

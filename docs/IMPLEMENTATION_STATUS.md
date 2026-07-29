@@ -406,6 +406,22 @@ Verification:
 
 ---
 
+## 16. Onboarding And Agent Chat UX Fixes
+
+Changes:
+- Creator onboarding now completes from the Instagram connection screen: entering an Instagram handle and pressing `에이전트 켜기` creates the Creator profile, Agent, and policy through Product API, then opens `/creator/agent`.
+- Brand onboarding now completes from the product-link screen: `읽어오기` uses the Product API source analyzer, then `에이전트 켜기` creates the Brand profile and Agent through Product API, then opens `/brand/agent`.
+- Added `/brand/agent` and `/creator/agent` chat-style Agent rooms based on the `feat/two-user-session` chat UI direction. The page visualizes Glow Agent / Mina Agent communication and uses Product API dashboard/negotiation messages when available.
+- Simplified Brand and Creator dashboards to only the requested surfaces: `정산하기`, `에이전트 켜기`, and `에이전트 결과`.
+
+Verification:
+- `npm --prefix frontend run typecheck` passed.
+- `npm --prefix frontend run test` passed.
+- `npm --prefix frontend run build` passed.
+- Local route checks returned `HTTP/1.1 200 OK` for `/brand/agent` and `/creator/agent`.
+
+---
+
 ## 5. Update Rule
 
 각 Phase:

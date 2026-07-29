@@ -1,10 +1,11 @@
 "use client";
 
-/** `/brand/product` — 링크 하나 (docs/24 §4-1). */
+/** Brand onboarding — 제품 링크 하나로 Brand Agent profile을 완성한다. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthProvider";
 import { ProductApiClient, type BrandSourceAnalysisDraft } from "@/product/apiClient";
 
 const DRAFT_KEY = "knot.draft.product";
@@ -20,8 +21,10 @@ type ProductDraft = {
 
 export function BrandProduct() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [url, setUrl] = useState("https://glowbar.example.com/spf-daily");
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [found, setFound] = useState<ProductDraft | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,20 +44,40 @@ export function BrandProduct() {
     }
   };
 
-  const next = () => {
+  const enableAgent = async () => {
     if (!found) return;
-    // 무드 화면에서 마무리하므로 여기서는 초안만 넘긴다.
-    window.sessionStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ ...found, productName: name, productUrl: url }),
-    );
-    router.push("/brand/mood");
+    setSaving(true);
+    setError(null);
+    const productName = name.trim() || found.productName;
+    try {
+      await new ProductApiClient().createMyBrandProfile(
+        {
+          brandName: found.brandName || productName,
+          websiteUrl: url,
+          categories: [found.category || "lifestyle"],
+          targetAudience: "Instagram Reels에 반응하는 잠재 고객",
+          description: [
+            found.summary,
+            `제품명: ${productName}`,
+            "Agent 생성과 정책 연결은 완료하지만 협상은 별도 에이전트 실행에서 시작합니다.",
+          ].join("\n"),
+          restrictedClaims: [],
+        },
+        idempotencyKey("brand-profile"),
+      );
+      window.sessionStorage.removeItem(DRAFT_KEY);
+      await refresh();
+      router.push("/brand/agent");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSaving(false);
+    }
   };
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-10">
       <div>
-        <p className="font-mono text-xs uppercase tracking-wide text-muted">1 / 2</p>
+        <p className="font-mono text-xs uppercase tracking-wide text-muted">Brand onboarding</p>
         <h1 className="mt-1 text-4xl">제품 링크만 주세요</h1>
         <p className="mt-2 text-muted">붙여넣으면 나머지는 매니저가 읽어옵니다.</p>
       </div>
@@ -114,15 +137,23 @@ export function BrandProduct() {
           </p>
           <button
             type="button"
-            onClick={next}
-            className="sketch-pill mt-5 bg-accent px-5 py-2.5 text-background"
+            onClick={enableAgent}
+            disabled={saving}
+            className="sketch-pill mt-5 bg-accent px-5 py-2.5 text-background disabled:opacity-50"
           >
-            무드 고르러 가기
+            {saving ? "에이전트 켜는 중..." : "에이전트 켜기"}
           </button>
         </motion.div>
       ) : null}
     </div>
   );
+}
+
+function idempotencyKey(action: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `frontend-${action}-${crypto.randomUUID()}`;
+  }
+  return `frontend-${action}-${Date.now()}`;
 }
 
 function toProductDraft(draft: BrandSourceAnalysisDraft, productUrl: string): ProductDraft {

@@ -1,6 +1,6 @@
 import type { Role } from "./types";
 
-/** docs/24_UX_JOURNEY_v1.md §2 — 전체 7개. */
+/** KNOT v2 active route surface. */
 export const appRoutes = [
   "/",
   "/login",
@@ -11,6 +11,7 @@ export const appRoutes = [
   "/creator/connect",
   "/creator/rules",
   "/creator",
+  "/creator/agent",
   "/creator/settings",
   "/onboarding/brand",
   "/brand/onboarding",
@@ -18,6 +19,7 @@ export const appRoutes = [
   "/brand/mood",
   "/brand/promotions/new",
   "/brand",
+  "/brand/agent",
   "/brand/settings",
   "/negotiations/[negotiationId]",
   "/dev/admin",
@@ -28,12 +30,14 @@ export function roleEntry(role: Role) {
   return role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
 }
 
-/** 상단바에 노출할 것 — 홈(채팅창) 하나면 충분하다. */
+/** 상단바에 노출할 것. */
 export const brandWorkspaceRoutes = [
-  { href: "/brand", label: "내 매니저" },
+  { href: "/brand", label: "Dashboard" },
+  { href: "/brand/agent", label: "Agent" },
   { href: "/mypage", label: "마이페이지" },
 ] as const;
 export const creatorWorkspaceRoutes = [
-  { href: "/creator", label: "내 매니저" },
+  { href: "/creator", label: "Dashboard" },
+  { href: "/creator/agent", label: "Agent" },
   { href: "/mypage", label: "마이페이지" },
 ] as const;

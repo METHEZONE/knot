@@ -1,11 +1,14 @@
 "use client";
 
-/** `/creator/connect` — 인스타 사용자이름 하나 (docs/24 §3-1). */
+/** Creator onboarding — Instagram 하나로 Agent profile을 완성한다. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthProvider";
+import { ProductApiClient } from "@/product/apiClient";
 import type { BlockedCategory } from "@/product/setupStore";
+import { BLOCKED_CATEGORY_LABEL } from "@/product/setupStore";
 
 type CreatorDraft = {
   handle: string;
@@ -20,9 +23,11 @@ type CreatorPreview = Omit<CreatorDraft, "minUsdc" | "blocked">;
 
 export function CreatorConnect() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [handle, setHandle] = useState("@mina.studio");
   const [creatorName, setCreatorName] = useState("Mina Studio");
   const [found, setFound] = useState<CreatorPreview | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const analyze = () => {
@@ -39,19 +44,36 @@ export function CreatorConnect() {
     });
   };
 
-  const next = () => {
+  const enableAgent = async () => {
     if (!found) return;
-    window.sessionStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ ...found, minUsdc: 300, blocked: ["gambling", "loanCrypto", "dietSupplement"] }),
-    );
-    router.push("/creator/rules");
+    setSaving(true);
+    setError(null);
+    const blocked: BlockedCategory[] = ["gambling", "loanCrypto", "dietSupplement"];
+    try {
+      await new ProductApiClient().createMyCreatorProfile(
+        {
+          creatorName: found.creatorName,
+          snsUrl: found.snsUrl,
+          categories: ["beauty"],
+          minimumUsdc: 300,
+          blockedDomains: blocked.map((item) => BLOCKED_CATEGORY_LABEL[item]),
+          preferredContent: ["Instagram Reels"],
+        },
+        idempotencyKey("creator-profile"),
+      );
+      window.sessionStorage.removeItem(DRAFT_KEY);
+      await refresh();
+      router.push("/creator/agent");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSaving(false);
+    }
   };
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-10">
       <div>
-        <p className="font-mono text-xs uppercase tracking-wide text-muted">1 / 2</p>
+        <p className="font-mono text-xs uppercase tracking-wide text-muted">Creator onboarding</p>
         <h1 className="mt-1 text-4xl">인스타그램만 연결하면 돼요</h1>
         <p className="mt-2 text-muted">
           사용자이름만 알려주세요. 나머지는 매니저가 알아서 봅니다.
@@ -105,13 +127,21 @@ export function CreatorConnect() {
 
           <button
             type="button"
-            onClick={next}
-            className="sketch-pill mt-5 bg-accent px-5 py-2.5 text-background"
+            onClick={enableAgent}
+            disabled={saving}
+            className="sketch-pill mt-5 bg-accent px-5 py-2.5 text-background disabled:opacity-50"
           >
-            맞아요, 계속
+            {saving ? "에이전트 켜는 중..." : "에이전트 켜기"}
           </button>
         </motion.div>
       ) : null}
     </div>
   );
+}
+
+function idempotencyKey(action: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `frontend-${action}-${crypto.randomUUID()}`;
+  }
+  return `frontend-${action}-${Date.now()}`;
 }
