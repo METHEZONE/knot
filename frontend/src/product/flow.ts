@@ -56,7 +56,7 @@ export const brandWorkspaceRoutes = [
   { href: "/brand/promotions", label: "Promotions" },
   { href: "/brand/promotions", label: "Negotiations" },
   { href: "/brand/settlements", label: "Settlements" },
-  { href: "/brand/settings/agent", label: "Agent" },
+  { href: "/brand/me", label: "My Page" },
 ] as const;
 
 export const creatorWorkspaceRoutes = [
@@ -64,12 +64,10 @@ export const creatorWorkspaceRoutes = [
   { href: "/creator/offers", label: "Offers" },
   { href: "/creator/deals", label: "Deals" },
   { href: "/creator/settlements", label: "Settlements" },
-  { href: "/creator/settings/agent", label: "Agent" },
+  { href: "/creator/me", label: "My Page" },
 ] as const;
 
 export const accountRoutes = [
   { href: "/brand/me", label: "Brand My" },
-  { href: "/brand/settings", label: "Brand Settings" },
   { href: "/creator/me", label: "Creator My" },
-  { href: "/creator/settings", label: "Creator Settings" },
 ] as const;

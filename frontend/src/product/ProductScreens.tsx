@@ -30,19 +30,12 @@ import {
 } from "./apiClient";
 import { A2ANegotiationVisualizer } from "./A2AVisualizer";
 import {
-  ActionRequiredList,
-  AgentActivityPreview,
   AgentConversationExperience,
-  AgentManagerCard,
 } from "./AgentExperienceComponents";
 import {
   agreementEscrowView,
-  dashboardActivitiesFromBrand,
-  dashboardActivitiesFromCreator,
-  managerFromContext,
   mapNegotiationMessagesToActivities,
   nextActionForDeal,
-  type NextActionView,
 } from "./agentExperience";
 import { usePhantomWallet } from "@/features/wallet/usePhantomWallet";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
@@ -242,76 +235,72 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
       <DashboardStatus state={state} retry={reload}>
         {(dashboard) => (
           <div className="grid gap-5">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="진행 중인 프로모션" value={dashboard.summary.activePromotions} />
-              <Metric label="진행 중인 협상" value={dashboard.summary.negotiationsInProgress} />
-              <Metric label="체결된 크리에이터" value={dashboard.summary.agreements} />
-              <Metric label="에스크로 예치" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
-            </div>
-            {(() => {
-              const activities = dashboardActivitiesFromBrand(dashboard.recentAgentActivity, dashboard.activePromotions);
-              return (
-                <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-                  <AgentManagerCard manager={managerFromContext("brand", context, activities)} />
-                  <ActionRequiredList items={brandDashboardActions(dashboard)} />
+            <Panel>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <SectionTitle eyebrow="Today" title={`${context.account.displayName ?? "브랜드"}님의 프로모션 운영 현황`} />
+                  <p className="max-w-2xl text-sm leading-6 text-muted">
+                    이 화면은 상품 프로모션과 Creator Agent 체결 상태만 보여줍니다. 매니저 이름, 정책, 계정 설정은 마이페이지에서 관리합니다.
+                  </p>
                 </div>
-              );
-            })()}
-            <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+                <PrimaryLink href="/brand/promotions/new">새 Promotion 만들기</PrimaryLink>
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-4">
+                <Metric label="진행 중 Promotion" value={dashboard.summary.activePromotions} />
+                <Metric label="협상 중 Creator" value={dashboard.summary.negotiationsInProgress} />
+                <Metric label="체결된 Creator" value={dashboard.summary.agreements} />
+                <Metric label="Escrow 예치" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
+              </div>
+            </Panel>
+
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
               <Panel>
-                <SectionTitle eyebrow="Promotions" title="내 프로모션" />
+                <SectionTitle eyebrow="Promotions" title="내가 올린 상품 프로모션" />
                 {dashboard.activePromotions.length ? (
                   <div className="mt-4 grid gap-3">
                     {dashboard.activePromotions.map((promotion) => {
                       const product = productSnapshotFromPromotion(promotion);
                       return (
-                        <div key={promotion.promotionId} className="grid gap-2 rounded border border-border-subtle bg-surface p-2">
-                          <PromotionSummaryCard
-                            promotion={promotion}
-                            productName={product.name}
-                            productCategory={product.category ?? promotion.category}
-                          />
-                          <DeletePromotionButton promotionId={promotion.promotionId} onDeleted={reload} />
-                        </div>
+                        <BrandPromotionWorkCard
+                          key={promotion.promotionId}
+                          promotion={promotion}
+                          productName={product.name}
+                          productCategory={product.category ?? promotion.category}
+                          onDeleted={reload}
+                        />
                       );
                     })}
                   </div>
                 ) : (
-                  <EmptyState text="아직 생성한 프로모션이 없습니다." />
+                  <div className="mt-4">
+                    <EmptyState text="아직 생성한 프로모션이 없습니다. 첫 상품을 올리면 Brand Agent가 Creator 후보와 협상을 시작할 수 있습니다." />
+                  </div>
                 )}
-                <div className="mt-5">
-                  <PrimaryLink href="/brand/promotions/new">첫 프로모션 만들기</PrimaryLink>
-                </div>
               </Panel>
-              <AgentActivityPreview
-                activities={dashboardActivitiesFromBrand(dashboard.recentAgentActivity, dashboard.activePromotions)}
-                emptyText={`${context.account.displayName ?? "Brand"} 계정에서 아직 협상 기록이 없습니다.`}
-              />
-            </div>
-            <Panel>
-              <SectionTitle eyebrow="Agreements" title="진행 중인 계약 및 에스크로" />
-              <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+
+              <Panel>
+                <SectionTitle eyebrow="Creators" title="체결된 Creator Agent" />
                 {dashboard.contractedCreators.length ? (
                   <div className="mt-4 grid gap-3">
                     {dashboard.contractedCreators.map((creator) => (
-                      <DashboardRow
-                        key={String(creator.creatorId)}
-                        title={String(creator.displayName ?? "Creator")}
-                        meta={stringList(creator.categories).join(", ") || "category pending"}
-                      />
+                      <div key={String(creator.creatorId)} className="rounded border border-border-subtle bg-background p-4">
+                        <div className="font-semibold">{String(creator.displayName ?? "Creator")}</div>
+                        <div className="mt-1 text-sm text-muted">
+                          {String(creator.creatorAgentId ?? "Creator Agent")} · {stringList(creator.categories).join(" · ") || "category pending"}
+                        </div>
+                        <div className="mt-2 font-mono text-xs uppercase text-muted">
+                          completed deals {String(creator.completedDealCount ?? 0)}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <EmptyState text="아직 계약 완료된 Creator가 없습니다." />
+                  <div className="mt-4">
+                    <EmptyState text="Agent 협상 후 Agreement가 생성되면 체결된 Creator가 여기에 표시됩니다." />
+                  </div>
                 )}
-                <div className="rounded border border-border-subtle bg-background p-4">
-                  <InfoBox label="lockedAmount" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
-                  <p className="mt-3 text-sm text-muted">
-                    Agent API spend와 Creator 보수 escrow는 분리해서 표시합니다. 이 카드는 계약 보수 escrow만 집계합니다.
-                  </p>
-                </div>
-              </div>
-            </Panel>
+              </Panel>
+            </div>
           </div>
         )}
       </DashboardStatus>
@@ -336,51 +325,68 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
       <DashboardStatus state={state} retry={reload}>
         {(dashboard) => (
           <div className="grid gap-5">
-            {(() => {
-              const activities = dashboardActivitiesFromCreator(dashboard.recentAgentActivity, dashboard.offers);
-              return (
-                <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-                  <AgentManagerCard manager={managerFromContext("creator", context, activities)} />
-                  <ActionRequiredList items={creatorDashboardActions(dashboard, context)} />
-                </div>
-              );
-            })()}
             <Panel>
-              <SectionTitle eyebrow="Settlement" title="현재 정산 가능 금액" />
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <SectionTitle eyebrow="Today" title={`${creatorLabel}님의 딜 현황`} />
+                  <p className="max-w-2xl text-sm leading-6 text-muted">
+                    새 제안, 진행 중 딜, 게시물/정산 상태만 빠르게 확인합니다. 매니저 기준과 프로필은 마이페이지에서 관리합니다.
+                  </p>
+                </div>
+                <SecondaryLink href="/creator/me">마이페이지</SecondaryLink>
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-4">
+                <Metric label="새 제안" value={dashboard.summary.newOffers} />
+                <Metric label="Agent 협상" value={dashboard.summary.agentNegotiations} />
+                <Metric label="진행 중 딜" value={dashboard.summary.activeSponsorships} />
+                <Metric label="정산 가능" value={`${baseUnitsToUsdc(String(dashboard.summary.availablePayoutBaseUnits ?? "0"))} USDC`} />
+              </div>
+            </Panel>
+
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <Panel>
+                <SectionTitle eyebrow="Offers" title="도착한 제안과 Agent 협상" />
+                {dashboard.offers.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {dashboard.offers.slice(0, 5).map((offer) => (
+                      <CreatorOfferWorkCard key={String(offer.negotiationId)} offer={offer} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <EmptyState text="아직 새 제안이 없습니다. Brand Agent가 제안을 보내면 여기에서 바로 협상 상세로 들어갑니다." />
+                  </div>
+                )}
+                <div className="mt-5">
+                  <SecondaryLink href="/creator/offers">전체 제안 보기</SecondaryLink>
+                </div>
+              </Panel>
+
+              <Panel>
+                <SectionTitle eyebrow="Settlement" title="정산 요약" />
               {(() => {
                 const summary = creatorDashboardSettlement(dashboard.activeSponsorships);
                 return (
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.7fr]">
-                    <div>
-                      <div className="text-5xl font-semibold">{summary.availableToClaimAmount} USDC</div>
-                      <p className="mt-2 text-sm text-muted">
-                        {summary.availableToClaimAmount > 0
-                          ? `${summary.availableToClaimAmount} USDC 정산 가능`
-                          : "현재 정산 가능한 금액이 없습니다."}
-                      </p>
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded border border-border-subtle bg-background p-4">
+                      <div className="text-xs text-muted">현재 정산 가능</div>
+                      <div className="mt-1 text-4xl font-semibold">{summary.availableToClaimAmount} USDC</div>
                     </div>
-                    <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-1">
-                      <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
-                      <InfoBox label="지급 대기" value={`${summary.pendingAmount} USDC`} />
-                      <InfoBox label="지갑 상태" value="연결 필요" />
-                    </div>
-                    <div className="flex flex-wrap gap-3 lg:col-span-2">
+                    <InfoBox label="지급 완료" value={`${summary.paidAmount} USDC`} />
+                    <InfoBox label="지급 대기" value={`${summary.pendingAmount} USDC`} />
+                    <InfoBox label="지갑" value={context.account.walletAddress ? "연결됨" : "마이페이지에서 연결"} />
+                    <div className="flex flex-wrap gap-3">
                       <SecondaryLink href="/creator/settlements">정산내역</SecondaryLink>
-                      <button
-                        type="button"
-                        disabled
-                        className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold text-muted"
-                        title="실제 Solana claim 서명 연동 전까지 fake 성공 처리는 하지 않습니다."
-                      >
-                        지갑 연결 후 정산 가능
-                      </button>
+                      <SecondaryLink href="/creator/me">지갑 설정</SecondaryLink>
                     </div>
                   </div>
                 );
               })()}
-            </Panel>
+              </Panel>
+            </div>
+
             <Panel>
-              <SectionTitle eyebrow="Promotions" title="내가 참여 중인 프로모션" />
+              <SectionTitle eyebrow="Deals" title="진행 중인 딜과 마일스톤" />
               {dashboard.activeSponsorships.length ? (
                 <div className="mt-4 grid gap-3">
                   {dashboard.activeSponsorships.map((agreement) => {
@@ -414,10 +420,6 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
                 <EmptyState text={`${creatorLabel} 계정에서 아직 참여 중인 프로모션이 없습니다.`} />
               )}
             </Panel>
-            <AgentActivityPreview
-              activities={dashboardActivitiesFromCreator(dashboard.recentAgentActivity, dashboard.offers)}
-              emptyText="아직 Agent 협상 기록이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다."
-            />
           </div>
         )}
       </DashboardStatus>
@@ -1160,22 +1162,32 @@ export function BrandOnboardingScreen() {
 
   return (
     <WorkspaceShell role="brand" active="onboarding" title="브랜드 온보딩" session={null}>
-      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="Brand profile" title="최소 정보와 핵심 Agent 기준만 정합니다" />
-            <Input label="Brand name" name="brandName" placeholder="Brand name" required />
-            <Input label="Brand website URL" name="websiteUrl" placeholder="https://brand.example" required />
+            <SectionTitle eyebrow="1 / 3" title="브랜드는 최소 정보만 알려주세요" />
+            <p className="mb-5 text-sm leading-6 text-muted">
+              제품별 예산과 deliverables는 Promotion에서 따로 정합니다. 여기서는 Manager가 계정을 만들 수 있는 기본 정보만 저장합니다.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Brand name" name="brandName" placeholder="루미에르 뷰티" required />
+              <Input label="Brand website URL" name="websiteUrl" placeholder="https://brand.example" required />
+            </div>
             <ChoiceGroup
-              label="Categories"
+              label="2 / 3 · 주 카테고리"
               name="categories"
               options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
               defaultSelected={["beauty"]}
             />
             <Input label="Custom category" name="customCategory" placeholder="clean skincare" />
-            <TextArea label="Primary target audience" name="targetAudience" placeholder="예: 25-34, clean beauty에 관심 있는 직장인" />
-            <TextArea label="Description" name="description" placeholder="브랜드 톤, 가치, 고객에게 주는 핵심 경험" />
-            <TextArea label="Restricted claims" name="restrictedClaims" placeholder="의료 효능 과장, 무검수 게시 등" />
+            <TextArea label="누구에게 보여주고 싶나요?" name="targetAudience" placeholder="예: 25-34, clean beauty에 관심 있는 직장인" />
+            <TextArea label="브랜드 톤" name="description" placeholder="예: 성분은 정확하게, 말투는 친근하게, 과장은 피하기" />
+            <ChoiceGroup
+              label="3 / 3 · Manager가 막아야 할 표현"
+              name="restrictedClaims"
+              options={["의료 효능 과장", "무검수 게시", "가격 미공개", "무기한 사용권", "경쟁사 직접 비방"]}
+              defaultSelected={["의료 효능 과장", "무검수 게시"]}
+            />
             {error && <FormError message={error} />}
             <button
               type="submit"
@@ -1187,11 +1199,12 @@ export function BrandOnboardingScreen() {
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Scope" title="Promotion 정보는 다음 단계에서 입력합니다" />
-          <div className="space-y-3">
-            <InfoBox label="이 페이지에 저장" value="브랜드명, 웹사이트, 카테고리, 타겟, 제한 표현" />
-            <InfoBox label="여기서 제외" value="제품명, 예산, deliverables, usage rights, deadline" />
-            <InfoBox label="저장 위치" value="Product API가 verified UID로 Brand Profile과 Brand Agent를 생성" />
+          <SectionTitle eyebrow="Manager" title="이후 흐름" />
+          <div className="space-y-3 text-sm text-muted">
+            <OnboardingStep label="1" title="브랜드 프로필 생성" body="Firebase UID에 Brand profile과 Brand Agent를 연결합니다." />
+            <OnboardingStep label="2" title="Promotion 만들기" body="상품, 예산, 딜당 한도, 사용권, 마감일을 입력합니다." />
+            <OnboardingStep label="3" title="Agent 실행" body="Brand Agent가 후보를 찾고 Creator Agent와 협상합니다." />
+            <OnboardingStep label="4" title="체결과 Escrow" body="Agreement 이후 Solana devnet escrow와 milestone으로 이어집니다." />
           </div>
         </Panel>
       </div>
@@ -1440,34 +1453,46 @@ export function CreatorOnboardingScreen() {
 
   return (
     <WorkspaceShell role="creator" active="onboarding" title="크리에이터 온보딩" session={null}>
-      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="Creator profile" title="인스타그램만 연결하면 돼요" />
-            <p className="mb-4 text-sm text-muted">두 개만 정하면 끝이에요. 기준선과 안 하는 카테고리를 저장하면 Manager가 제안을 선별합니다.</p>
-            <Input label="Creator display name" name="creatorName" placeholder="Creator name" required />
-            <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/creator" required />
+            <SectionTitle eyebrow="1 / 3" title="인스타그램만 연결하면 돼요" />
+            <p className="mb-5 text-sm leading-6 text-muted">
+              지금은 사용자 입력을 저장합니다. 실제 SNS 재수집이 연결되면 팔로워, 참여율, 릴스 비중이 마이페이지에서 갱신됩니다.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Creator display name" name="creatorName" placeholder="민지의 뷰티룸" required />
+              <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/demobeauty" required />
+            </div>
             <ChoiceGroup
-              label="Categories"
+              label="활동 카테고리"
               name="categories"
               options={["beauty", "fashion", "food", "tech", "fitness", "home", "travel"]}
               defaultSelected={["beauty"]}
             />
-            <Input label="Custom category" name="customCategory" placeholder="vegan lifestyle" />
-            <Input label="Minimum sponsorship amount" name="minimumUsdc" placeholder="500" type="number" required />
+            <Input label="Custom category" name="customCategory" placeholder="뷰티 · 스킨케어" />
+            <div className="mt-7 rounded border border-border-subtle bg-background p-4">
+              <SectionTitle eyebrow="2 / 3" title="두 개만 정하면 끝이에요" />
+              <div className="grid gap-4 md:grid-cols-[180px_1fr]">
+                <div>
+                  <Input label="마지노선" name="minimumUsdc" placeholder="300" type="number" required />
+                  <p className="mt-2 text-xs text-muted">300 USDC = {formatKrw(300)} 참고값</p>
+                </div>
+                <ChoiceGroup
+                  label="안 하는 카테고리"
+                  name="blockedDomains"
+                  options={["도박", "대출·코인", "다이어트 보조제", "의료 시술", "주류", "성인"]}
+                  defaultSelected={["도박", "대출·코인", "다이어트 보조제"]}
+                />
+              </div>
+            </div>
             <ChoiceGroup
-              label="Preferred content"
+              label="선호 콘텐츠"
               name="preferredContent"
-              options={["Instagram Reels", "TikTok short", "Story link", "YouTube Shorts", "UGC review"]}
+              options={["Instagram Reels", "Story link", "YouTube Shorts", "UGC review"]}
               defaultSelected={["Instagram Reels"]}
             />
-            <ChoiceGroup
-              label="Blocked domains"
-              name="blockedDomains"
-              options={["담배", "도박", "성인", "고위험 투자", "의료 효능 과장", "정치"]}
-              defaultSelected={["담배", "도박"]}
-            />
-            <Input label="Settlement wallet public address" name="walletAddress" placeholder="Optional" />
+            <Input label="Settlement wallet public address" name="walletAddress" placeholder="나중에 마이페이지에서 연결해도 됩니다" />
             {error && <FormError message={error} />}
             <button
               type="submit"
@@ -1479,11 +1504,12 @@ export function CreatorOnboardingScreen() {
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Private criteria" title="브랜드에게 공개되지 않는 기준입니다" />
-          <div className="space-y-3">
-            <InfoBox label="공개 프로필" value="이름, SNS reference, 카테고리, 공개 rate band" />
-            <InfoBox label="비공개 Agent 기준" value="minimum, blocked domains, preferred content" />
-            <InfoBox label="주의" value="SNS 분석은 ingestion이 연결된 뒤에만 표시합니다" />
+          <SectionTitle eyebrow="3 / 3" title="매니저가 하는 일" />
+          <div className="space-y-3 text-sm text-muted">
+            <OnboardingStep label="1" title="제안 선별" body="마지노선 아래 제안과 안 하는 카테고리는 자동으로 걸러냅니다." />
+            <OnboardingStep label="2" title="Agent 협상" body="조건이 맞으면 Creator Agent가 Brand Agent와 제안/역제안을 주고받습니다." />
+            <OnboardingStep label="3" title="Agreement 확인" body="정책 범위 안이면 Agreement가 생성되고, 아니면 승인을 요청합니다." />
+            <OnboardingStep label="4" title="Escrow와 정산" body="에스크로 예치 후 게시물 링크, 검수, 정산으로 이어집니다." />
           </div>
         </Panel>
       </div>
@@ -1633,30 +1659,139 @@ export function CreatorBrandDetailScreen({ deal }: { deal: CreatorDeal }) {
 }
 
 export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const serverSession = useServerRoleSession(role);
-  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
+  const router = useRouter();
+  const auth = useAuth();
+  const myPage = useMyPageData(role);
+  const context = myPage.type === "ready" ? myPage.data.context : auth.context;
+  const dashboard = myPage.type === "ready" ? myPage.data.dashboard : null;
+  const profile = myPageProfile(role, context, dashboard);
+  const roleSession = session ?? (context ? roleSessionFromContext(context, role) : null) ?? fallbackRoleSession(role);
   const balance = useWalletBalance(roleSession.walletAddress);
+  const wallet = usePhantomWallet();
+  const manager = managerProfileFor(role, profile);
+  const money = moneyProfileFor(role, profile);
+  const hiddenCategories = hiddenCategoryListFor(role, profile);
   return (
     <WorkspaceShell role={role} active="me" title="마이페이지" session={roleSession}>
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel>
-          <div className="flex items-center gap-4">
-            <AgentCharacter agentId={roleSession.agentId} side={role} category="wellness" pose="idle" size={92} />
-            <div>
-              <Pill>{role}</Pill>
-              <h2 className="mt-2 text-3xl font-semibold">{roleSession.organizationLabel}</h2>
+          <SectionTitle eyebrow="설정" title="내 매니저" />
+          <p className="mb-5 text-sm text-muted">이 캐릭터와 이름은 계정에 고정돼요.</p>
+          <div className="flex items-start gap-4">
+            <AgentCharacter agentId={roleSession.agentId} side={role} category={manager.categoryId} pose="greet" size={110} />
+            <div className="min-w-0">
+              <h2 className="text-4xl font-semibold leading-none">{manager.name}</h2>
+              <p className="mt-2 text-lg">{manager.title}</p>
+              <p className="mt-1 text-sm text-muted">{manager.domain}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {manager.tone.map((item) => (
+                  <span key={item} className="rounded-full border border-border-subtle bg-background px-3 py-1 text-sm">
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </Panel>
+
         <Panel>
-          <SectionTitle eyebrow="Profile" title="프로필 요약" />
-          <p className="text-muted">{roleSession.profileSummary}</p>
+          <SectionTitle eyebrow="내 프로필" title={role === "creator" ? "브랜드에게 보이는 공개 정보" : "Creator에게 보이는 공개 정보"} />
+          <p className="mb-4 text-sm text-muted">
+            상대에게는 이 중 공개 정보만 전달돼요. 비공개 협상 기준은 Agent 판단에만 사용합니다.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {role === "creator" ? (
+              <>
+                <InfoBox label="핸들" value={profileText(profile.handle, handleFromProfile(profile, roleSession))} />
+                <InfoBox label="팔로워" value={profileNumberText(profile.followers ?? profile.followerCount)} />
+                <InfoBox label="참여율" value={percentText(profile.engagementRate)} />
+                <InfoBox label="릴스 비중" value={percentText(profile.reelShare)} />
+              </>
+            ) : (
+              <>
+                <InfoBox label="브랜드" value={profileText(profile.displayName, roleSession.organizationLabel)} />
+                <InfoBox label="웹사이트" value={profileText(profile.websiteUrl, "등록 후 표시")} />
+                <InfoBox label="카테고리" value={stringList(profile.categories).join(" · ") || profileText(profile.customCategory, "등록 후 표시")} />
+                <InfoBox label="담당자" value={roleSession.userLabel} />
+              </>
+            )}
+          </div>
+          <p className="mt-4 text-xs text-muted">
+            {profileText(profile.capturedAt, "다시 연결하면 갱신됩니다")}
+          </p>
+        </Panel>
+
+        <Panel>
+          <SectionTitle eyebrow={role === "creator" ? "마지노선" : "딜당 한도"} title={`${money.usdc} USDC`} />
+          <div className="text-3xl font-semibold">{formatKrw(money.usdc)}</div>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            {role === "creator"
+              ? "이 밑으로 들어오는 제안은 매니저가 알아서 거절해요. 이 값은 상대 브랜드에게 공개되지 않습니다."
+              : "이 금액을 넘는 조건은 매니저가 자동 체결하지 않고 사용자 승인을 요청합니다. 이 값은 Creator에게 공개되지 않습니다."}
+          </p>
+          <div className="mt-5">
+            <div className="mb-2 text-sm font-semibold">
+              {role === "creator" ? "안 하는 카테고리 (비공개)" : "승인 전 확인할 조건 (비공개)"}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {hiddenCategories.map((item) => (
+                <span key={item} className="rounded-full border border-border-subtle bg-background px-3 py-1.5 text-sm">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <SectionTitle eyebrow="금액 표시" title="계약과 정산은 USDC 기준" />
+          <p className="text-sm leading-6 text-muted">
+            계약과 정산의 단위는 언제나 USDC예요. 원화는 표시 환율 1 USDC = 1,380원으로 환산한 참고값입니다.
+          </p>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <InfoBox label="User" value={roleSession.userLabel} />
-            <InfoBox label="Wallet" value={roleSession.walletAddress} />
+            <InfoBox label="원화 먼저" value={`${formatKrw(money.previewUsdc)} ${money.previewUsdc} USDC`} />
+            <InfoBox label="USDC 먼저" value={`${money.previewUsdc} USDC ${formatKrw(money.previewUsdc)}`} />
+          </div>
+        </Panel>
+
+        <Panel>
+          <SectionTitle eyebrow="계정" title={roleSession.userLabel} />
+          <div className="grid gap-3 md:grid-cols-2">
+            <InfoBox label="Workspace" value={roleSession.organizationLabel} />
+            <InfoBox label="Wallet" value={wallet.address ?? roleSession.walletAddress} />
             <InfoBox label="USDC 잔고" value={balance.usdcLabel} />
             <InfoBox label="SOL 잔고" value={balance.solLabel} />
           </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <SecondaryLink href={role === "brand" ? "/brand" : "/creator"}>대시보드로 돌아가기</SecondaryLink>
+            <SecondaryLink href={`/${role}/onboarding`}>처음부터 다시 설정</SecondaryLink>
+            <button
+              type="button"
+              onClick={() => {
+                void wallet.connect();
+              }}
+              disabled={wallet.status === "connecting" || wallet.status === "saving"}
+              className="rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised disabled:opacity-60"
+            >
+              {wallet.status === "connecting"
+                ? "연결 중..."
+                : wallet.status === "saving"
+                  ? "저장 중..."
+                  : wallet.address || roleSession.walletAddress !== "not-connected"
+                    ? "Phantom 재연결"
+                    : "Phantom 연결"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void auth.logout().then(() => router.push("/login"));
+              }}
+              className="rounded-full border border-border-subtle bg-surface px-5 py-2.5 text-sm font-semibold hover:bg-surface-raised"
+            >
+              로그아웃
+            </button>
+          </div>
+          {wallet.error && <p className="mt-3 text-sm text-muted">{wallet.error}</p>}
         </Panel>
       </div>
     </WorkspaceShell>
@@ -1664,48 +1799,7 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
 }
 
 export function RoleSettingsScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const serverSession = useServerRoleSession(role);
-  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
-  const wallet = usePhantomWallet();
-  return (
-    <WorkspaceShell role={role} active="settings" title="설정" session={roleSession}>
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Panel>
-          <SectionTitle eyebrow="Account" title="계정" />
-          <Input label="Display name" placeholder={roleSession.userLabel} />
-          <Input label="Workspace" placeholder={roleSession.organizationLabel} />
-        </Panel>
-        <Panel>
-          <SectionTitle eyebrow="Agent" title="에이전트" />
-          <InfoBox label="Agent ID" value={roleSession.agentId} />
-          <InfoBox label="Mode" value="ACTIVE" />
-          <PrivacyNote>Agent policy 변경은 audit event로 남기고, 결제 승인은 deterministic checks를 통과해야 합니다.</PrivacyNote>
-        </Panel>
-        <Panel>
-          <SectionTitle eyebrow="Wallet" title="지갑" />
-          <Input label="Wallet address" placeholder={wallet.address ?? roleSession.walletAddress} />
-          <InfoBox label="Network" value="Solana Devnet" />
-          <button
-            type="button"
-            onClick={() => {
-              void wallet.connect();
-            }}
-            disabled={wallet.status === "connecting" || wallet.status === "saving"}
-            className="mt-4 inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            {wallet.status === "connecting"
-              ? "연결 중..."
-              : wallet.status === "saving"
-                ? "저장 중..."
-                : (wallet.address ?? (roleSession.walletAddress !== "not-connected" ? roleSession.walletAddress : null))
-                  ? "Phantom 재연결"
-                  : "Phantom 연결"}
-          </button>
-          {wallet.error && <p className="mt-2 text-sm text-muted">{wallet.error}</p>}
-        </Panel>
-      </div>
-    </WorkspaceShell>
-  );
+  return <RoleMeScreen role={role} session={session} />;
 }
 
 export function DevAdminScreen({ overview }: { overview: DevOverview }) {
@@ -1870,10 +1964,7 @@ function WorkspaceShell({
           </div>
           <nav aria-label={`${role} account actions`} className="flex flex-wrap gap-2 text-sm font-semibold">
             <Link href={`/${role}/me`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
-              My
-            </Link>
-            <Link href={`/${role}/settings`} className="rounded-full border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
-              Settings
+              마이페이지
             </Link>
           </nav>
         </div>
@@ -2344,6 +2435,66 @@ function PromotionSummaryCard({
   );
 }
 
+function BrandPromotionWorkCard({
+  promotion,
+  productName,
+  productCategory,
+  onDeleted,
+}: {
+  promotion: BrandDashboard["activePromotions"][number];
+  productName: string;
+  productCategory: string;
+  onDeleted: () => void;
+}) {
+  const activeNegotiations = numberRecordValue(promotion, "activeNegotiationCount", 0);
+  const agreedCreators = numberRecordValue(promotion, "agreedCreatorCount", 0);
+  const nextHref = activeNegotiations > 0
+    ? `/brand/promotions/${promotion.promotionId}`
+    : `/brand/negotiate?promotionId=${promotion.promotionId}`;
+  return (
+    <div className="grid gap-2 rounded border border-border-subtle bg-surface p-2">
+      <PromotionSummaryCard
+        promotion={promotion}
+        productName={productName}
+        productCategory={productCategory}
+      />
+      <div className="grid gap-3 rounded border border-border-subtle bg-background p-4 md:grid-cols-[1fr_auto]">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <InfoBox label="Creator Agent 협상" value={`${activeNegotiations}건 진행`} />
+          <InfoBox label="체결된 Creator" value={`${agreedCreators}명`} />
+          <InfoBox label="다음 행동" value={activeNegotiations > 0 ? "협상 상세 확인" : "Agent 실행"} />
+        </div>
+        <div className="flex items-center gap-2">
+          <SecondaryLink href={nextHref}>
+            {activeNegotiations > 0 ? "Promotion 상세 보기" : "Agent 실행"}
+          </SecondaryLink>
+        </div>
+      </div>
+      <DeletePromotionButton promotionId={promotion.promotionId} onDeleted={onDeleted} />
+    </div>
+  );
+}
+
+function CreatorOfferWorkCard({ offer }: { offer: Record<string, unknown> }) {
+  const negotiationId = String(offer.negotiationId ?? "");
+  const amount = String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-");
+  const href = negotiationId ? `/creator/offers/${negotiationId}` : "/creator/offers";
+  return (
+    <Link href={href} className="block rounded border border-border-subtle bg-background p-4 hover:bg-surface-raised">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold">{String(offer.title ?? "Promotion")}</div>
+          <div className="mt-1 text-sm text-muted">
+            {mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · round {String(offer.currentRound ?? "-")}
+          </div>
+        </div>
+        <span className="font-mono text-sm">{amount} USDC</span>
+      </div>
+      <p className="mt-3 text-sm text-muted">클릭하면 제안, 역제안, 정책 검사, Agreement/Escrow 흐름을 확인합니다.</p>
+    </Link>
+  );
+}
+
 function DeletePromotionButton({
   promotionId,
   onDeleted,
@@ -2464,83 +2615,10 @@ function creatorDashboardSettlement(agreements: Array<Record<string, unknown>>):
   );
 }
 
-function brandDashboardActions(dashboard: BrandDashboard): NextActionView[] {
-  const actions: NextActionView[] = [];
-  const lockedAmount = Number(dashboard.summary.lockedEscrowBaseUnits);
-  if (dashboard.summary.negotiationsInProgress > 0) {
-    actions.push({
-      label: "에이전트 협상하기",
-      href: "/brand/promotions",
-      message: `${dashboard.summary.negotiationsInProgress}건의 Creator 협상이 진행 중입니다.`,
-    });
-  }
-  if (dashboard.summary.agreements > 0 && (!Number.isFinite(lockedAmount) || lockedAmount <= 0)) {
-    actions.push({
-      label: "Escrow 예치",
-      href: "/brand/promotions",
-      message: "Agreement가 생성된 Promotion의 escrow 예치 상태를 확인하세요.",
-    });
-  }
-  if (dashboard.activePromotions.length === 0) {
-    actions.push({
-      label: "새 Promotion 만들기",
-      href: "/brand/promotions/new",
-      message: "Promotion을 만들면 Brand Agent가 후보 탐색과 협상을 시작합니다.",
-    });
-  }
-  if (actions.length === 0) {
-    actions.push({
-      label: "Promotion 상세 보기",
-      href: "/brand/promotions",
-      message: "진행 중인 Promotion, Agreement, Escrow 상태를 검토하세요.",
-    });
-  }
-  return actions.slice(0, 3);
-}
-
-function creatorDashboardActions(dashboard: CreatorDashboard, context: CurrentUserContext): NextActionView[] {
-  const actions: NextActionView[] = [];
-  const settlement = creatorDashboardSettlement(dashboard.activeSponsorships);
-  if (dashboard.summary.newOffers > 0) {
-    actions.push({
-      label: "에이전트 협상하기",
-      href: "/creator/offers",
-      message: `${dashboard.summary.newOffers}건의 새 제안을 Creator Agent가 확인했습니다.`,
-    });
-  }
-  if (!context.account.walletAddress && dashboard.activeSponsorships.length > 0) {
-    actions.push({
-      label: "wallet 연결",
-      href: "/creator/settings",
-      message: "정산을 받으려면 지갑 주소가 필요합니다.",
-    });
-  }
-  if (settlement.availableToClaimAmount > 0) {
-    actions.push({
-      label: "정산받기",
-      href: "/creator/settlements",
-      message: `${settlement.availableToClaimAmount} USDC 정산 가능 상태입니다.`,
-    });
-  }
-  if (dashboard.activeSponsorships.length > 0 && settlement.availableToClaimAmount === 0) {
-    actions.push({
-      label: "게시물 링크 제출",
-      href: "/creator/agreements",
-      message: "마일스톤 검증이 필요한 딜의 게시물 링크를 확인하세요.",
-    });
-  }
-  if (actions.length === 0) {
-    actions.push({
-      label: "에이전트 설정",
-      href: "/creator/settings",
-      message: "Creator Agent 기준선과 제외 카테고리를 최신 상태로 유지하세요.",
-    });
-  }
-  return actions.slice(0, 3);
-}
-
 function stringList(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  if (typeof value === "string" && value.trim()) return splitList(value);
+  return [];
 }
 
 function PageTitle({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
@@ -2558,6 +2636,20 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
     <div className="mb-4">
       <Pill>{eyebrow}</Pill>
       <h2 className="mt-3 text-3xl font-semibold leading-none">{title}</h2>
+    </div>
+  );
+}
+
+function OnboardingStep({ label, title, body }: { label: string; title: string; body: string }) {
+  return (
+    <div className="grid grid-cols-[34px_1fr] gap-3 rounded border border-border-subtle bg-background p-3">
+      <div className="flex size-8 items-center justify-center rounded-full border border-border-subtle font-mono text-xs">
+        {label}
+      </div>
+      <div>
+        <div className="font-semibold text-foreground">{title}</div>
+        <p className="mt-1 leading-6">{body}</p>
+      </div>
     </div>
   );
 }
@@ -2753,36 +2845,20 @@ function fallbackForNegotiation(negotiation: ApiNegotiation) {
   };
 }
 
-/**
- * 화면들이 받는 RoleSession 을 서버(/me)와 로컬 세션 저장소에서 만든다.
- * /brand/settings · /creator/me 처럼 session 을 넘기지 않는 페이지가 fallback mock(`creator-signup-agent`,
- * `not-connected`) 대신 실제 계정·지갑 값으로 뜨게 하기 위한 것. 화면 마크업은 건드리지 않는다.
- */
-function useServerRoleSession(role: Role): RoleSession | null {
-  const [state, setState] = useDashboardState<RoleSession>();
+function useMyPageData(role: Role) {
+  const [state, setState] = useDashboardState<{
+    context: CurrentUserContext;
+    dashboard: BrandDashboard | CreatorDashboard | null;
+  }>();
   const load = useCallback(
     () =>
       loadDashboard(async () => {
-        const local = readLocalSession();
-        const { account } = await new ProductApiClient().getMe();
-        const brand = role === "brand";
-        const session: RoleSession = {
-          role,
-          userLabel: account.displayName ?? account.email ?? (brand ? "Brand operator" : "Creator"),
-          organizationLabel:
-            (brand ? account.brandId : account.creatorId) ??
-            (brand ? "Brand workspace" : "Creator workspace"),
-          agentId:
-            account.agentId ??
-            (brand ? local.brandAgentId : local.creatorAgentId) ??
-            `${role}-signup-agent`,
-          agentLabel: brand ? "Brand Agent" : "Creator Agent",
-          profileSummary: account.agentWalletPubkey
-            ? `에이전트 지갑(수탁): ${account.agentWalletPubkey}`
-            : "온보딩이 완료되어 Agent가 활성화되어 있습니다.",
-          walletAddress: account.walletAddress ?? "not-connected",
-        };
-        return session;
+        const client = new ProductApiClient();
+        const context = await client.getMe();
+        const dashboard = role === "brand"
+          ? await client.getBrandDashboard().catch(() => null)
+          : await client.getCreatorDashboard().catch(() => null);
+        return { context, dashboard };
       }, setState),
     [role, setState],
   );
@@ -2791,7 +2867,118 @@ function useServerRoleSession(role: Role): RoleSession | null {
     void load();
   }, [load]);
 
-  return state.type === "ready" ? state.data : null;
+  return state;
+}
+
+function roleSessionFromContext(context: CurrentUserContext, role: Role): RoleSession {
+  const local = readLocalSession();
+  const account = context.account;
+  const brand = role === "brand";
+  return {
+    role,
+    userLabel: account.displayName ?? account.email ?? (brand ? "Brand operator" : "Creator"),
+    organizationLabel:
+      profileText(
+        context.profileSummary?.displayName,
+        (brand ? account.brandId : account.creatorId) ?? (brand ? "Brand workspace" : "Creator workspace"),
+      ),
+    agentId:
+      account.agentId ??
+      (brand ? local.brandAgentId : local.creatorAgentId) ??
+      `${role}-signup-agent`,
+    agentLabel: brand ? "Brand Agent" : "Creator Agent",
+    profileSummary: account.agentWalletPubkey
+      ? `에이전트 지갑(수탁): ${account.agentWalletPubkey}`
+      : "온보딩이 완료되어 Agent가 활성화되어 있습니다.",
+    walletAddress: account.walletAddress ?? "not-connected",
+  };
+}
+
+function myPageProfile(
+  role: Role,
+  context: CurrentUserContext | null,
+  dashboard: BrandDashboard | CreatorDashboard | null,
+): Record<string, unknown> {
+  if (role === "brand" && dashboard && "brand" in dashboard) return dashboard.brand;
+  if (role === "creator" && dashboard && "creator" in dashboard) return dashboard.creator;
+  return context?.profileSummary ?? {};
+}
+
+function managerProfileFor(role: Role, profile: Record<string, unknown>) {
+  if (role === "creator") {
+    return {
+      name: profileText(profile.agentName, "Mina Agent"),
+      title: "크리에이터 매니저",
+      domain: profileText(profile.customCategory, "뷰티 담당"),
+      categoryId: "beauty",
+      tone: ["정중함", "유머 한 스푼"],
+    };
+  }
+  return {
+    name: profileText(profile.agentName, "Glow Agent"),
+    title: "브랜드 매니저",
+    domain: profileText(profile.customCategory, "프로모션 담당"),
+    categoryId: "wellness",
+    tone: ["명확함", "예산 엄수"],
+  };
+}
+
+function moneyProfileFor(role: Role, profile: Record<string, unknown>) {
+  const usdc = numberProfileValue(
+    role === "creator"
+      ? firstDefined(profile.minimumUsdc, profile.minimumAmountUsdc, profile.baseMinimumUsdc)
+      : firstDefined(profile.maxPerCreatorUsdc, profile.maximumPerCreator, profile.dealCapUsdc),
+    role === "creator" ? 300 : 650,
+  );
+  return { usdc, previewUsdc: role === "creator" ? 300 : 650 };
+}
+
+function hiddenCategoryListFor(role: Role, profile: Record<string, unknown>) {
+  const values = role === "creator"
+    ? stringList(firstDefined(profile.blockedDomains, profile.blockedCategories, profile.excludedCategories))
+    : stringList(firstDefined(profile.restrictedClaims, profile.prohibitedClaims, profile.approvalRequiredTerms));
+  if (values.length) return values;
+  return role === "creator"
+    ? ["도박", "대출·코인", "다이어트 보조제", "의료 시술", "주류", "성인"]
+    : ["무기한 사용권", "과장 효능 표현", "무검수 게시", "딜당 한도 초과"];
+}
+
+function handleFromProfile(profile: Record<string, unknown>, session: RoleSession) {
+  const fromProfile = profileText(profile.handle, "");
+  if (fromProfile) return fromProfile.startsWith("@") ? fromProfile : `@${fromProfile}`;
+  const snsUrl = profileText(profile.snsUrl, "");
+  const handle = snsUrl.split("/").filter(Boolean).pop();
+  return handle ? `@${handle.replace(/^@/, "")}` : session.userLabel;
+}
+
+function formatKrw(usdc: number) {
+  return `${(usdc * 1_380).toLocaleString("ko-KR")}원`;
+}
+
+function profileText(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function profileNumberText(value: unknown) {
+  const number = numberProfileValue(value, NaN);
+  return Number.isFinite(number) ? number.toLocaleString("ko-KR") : "연결 후 표시";
+}
+
+function percentText(value: unknown) {
+  const number = numberProfileValue(value, NaN);
+  if (!Number.isFinite(number)) return "연결 후 표시";
+  const percent = number > 1 ? number : number * 100;
+  return `${percent.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
+}
+
+function numberProfileValue(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return fallback;
+}
+
+function firstDefined(...values: unknown[]) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
 /**

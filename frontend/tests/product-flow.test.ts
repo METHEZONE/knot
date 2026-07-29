@@ -60,14 +60,14 @@ test("workspace nav is menu-like and role-specific", () => {
     "/brand/promotions",
     "/brand/promotions",
     "/brand/settlements",
-    "/brand/settings/agent",
+    "/brand/me",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
     "/creator",
     "/creator/offers",
     "/creator/deals",
     "/creator/settlements",
-    "/creator/settings/agent",
+    "/creator/me",
   ]);
 });
 
@@ -187,9 +187,7 @@ test("settlement and promotion selectors keep MVP concepts separated", () => {
 test("account routes are kept out of role workspace menus", () => {
   assert.deepEqual(accountRoutes.map((route) => route.href), [
     "/brand/me",
-    "/brand/settings",
     "/creator/me",
-    "/creator/settings",
   ]);
 });
 

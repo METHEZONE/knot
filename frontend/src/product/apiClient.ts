@@ -371,6 +371,8 @@ export type CreatorDashboard = {
     newOffers: number;
     agentNegotiations: number;
     activeSponsorships: number;
+    availablePayoutBaseUnits?: string;
+    releasedPayoutBaseUnits?: string;
     pendingPayoutBaseUnits: string;
   };
   offers: Array<Record<string, unknown>>;
