@@ -230,5 +230,5 @@ Exit:
 - [x] Phase 5 dashboards.
 - [x] Phase 6 promotion/candidates/lists.
 - [x] Phase 7 A2A detail.
-- [ ] Phase 8 Agreement/Escrow/Evidence/Settlement.
+- [x] Phase 8 Agreement/Escrow/Evidence/Settlement.
 - [ ] Phase 9 cleanup/E2E/deploy.

@@ -50,10 +50,10 @@
 | Human approval | NOT_STARTED | |
 | Agreement Artifact | IMPLEMENTED | Negotiation Detail reads Agreement artifact from Product API when present; escrow/evidence are Phase 8 |
 | termsHash | VERIFIED | Backend promotion/A2A tests verify real `termsHash`; UI displays API-provided hash only |
-| Devnet escrow lock | NOT_STARTED | |
-| Evidence URL | NOT_STARTED | |
-| Milestone release | NOT_STARTED | |
-| Explorer receipt | NOT_STARTED | |
+| Devnet escrow lock | VERIFIED | Negotiation Detail calls `escrow:lock`; backend escrow and web3 gateway tests passed; live devnet smoke skipped pending approval |
+| Evidence URL | VERIFIED | Negotiation Detail submits user-entered Evidence URL and verifies via Product API |
+| Milestone release | VERIFIED | Negotiation Detail releases milestone only after verified evidence and API escrow state |
+| Explorer receipt | IMPLEMENTED | UI displays API receipt signature/explorer only when returned; no fake URL generated |
 | E2E | NOT_STARTED | |
 | Deployment | NOT_STARTED | |
 
@@ -92,12 +92,12 @@ NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ## 4. Latest Verified Build
 
 ```text
-Commit: 2364ac4 feat: add promotion candidates and negotiation history; pending Phase 7 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, and Negotiation adapters
+Commit: c2619a6 feat: connect real A2A conversation; pending Phase 8 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, Negotiation, Escrow, Evidence, and Settlement adapters
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 7 tests
+Verified at: 2026-07-30 Phase 8 tests
 Verifier: Codex
 ```
 
@@ -299,6 +299,40 @@ Results:
 - Frontend typecheck: passed.
 - Frontend production build: passed; dynamic `/negotiations/[negotiationId]` route generated.
 - Backend A2A/promotion tests: 28 passed, 1 Starlette/httpx deprecation warning.
+
+Screenshot status:
+- Pending for the same local browser tooling reason recorded in Phase 1.
+
+---
+
+## 13. Phase 8 Agreement, Escrow, Evidence, Settlement
+
+Changes:
+- Negotiation Detail now loads Agreement escrow bundle.
+- Added explicit Escrow lock action using `POST /api/v1/agreements/{agreementId}/escrow:lock`.
+- Added Evidence URL input and submit/verify action using Product API evidence endpoints.
+- Added milestone release action using `POST /api/v1/escrows/{escrowId}/milestones/{milestoneId}:release`.
+- Receipt display shows only API-returned receipt ID, status, signature, and explorer URL.
+
+Commands run:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run build
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_escrow_devnet.py
+cd web3/gateway && npm run test
+```
+
+Results:
+- Frontend tests: 8 passed.
+- Frontend typecheck: passed.
+- Frontend production build: passed.
+- Backend escrow tests: 13 passed, 1 skipped devnet test, 1 Starlette/httpx deprecation warning.
+- Web3 gateway tests: 12 passed.
+
+Devnet note:
+- No live wallet funding, on-chain transaction, or mainnet action was performed. Live devnet smoke still requires explicit approval.
 
 Screenshot status:
 - Pending for the same local browser tooling reason recorded in Phase 1.

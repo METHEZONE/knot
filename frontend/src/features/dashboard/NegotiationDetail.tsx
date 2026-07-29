@@ -5,8 +5,11 @@ import { AgentCharacter } from "@/components/AgentCharacter";
 import {
   ProductApiClient,
   type ApiAgreement,
+  type ApiAgreementEscrowBundle,
+  type ApiEvidence,
   type ApiNegotiation,
   type ApiNegotiationMessage,
+  type ApiReceipt,
 } from "@/product/apiClient";
 
 type DetailState =
@@ -16,6 +19,7 @@ type DetailState =
       negotiation: ApiNegotiation;
       messages: ApiNegotiationMessage[];
       agreement: ApiAgreement | null;
+      escrowBundle: ApiAgreementEscrowBundle | null;
       error: null;
     }
   | { status: "error"; negotiation: null; messages: []; agreement: null; error: string };
@@ -37,8 +41,9 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: string }) 
       client.listNegotiationMessages(negotiationId),
       client.getNegotiationAgreement(negotiationId).catch(() => null),
     ])
-      .then(([negotiation, messages, agreement]) => {
-        if (!cancelled) setState({ status: "ready", negotiation, messages, agreement, error: null });
+      .then(async ([negotiation, messages, agreement]) => {
+        const escrowBundle = agreement ? await client.getAgreementEscrow(agreement.agreementId).catch(() => null) : null;
+        if (!cancelled) setState({ status: "ready", negotiation, messages, agreement, escrowBundle, error: null });
       })
       .catch((caught) => {
         if (!cancelled) {
@@ -107,7 +112,131 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: string }) 
           <div className="mt-4"><Panel text="아직 Agreement가 없습니다." /></div>
         )}
       </section>
+
+      {state.agreement ? (
+        <SettlementPanel agreement={state.agreement} initialBundle={state.escrowBundle} />
+      ) : null}
     </Shell>
+  );
+}
+
+function SettlementPanel({
+  agreement,
+  initialBundle,
+}: {
+  agreement: ApiAgreement;
+  initialBundle: ApiAgreementEscrowBundle | null;
+}) {
+  const firstMilestone = agreement.terms.milestones[0]?.id ?? "m1";
+  const [bundle, setBundle] = useState(initialBundle);
+  const [evidenceUrl, setEvidenceUrl] = useState("https://social.example/post/with-brand-and-ad");
+  const [evidence, setEvidence] = useState<ApiEvidence | null>(null);
+  const [receipt, setReceipt] = useState<ApiReceipt | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const escrow = bundle?.escrow ?? null;
+
+  async function reloadBundle() {
+    const next = await new ProductApiClient().getAgreementEscrow(agreement.agreementId);
+    setBundle(next);
+  }
+
+  async function lock() {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await new ProductApiClient().lockEscrow(agreement.agreementId);
+      setReceipt(result.receipt);
+      await reloadBundle();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitAndVerifyEvidence() {
+    setSaving(true);
+    setError(null);
+    try {
+      const submitted = await new ProductApiClient().submitEvidence(agreement, firstMilestone, evidenceUrl);
+      const verified = await new ProductApiClient().verifyEvidence(submitted.evidenceId);
+      setEvidence(verified);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function release() {
+    if (!escrow) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await new ProductApiClient().releaseMilestone(escrow.escrowId, firstMilestone);
+      setReceipt(result.receipt);
+      await reloadBundle();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <h2 className="text-2xl">Escrow · Evidence · Settlement</h2>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <Stat label="Escrow" value={escrow ? escrow.status : "not locked"} />
+        <Stat label="Locked" value={escrow ? formatUsdcBaseUnits(escrow.lockedAmountBaseUnits) : "0 USDC"} />
+        <Stat label="Released" value={escrow ? formatUsdcBaseUnits(escrow.releasedAmountBaseUnits) : "0 USDC"} />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={lock}
+          disabled={saving || Boolean(escrow)}
+          className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+        >
+          Escrow lock
+        </button>
+        <button
+          type="button"
+          onClick={submitAndVerifyEvidence}
+          disabled={saving || !escrow || !evidenceUrl.trim()}
+          className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+        >
+          Evidence 검증
+        </button>
+        <button
+          type="button"
+          onClick={release}
+          disabled={saving || !escrow || evidence?.status !== "PASSED"}
+          className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+        >
+          Milestone release
+        </button>
+      </div>
+      <label className="mt-4 flex flex-col gap-1.5">
+        <span className="text-sm text-muted">Evidence URL</span>
+        <input
+          value={evidenceUrl}
+          onChange={(event) => setEvidenceUrl(event.target.value)}
+          className="sketch-alt ink border border-border-subtle bg-background px-3 py-2 text-sm outline-none"
+        />
+      </label>
+      {evidence ? <div className="mt-4"><Stat label="Evidence status" value={evidence.status} /></div> : null}
+      {receipt ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Stat label="Receipt" value={receipt.receiptId} />
+          <Stat label="Signature" value={receipt.signature ?? "not confirmed"} />
+          <Stat label="Explorer" value={receipt.explorerUrl ?? "not available"} />
+          <Stat label="Receipt status" value={receipt.status} />
+        </div>
+      ) : null}
+      {error ? <p className="mt-3 text-sm text-muted">{error}</p> : null}
+    </section>
   );
 }
 
@@ -150,4 +279,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Panel({ text: value }: { text: string }) {
   return <div className="sketch-alt ink border border-border-subtle bg-background p-4 text-sm text-muted">{value}</div>;
+}
+
+function formatUsdcBaseUnits(value: string) {
+  try {
+    const baseUnits = BigInt(value || "0");
+    const scale = BigInt(1000000);
+    const whole = baseUnits / scale;
+    const fraction = baseUnits % scale;
+    if (fraction === BigInt(0)) return `${whole.toString()} USDC`;
+    return `${whole.toString()}.${fraction.toString().padStart(6, "0").replace(/0+$/, "")} USDC`;
+  } catch {
+    return "0 USDC";
+  }
 }

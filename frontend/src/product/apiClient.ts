@@ -763,13 +763,14 @@ export class ProductApiClient {
       | ApiAgreement
       | { agreementId: string; creatorAgentId: string },
     milestoneId: string,
+    url: string,
   ) {
     const response = await this.request<{ evidence: ApiEvidence }>(
       `/api/v1/agreements/${agreement.agreementId}/evidence`,
       {
         method: "POST",
         body: JSON.stringify({
-          url: "https://social.example/post/with-brand-and-ad",
+          url,
           submittedByAgentId: agreement.creatorAgentId,
           milestoneId,
         }),
