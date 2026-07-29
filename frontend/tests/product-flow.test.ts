@@ -43,6 +43,7 @@ test("route surface includes v2 onboarding entries and UI reference routes", () 
     "/brand/onboarding",
     "/brand/product",
     "/brand/mood",
+    "/brand/promotions/new",
     "/brand",
     "/brand/settings",
     "/dev/admin",

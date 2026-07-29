@@ -41,10 +41,10 @@
 | MyPage unified | VERIFIED | `/mypage` added; `/brand/me`, `/creator/me`, `/brand/settings`, `/creator/settings` redirect; frontend `npm run test`, `npm run build`, `npm run typecheck` passed |
 | Creator dashboard | VERIFIED | `/creator` loads `GET /api/v1/creator/dashboard`; frontend test/typecheck/build and backend dashboard/resource tests passed |
 | Brand dashboard | VERIFIED | `/brand` loads `GET /api/v1/brand/dashboard`; frontend test/typecheck/build and backend dashboard/resource tests passed |
-| Creator availability | NOT_STARTED | |
-| Brand proposal run | NOT_STARTED | |
-| Candidate list | NOT_STARTED | |
-| Negotiation history | NOT_STARTED | |
+| Creator availability | VERIFIED | `POST /api/v1/creator/availability`; dashboard CTA toggles receiving state; backend dashboard tests passed |
+| Brand proposal run | VERIFIED | `/brand/promotions/new` creates Brand Promotion and runs matching through Product API |
+| Candidate list | VERIFIED | Promotion flow lists match candidates and allows explicit eligible candidate selection |
+| Negotiation history | IMPLEMENTED | `/brand/promotions/[promotionId]` shows promotion activity and existing Agreement/negotiation references; full negotiation detail is Phase 7 |
 | Rejected negotiation | NOT_STARTED | |
 | Real A2A counter | NOT_STARTED | |
 | Human approval | NOT_STARTED | |
@@ -92,12 +92,12 @@ NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ## 4. Latest Verified Build
 
 ```text
-Commit: 31de3af refactor: unify mypage settings; pending Phase 5 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, and dashboard adapters
+Commit: cd7dec4 feat: build live role dashboards; pending Phase 6 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, and Promotion adapters
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 5 tests
+Verified at: 2026-07-30 Phase 6 tests
 Verifier: Codex
 ```
 
@@ -240,6 +240,36 @@ Results:
 - Frontend production build: passed.
 - Frontend typecheck: passed after build completed. Parallel typecheck/build can race on generated `.next/types`.
 - Backend dashboard/resource tests: 8 passed, 1 Starlette/httpx deprecation warning.
+
+Screenshot status:
+- Pending for the same local browser tooling reason recorded in Phase 1.
+
+---
+
+## 11. Phase 6 Promotion, Candidates, Negotiation Lists
+
+Changes:
+- Added Creator availability API: `POST /api/v1/creator/availability`.
+- Creator dashboard `협찬 받기` toggles availability through Product API.
+- Brand dashboard `협찬 제안하기` links to `/brand/promotions/new`.
+- Added `/brand/promotions/new` flow: creates Brand-owned Promotion, runs matching, lists candidates, and allows explicit eligible candidate selection.
+- Added `/brand/promotions/[promotionId]` detail: reads Product API detail/activity and lists Agreement/negotiation references.
+- No `setTimeout` success path, fake signature, fake explorer, or automatic negotiation success was added.
+
+Commands run:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run build
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest tests/test_api_dashboards.py tests/test_api_promotions.py tests/test_api_resource_routes.py
+```
+
+Results:
+- Frontend tests: 8 passed.
+- Frontend typecheck: passed.
+- Frontend production build: passed; 23 app routes generated including `/brand/promotions/new` and `/brand/promotions/[promotionId]`.
+- Backend dashboard/promotions/resource tests: 24 passed, 1 Starlette/httpx deprecation warning.
 
 Screenshot status:
 - Pending for the same local browser tooling reason recorded in Phase 1.

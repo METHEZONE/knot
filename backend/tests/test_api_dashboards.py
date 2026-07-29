@@ -149,6 +149,33 @@ def test_creator_dashboard_filters_by_authenticated_creator_agent() -> None:
     assert [offer["negotiationId"] for offer in offers] == ["negotiation-owned"]
 
 
+def test_creator_can_toggle_offer_availability() -> None:
+    client, repository = client_and_repository()
+    creator = complete_creator(client, "creator-availability")
+
+    on_response = client.post(
+        "/api/v1/creator/availability",
+        headers={"Authorization": creator["Authorization"]},
+        json={"acceptingOffers": True},
+    )
+    off_response = client.post(
+        "/api/v1/creator/availability",
+        headers={"Authorization": creator["Authorization"]},
+        json={"acceptingOffers": False},
+    )
+
+    assert on_response.status_code == 200
+    assert on_response.json()["data"]["creator"]["availability"] == "RECEIVING"
+    assert off_response.status_code == 200
+    creator_doc = repository.get_raw_document(
+        FirestorePaths.creator_profile(creator["creatorId"])
+    )
+    assert creator_doc is not None
+    assert creator_doc["receivingOffers"] is False
+    assert creator_doc["acceptingOffers"] is False
+    assert creator_doc["availability"] == "OFFLINE"
+
+
 def test_seeded_demo_dashboards_show_expected_agreements_and_payouts() -> None:
     repository = KnotRepository(InMemoryDocumentStore())
     seed_demo_repository(repository, include_business_flow=True)

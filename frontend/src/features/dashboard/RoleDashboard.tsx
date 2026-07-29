@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import {
@@ -23,27 +23,26 @@ export function RoleDashboard({ role }: { role: Role }) {
     error: null,
   });
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDashboard = useCallback(() => {
     const client = new ProductApiClient();
     const request = role === "brand" ? client.getBrandDashboard() : client.getCreatorDashboard();
+    setState((current) => current.status === "ready" ? current : { status: "loading", data: null, error: null });
     request
       .then((data) => {
-        if (!cancelled) setState({ status: "ready", data, error: null });
+        setState({ status: "ready", data, error: null });
       })
       .catch((caught) => {
-        if (!cancelled) {
-          setState({
-            status: "error",
-            data: null,
-            error: caught instanceof Error ? caught.message : String(caught),
-          });
-        }
+        setState({
+          status: "error",
+          data: null,
+          error: caught instanceof Error ? caught.message : String(caught),
+        });
       });
-    return () => {
-      cancelled = true;
-    };
   }, [role]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   if (state.status === "loading") {
     return <DashboardShell role={role} title="Dashboard"><EmptyState text="Dashboard를 불러오는 중..." /></DashboardShell>;
@@ -56,7 +55,7 @@ export function RoleDashboard({ role }: { role: Role }) {
   return role === "brand" ? (
     <BrandDashboardView dashboard={state.data as BrandDashboard} />
   ) : (
-    <CreatorDashboardView dashboard={state.data as CreatorDashboard} />
+    <CreatorDashboardView dashboard={state.data as CreatorDashboard} onReload={loadDashboard} />
   );
 }
 
@@ -75,8 +74,8 @@ function BrandDashboardView({ dashboard }: { dashboard: BrandDashboard }) {
       />
       <ActionPanel
         title="해야 할 일"
-        body="협찬 제안하기는 다음 단계에서 Promotion 후보 탐색과 실제 협상을 시작하는 CTA로 연결됩니다."
-        action={<span className="sketch-pill ink border border-border-subtle bg-surface px-4 py-2 text-sm text-muted">Phase 6 연결 예정</span>}
+        body="Promotion을 만들고 Creator 후보를 탐색합니다. 협상 시작은 후보 확인 후 명시적으로 진행합니다."
+        action={<Link href="/brand/promotions/new" className="sketch-pill inline-flex bg-accent px-4 py-2 text-sm text-background">협찬 제안하기</Link>}
       />
       <ListSection title="진행 중 목록" empty="진행 중인 Promotion이 없습니다.">
         {dashboard.activePromotions.map((promotion) => (
@@ -88,9 +87,25 @@ function BrandDashboardView({ dashboard }: { dashboard: BrandDashboard }) {
   );
 }
 
-function CreatorDashboardView({ dashboard }: { dashboard: CreatorDashboard }) {
+function CreatorDashboardView({ dashboard, onReload }: { dashboard: CreatorDashboard; onReload: () => void }) {
   const creatorName = text(dashboard.creator.displayName) || "Creator";
   const accepting = dashboard.creator.acceptingOffers === true || dashboard.creator.receivingOffers === true;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggleAvailability() {
+    setSaving(true);
+    setError(null);
+    try {
+      await new ProductApiClient().updateCreatorAvailability(!accepting);
+      onReload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <DashboardShell role="creator" title="Creator Dashboard">
       <ManagerCard role="creator" title="Mina Agent" body={`${creatorName}의 신규 제안과 정산 상태를 관리합니다.`} status={accepting ? "RECEIVING" : "OFFLINE"} />
@@ -104,8 +119,20 @@ function CreatorDashboardView({ dashboard }: { dashboard: CreatorDashboard }) {
       />
       <ActionPanel
         title="해야 할 일"
-        body="협찬 받기는 다음 단계에서 신규 제안 수신 상태를 켜는 API로 연결됩니다."
-        action={<span className="sketch-pill ink border border-border-subtle bg-surface px-4 py-2 text-sm text-muted">Phase 6 연결 예정</span>}
+        body={accepting ? "신규 제안 수신이 켜져 있습니다." : "협찬 받기를 켜면 Brand의 신규 제안 대상이 됩니다."}
+        action={
+          <div className="flex flex-col items-start gap-2">
+            <button
+              type="button"
+              onClick={toggleAvailability}
+              disabled={saving}
+              className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+            >
+              {saving ? "저장 중..." : accepting ? "협찬 받기 끄기" : "협찬 받기"}
+            </button>
+            {error ? <span className="text-sm text-muted">{error}</span> : null}
+          </div>
+        }
       />
       <ListSection title="진행 중 목록" empty="현재 받은 제안이 없습니다.">
         {dashboard.offers.map((offer) => (

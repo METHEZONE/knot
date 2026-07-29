@@ -605,6 +605,13 @@ export class ProductApiClient {
     return response.dashboard;
   }
 
+  async updateCreatorAvailability(acceptingOffers: boolean) {
+    return this.request<{ creator: Record<string, unknown> }>("/api/v1/creator/availability", {
+      method: "POST",
+      body: JSON.stringify({ acceptingOffers }),
+    });
+  }
+
   async bootstrapUser(input: BootstrapUserInput) {
     const response = await this.request<{ user: ApiUser }>("/api/v1/users:bootstrap", {
       method: "POST",
@@ -666,6 +673,14 @@ export class ProductApiClient {
       `/api/v1/match-runs/${matchRunId}/candidates`,
     );
     return response.candidates;
+  }
+
+  async selectCandidate(matchRunId: string, creatorAgentId: string) {
+    const response = await this.request<{ matchRun: ApiMatchRun }>(
+      `/api/v1/match-runs/${matchRunId}/candidates/${creatorAgentId}:select`,
+      { method: "POST" },
+    );
+    return response;
   }
 
   async getMatchRun(matchRunId: string) {

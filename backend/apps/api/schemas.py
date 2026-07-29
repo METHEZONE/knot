@@ -101,6 +101,10 @@ class CurrentUserCreatorProfileRequest(DomainModel):
         return categories
 
 
+class CreatorAvailabilityRequest(DomainModel):
+    accepting_offers: bool = Field(alias="acceptingOffers")
+
+
 class BrandSourceAnalysisRequest(DomainModel):
     website_url: str | None = Field(default=None, alias="websiteUrl")
     product_url: str | None = Field(default=None, alias="productUrl")

@@ -12,6 +12,7 @@ from apps.api.schemas import (
     BrandOnboardingRequest,
     BrandPromotionCreateRequest,
     BrandSourceAnalysisRequest,
+    CreatorAvailabilityRequest,
     CreatorCriteriaRequest,
     CreatorOnboardingRequest,
     CurrentUserBrandProfileRequest,
@@ -964,6 +965,34 @@ def build_api_router(
         user = _require_completed_role(repository, auth_user, "CREATOR")
         offers = _creator_offer_documents(repository, user)
         return _ok({"offers": offers})
+
+    @router.post("/creator/availability")
+    def update_creator_availability(
+        payload: CreatorAvailabilityRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        creator_id = _require_document_str(user, "creatorId")
+        path = FirestorePaths.creator_profile(creator_id)
+        creator = repository.get_raw_document(path)
+        if creator is None:
+            raise _not_found("creator", creator_id)
+        accepting = payload.accepting_offers
+        updated = {
+            **creator,
+            "receivingOffers": accepting,
+            "acceptingOffers": accepting,
+            "availability": "RECEIVING" if accepting else "OFFLINE",
+            "updatedAt": _now(),
+        }
+        repository.save_raw_document(path, updated)
+        _append_audit(
+            repository,
+            action="CREATOR_AVAILABILITY_UPDATED",
+            data={"uid": auth_user.uid, "creatorId": creator_id, "acceptingOffers": accepting},
+        )
+        return _ok({"creator": updated})
 
     @router.get("/creator/offers/{negotiation_id}")
     def get_creator_offer(

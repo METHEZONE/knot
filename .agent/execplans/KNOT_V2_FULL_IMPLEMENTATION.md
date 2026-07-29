@@ -228,7 +228,7 @@ Exit:
 - [x] Phase 3 onboarding API connection.
 - [x] Phase 4 `/mypage`.
 - [x] Phase 5 dashboards.
-- [ ] Phase 6 promotion/candidates/lists.
+- [x] Phase 6 promotion/candidates/lists.
 - [ ] Phase 7 A2A detail.
 - [ ] Phase 8 Agreement/Escrow/Evidence/Settlement.
 - [ ] Phase 9 cleanup/E2E/deploy.

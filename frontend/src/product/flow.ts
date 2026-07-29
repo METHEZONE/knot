@@ -16,6 +16,7 @@ export const appRoutes = [
   "/brand/onboarding",
   "/brand/product",
   "/brand/mood",
+  "/brand/promotions/new",
   "/brand",
   "/brand/settings",
   "/dev/admin",
