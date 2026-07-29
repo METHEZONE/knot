@@ -46,10 +46,10 @@
 | Candidate list | VERIFIED | Promotion flow lists match candidates and allows explicit eligible candidate selection |
 | Negotiation history | IMPLEMENTED | `/brand/promotions/[promotionId]` shows promotion activity and existing Agreement/negotiation references; full negotiation detail is Phase 7 |
 | Rejected negotiation | NOT_STARTED | |
-| Real A2A counter | NOT_STARTED | |
+| Real A2A counter | VERIFIED | Candidate-selected Promotion flow calls `startNegotiation`; backend A2A/promotion tests passed |
 | Human approval | NOT_STARTED | |
-| Agreement Artifact | NOT_STARTED | |
-| termsHash | NOT_STARTED | |
+| Agreement Artifact | IMPLEMENTED | Negotiation Detail reads Agreement artifact from Product API when present; escrow/evidence are Phase 8 |
+| termsHash | VERIFIED | Backend promotion/A2A tests verify real `termsHash`; UI displays API-provided hash only |
 | Devnet escrow lock | NOT_STARTED | |
 | Evidence URL | NOT_STARTED | |
 | Milestone release | NOT_STARTED | |
@@ -92,12 +92,12 @@ NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ## 4. Latest Verified Build
 
 ```text
-Commit: cd7dec4 feat: build live role dashboards; pending Phase 6 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, and Promotion adapters
+Commit: 2364ac4 feat: add promotion candidates and negotiation history; pending Phase 7 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, and Negotiation adapters
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 6 tests
+Verified at: 2026-07-30 Phase 7 tests
 Verifier: Codex
 ```
 
@@ -270,6 +270,35 @@ Results:
 - Frontend typecheck: passed.
 - Frontend production build: passed; 23 app routes generated including `/brand/promotions/new` and `/brand/promotions/[promotionId]`.
 - Backend dashboard/promotions/resource tests: 24 passed, 1 Starlette/httpx deprecation warning.
+
+Screenshot status:
+- Pending for the same local browser tooling reason recorded in Phase 1.
+
+---
+
+## 12. Phase 7 Real A2A Negotiation Detail
+
+Changes:
+- Candidate-selected Promotion flow now exposes an explicit `협상 시작` action that calls `POST /api/v1/match-runs/{matchRunId}:start-negotiation`.
+- Added `/negotiations/[negotiationId]` detail route.
+- Negotiation Detail reads `GET /api/v1/negotiations/{id}`, `/messages`, and `/agreement`; it displays only API-returned messages, Agreement status, and termsHash.
+- Creator dashboard offer/activity rows link to Negotiation Detail when a `negotiationId` is present.
+- No timer-based success, fake termsHash, or fake Agreement path was added.
+
+Commands run:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run typecheck
+cd frontend && npm run build
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_a2a_http_integration.py tests/test_api_promotions.py
+```
+
+Results:
+- Frontend tests: 8 passed.
+- Frontend typecheck: passed.
+- Frontend production build: passed; dynamic `/negotiations/[negotiationId]` route generated.
+- Backend A2A/promotion tests: 28 passed, 1 Starlette/httpx deprecation warning.
 
 Screenshot status:
 - Pending for the same local browser tooling reason recorded in Phase 1.

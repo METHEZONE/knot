@@ -229,6 +229,6 @@ Exit:
 - [x] Phase 4 `/mypage`.
 - [x] Phase 5 dashboards.
 - [x] Phase 6 promotion/candidates/lists.
-- [ ] Phase 7 A2A detail.
+- [x] Phase 7 A2A detail.
 - [ ] Phase 8 Agreement/Escrow/Evidence/Settlement.
 - [ ] Phase 9 cleanup/E2E/deploy.

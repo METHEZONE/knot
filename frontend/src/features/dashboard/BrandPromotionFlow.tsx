@@ -14,10 +14,11 @@ type RunState = {
   promotion: ApiPromotion | null;
   matchRun: ApiMatchRun | null;
   candidates: ApiCandidate[];
+  negotiationId: string | null;
 };
 
 export function BrandPromotionFlow() {
-  const [state, setState] = useState<RunState>({ promotion: null, matchRun: null, candidates: [] });
+  const [state, setState] = useState<RunState>({ promotion: null, matchRun: null, candidates: [], negotiationId: null });
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export function BrandPromotionFlow() {
       const promotion = await client.createBrandPromotion(input, idempotencyKey("brand-promotion"));
       const matchRun = await client.runMatches(promotion.promotionId);
       const candidates = await client.listCandidates(matchRun.matchRunId);
-      setState({ promotion, matchRun, candidates });
+      setState({ promotion, matchRun, candidates, negotiationId: null });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -50,6 +51,20 @@ export function BrandPromotionFlow() {
         candidate.creatorAgentId,
       );
       setSelectedAgentId(response.matchRun.selectedCreatorAgentId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function startNegotiation() {
+    if (!state.matchRun) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { negotiation } = await new ProductApiClient().startNegotiation(state.matchRun.matchRunId);
+      setState((current) => ({ ...current, negotiationId: negotiation.negotiationId }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -120,6 +135,21 @@ export function BrandPromotionFlow() {
                 후보가 없습니다. Promotion 조건을 조정하세요.
               </div>
             )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={startNegotiation}
+              disabled={saving || !selectedAgentId}
+              className="sketch-pill bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+            >
+              협상 시작
+            </button>
+            {state.negotiationId ? (
+              <Link href={`/negotiations/${state.negotiationId}`} className="text-sm font-semibold text-muted hover:text-foreground">
+                Negotiation Detail 열기
+              </Link>
+            ) : null}
           </div>
         </section>
       ) : null}

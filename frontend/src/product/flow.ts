@@ -19,6 +19,7 @@ export const appRoutes = [
   "/brand/promotions/new",
   "/brand",
   "/brand/settings",
+  "/negotiations/[negotiationId]",
   "/dev/admin",
 ] as const;
 

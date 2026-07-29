@@ -230,12 +230,27 @@ function PromotionRow({ promotion }: { promotion: ApiPromotion }) {
 
 function GenericRow({ item }: { item: Record<string, unknown> }) {
   const id = text(item.negotiationId) || text(item.id) || "item";
-  return (
-    <div className="sketch-alt ink border border-border-subtle bg-background p-4">
+  const content = (
+    <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-mono text-sm">{id}</span>
         <span className="font-mono text-xs text-muted">{text(item.status) || "ACTIVE"}</span>
       </div>
+    </>
+  );
+  if (text(item.negotiationId)) {
+    return (
+      <Link
+        href={`/negotiations/${text(item.negotiationId)}`}
+        className="sketch-alt ink border border-border-subtle bg-background p-4 hover:bg-surface-raised"
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div className="sketch-alt ink border border-border-subtle bg-background p-4">
+      {content}
     </div>
   );
 }

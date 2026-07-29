@@ -46,6 +46,7 @@ test("route surface includes v2 onboarding entries and UI reference routes", () 
     "/brand/promotions/new",
     "/brand",
     "/brand/settings",
+    "/negotiations/[negotiationId]",
     "/dev/admin",
   ]);
 });
