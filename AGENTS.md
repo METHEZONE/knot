@@ -1,66 +1,78 @@
 # KNOT Repository Instructions
 
-## Source of truth
+## Product goal
 
-Before changing code, read:
+```text
+Real authentication
+→ one-page role onboarding
+→ role dashboard
+→ Promotion / Offer
+→ real A2A negotiation
+→ Agreement
+→ Solana devnet Escrow
+```
 
-1. `docs/01_PRD_v1.md`
-2. `docs/02_SCOPE_GLOSSARY.md`
-3. `docs/03_SYSTEM_ARCHITECTURE.md`
-4. The task-specific document listed in `docs/00_INDEX.md`
+Society Map is not part of the MVP.
 
-For multi-service, multi-day, or architecture-changing work, create or update an execution plan in `PLANS.md` before implementation.
+## Sources of truth
 
-## Non-negotiable constraints
+Read `docs/00_DOCUMENT_INDEX.md` first. Do not use archived documents as requirements. `DESIGN.md` and existing visual assets remain the visual source of truth.
 
-- This is KNOT **v1**.
-- Onboarding **is now in scope**: `docs/23_EXPERIENCE_PRD_v2.md` (approved) amends the v1 exclusion list — hatching onboarding, social/website ingest, and Firebase/wallet sign-in are Tier A/B. Seed data and demo accounts stay first-class, and every demo gate must still run on seeds alone.
-- Use `Promotion` / `promotionId`; do not introduce legacy initiative terms in new code.
-- All off-chain runtime and deployment must use Google Cloud services.
-- Frontend: Next.js + TypeScript, deployed to Cloud Run when frontend work starts. The `frontend/` directory may be intentionally empty before that milestone.
-- Backend and agents: Python + FastAPI + Google ADK + Vertex AI Gemini, deployed to Cloud Run.
-- A2A: official A2A Protocol v1.0, HTTP+JSON binding, official Python SDK where possible.
-- Database: Firestore in Native mode.
-- Web3 gateway: TypeScript service on private Cloud Run; Solana program: Anchor/Rust on devnet.
-- Never expose a private key, seed phrase, service-account JSON, API token, or secret in source, logs, tests, fixtures, or documentation.
-- LLM output cannot authorize payments. Deterministic policy checks and the web3 gateway must approve every lock or release.
-- Do not make unrelated refactors or expand scope.
+## KNOT v2 Product Source of Truth
 
-## Repository layout
+- Follow `docs/KNOT_PRODUCT_MASTER_SPEC_V2.md`.
+- Use `docs/00_DOCUMENT_INDEX.md` to select specialized documents.
+- Do not use archived or git-history product documents as active requirements.
+- Frontend UI/UX source of truth is `origin/feat/two-user-session`.
+- Preserve its onboarding, Manager, Agent conversation, and Settings visual language.
+- Backend/API/A2A/Agreement/Escrow/Settlement source of truth is the stable branch that currently runs the real services.
+- Connect UI and backend through ViewModel/Adapter layers.
+- Do not restore the legacy long-form onboarding.
+- Do not mix old and new dashboards or duplicate settings pages.
+- `매니저 붙이기` creates and connects an Agent; it does not start a negotiation.
+- Creator `협찬 받기` and Brand `협찬 제안하기` are the Agent run entry points.
+- Dashboard shows summaries. Negotiation Detail shows the full Agent conversation.
+- Store rejected and expired negotiations.
+- Never expose counterparty private policy, raw prompts, chain-of-thought, credentials, or wallet secrets.
+- Never use silent mock fallback in production.
+- Never fabricate profile metrics, Agreement hashes, Solana signatures, Explorer links, or payment success.
+- Use Solana localnet/devnet only for the MVP. Do not use mainnet.
+- Preserve idempotency for A2A messages, Agreement creation, escrow lock, and milestone release.
+- Run relevant tests and update `docs/IMPLEMENTATION_STATUS.md` at every phase.
+- Do not push directly to main.
 
-- `frontend/`: reserved for the Next.js web application; currently empty until frontend work starts
-- `backend/`: Product API, Brand Agent, Creator A2A server, shared Python libraries
-- `web3/`: private transaction gateway and Anchor program
-- `docs/`: product and engineering source of truth
-- `infra/` and `scripts/`: add only when deployment, seed, reset, or smoke-test implementation starts
-- External prompt files may be used during a task, but prompt originals are not tracked in this repository unless explicitly requested.
+## Development rules
 
-## Commit rules
+1. Inspect existing code before editing.
+2. Preserve working UI components and visual tokens.
+3. Refactor incrementally; do not rewrite the repository from scratch.
+4. Use real resource identifiers in routes and APIs.
+5. Firebase Auth UID is the user identity source.
+6. Firestore is the business-state source.
+7. The browser must not write business data directly to Firestore.
+8. API mode must never fall back to a successful mock result.
+9. Seed data may exist only through an explicit dev/admin seed action.
+10. Brand Agent and Creator Agent must cross an actual HTTP boundary for A2A.
+11. Gemini proposes; deterministic policy code authorizes.
+12. LLM output never authorizes payment or escrow.
+13. Do not expose private brand or creator policy to the other party.
+14. Do not expose credentials, tokens, wallet secrets, or private keys.
+15. Do not claim escrow success without a confirmed Solana devnet signature.
+16. Ask for approval before deployment, IAM/Secret changes, destructive data work, wallet funding, program deployment, or on-chain transactions.
 
-- Do not run `git commit` or `git push` until the user explicitly approves it for the current change set.
-- Before asking for commit approval, summarize the staged or intended files and the validation result.
-- Commit messages must start with the domain touched: `frontend:`, `backend:`, `web3:`, `docs:`, `infra:`, or `chore:`.
-- For cross-domain changes, use the main domain first and mention the secondary domain in the subject or body.
-- Keep the subject imperative and specific, for example `backend: add policy decision models` or `docs: record M0 repository cleanup`.
+## Required workflow
 
-## Required verification
+For each phase:
 
-Run the relevant checks before declaring completion:
-
-- Frontend: typecheck, lint, unit tests, production build when frontend files exist
-- Backend: Ruff, mypy/pyright if configured, pytest
-- Web3 gateway: typecheck, lint, tests
-- Anchor: format, build, tests against local validator
-- Integration: Firestore emulator and local Solana validator where applicable
-- Any API/schema change: update docs and contract tests
+1. Read only the documents listed in the phase prompt.
+2. Reproduce current behavior.
+3. Write or update one ExecPlan in `.agent/execplans/`.
+4. Implement only the approved phase.
+5. Run phase tests.
+6. Review the diff.
+7. Update implementation status and migration notes.
+8. Stop before the next phase.
 
 ## Definition of done
 
-A task is done only when:
-
-- acceptance criteria are met,
-- tests pass,
-- no secrets are introduced,
-- deployment/config changes are documented,
-- `docs/20_IMPLEMENTATION_STATUS.md` is updated,
-- remaining risks are stated explicitly.
+A feature is done only when the real data path works, state survives refresh, backend authorization is enforced, loading/empty/error states exist, tests exercise the real path, and no successful fixture fallback hides failure.

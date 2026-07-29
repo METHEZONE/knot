@@ -1,212 +1,502 @@
-# Product API Contracts v1
+# KNOT v2 API Contracts
 
-Base path: `/api/v1`  
-Media type: `application/json`  
-Authentication: Firebase ID token for user-facing routes; Cloud Run IAM/OIDC for private service routes.
+## 1. 공통
 
-## 1. Standard response metadata
+Base:
+
+```text
+/api/v1
+```
+
+Headers:
+
+```http
+Authorization: Bearer <Firebase ID Token>
+Content-Type: application/json
+Idempotency-Key: <key>    # mutation where required
+X-Correlation-Id: <uuid>  # optional; server generates if absent
+```
+
+Error:
 
 ```json
 {
-  "data": {},
-  "meta": {
-    "requestId": "uuid",
-    "traceId": "hex",
-    "timestamp": "RFC3339"
+  "error": {
+    "code": "NEGOTIATION_NOT_FOUND",
+    "message": "협상 기록을 찾을 수 없습니다.",
+    "correlationId": "..."
   }
 }
 ```
 
-## 2. Standard problem response
+---
 
-Use RFC 9457-style problem JSON.
+## 2. Me / Auth
 
-```json
-{
-  "type": "https://knot.example/errors/policy-violation",
-  "title": "Policy violation",
-  "status": 409,
-  "detail": "Requested amount exceeds maxPerCreatorUsdc.",
-  "code": "POLICY_MAX_PER_CREATOR_EXCEEDED",
-  "requestId": "uuid",
-  "violations": [{"field": "terms.compensation.baseAmountUsdc", "rule": "maxPerCreatorUsdc"}]
-}
-```
-
-## 3. Promotion endpoints
-
-```text
-POST   /promotions
-GET    /promotions/{promotionId}
-GET    /promotions
-POST   /promotions/{promotionId}:activate
-POST   /promotions/{promotionId}/matches:run
-GET    /promotions/{promotionId}/timeline
-```
-
-`POST /promotions` creates a Promotion but does not start matching.
-
-Promotion create request accepts the same camelCase domain fields as the Firestore
-`Promotion` document. For v1 demo flows, `promotionId`, `brandId`, and `brandAgentId`
-may be omitted; the API defaults brand fields to seeded demo IDs and generates a
-Promotion ID.
-
-Promotion responses are wrapped as:
+### `GET /me`
 
 ```json
 {
-  "data": {
-    "promotion": {}
+  "userId": "...",
+  "role": "CREATOR",
+  "onboarding": {
+    "version": 2,
+    "completed": true,
+    "step": "COMPLETE"
   },
-  "meta": {
-    "requestId": "uuid",
-    "timestamp": "RFC3339",
-    "schemaVersion": "v1"
-  }
+  "profileId": "creator-001",
+  "agentId": "creator-agent-001"
 }
 ```
 
-## 4. Matching endpoints
+---
 
-```text
-GET    /match-runs/{matchRunId}
-GET    /match-runs/{matchRunId}/candidates
-POST   /match-runs/{matchRunId}/candidates/{creatorAgentId}:select
-POST   /match-runs/{matchRunId}:start-negotiation
-```
+## 3. Brand Source Analysis
 
-The normal demo path auto-selects the top eligible candidate, while manual selection remains available for debugging.
-
-`POST /promotions/{promotionId}/matches:run` persists one `matchRuns/{matchRunId}`
-document and one candidate document per seeded Creator Profile under
-`matchRuns/{matchRunId}/candidates/{creatorId}`. Candidate documents include both
-`creatorId` and `creatorAgentId` so the logical candidate is the Creator Profile
-while negotiation still routes to the selected Creator Agent. Gemini-generated
-explanations are not required for the current baseline; deterministic placeholder
-explanations must not affect eligibility, score or rank.
-
-## 5. Negotiation endpoints
-
-```text
-GET    /negotiations/{negotiationId}
-GET    /negotiations/{negotiationId}/messages
-GET    /negotiations/{negotiationId}/events
-GET    /negotiations/{negotiationId}/stream
-POST   /negotiations/{negotiationId}:cancel
-POST   /negotiations/{negotiationId}:resume
-```
-
-`resume` is only allowed for `ESCALATED` or input-required state and requires an explicit user decision payload.
-
-Current backend baseline implements `start-negotiation` by persisting the
-Negotiation, offer/decision Messages, decision Events, A2A Task, A2A Artifact,
-Agreement and Agreement Milestone documents through the repository boundary.
-The MatchCandidate document is updated with the started `negotiationId`. External
-A2A HTTP orchestration is a later integration step; persisted document shapes
-must remain compatible with the A2A payloads in `docs/09_A2A_PROTOCOL_v1.md`.
-
-## 6. Agreement and payment endpoints
-
-```text
-GET    /agreements/{agreementId}
-POST   /agreements/{agreementId}/escrow:lock
-GET    /escrows/{escrowId}
-POST   /escrows/{escrowId}/milestones/{milestoneId}:release
-GET    /transaction-receipts/{receiptId}
-```
-
-Every payment POST requires an `Idempotency-Key` header.
-
-`GET /agreements/{agreementId}` returns the persisted Agreement document,
-including structured `terms`, `canonicalTermsJson`, `termsHash`, and `status`.
-Payment mutation endpoints are intentionally deferred until web3 gateway signing
-is wired. When wired, payment attempts must be represented by
-`paymentOperations/{operationId}`; `transactionReceipts/{receiptId}` points to
-the PaymentOperation instead of directly to Escrow or Settlement.
-
-## 7. Evidence endpoints
-
-```text
-POST   /agreements/{agreementId}/evidence
-GET    /evidence/{evidenceId}
-POST   /evidence/{evidenceId}:verify
-```
-
-Evidence request:
+### `POST /brand-sources:analyze`
 
 ```json
 {
-  "url": "https://social.example/post/123",
-  "submittedByAgentId": "creator-agent-001",
-  "milestoneId": "content"
+  "url": "https://demo-skincare.example.com/spf-daily"
 }
 ```
 
-`milestoneId` defaults to `content` for the current demo path.
-
-Verification result:
+Response:
 
 ```json
 {
-  "evidenceId": "uuid",
-  "status": "PASSED",
-  "observations": {
-    "urlReachable": true,
-    "brandMentioned": true,
-    "disclosurePresent": true,
-    "prohibitedClaimsFound": []
+  "source": "REAL",
+  "product": {
+    "name": "Daily SPF Moisturizer",
+    "priceKrw": 28000,
+    "category": "beauty",
+    "description": "...",
+    "imageUrl": null
   },
-  "policyDecision": {
-    "allowed": true,
-    "ruleVersion": "verification-v1"
+  "confidence": {
+    "name": 0.98,
+    "category": 0.85
   }
 }
 ```
 
-Current backend baseline persists submitted evidence under `evidence/{evidenceId}`.
-Evidence references `agreementId`, `milestoneId`, and a milestone snapshot.
-Verification is deterministic and does not fetch live social content yet. If the
-request body omits observations, the API derives demo observations from the URL:
+보안:
+- SSRF 차단
+- private IP 금지
+- redirect 제한
+- timeout/content size 제한
 
-- `unreachable` in the URL sets `urlReachable=false`
-- `missing-brand` in the URL sets `brandMentioned=false`
-- `missing-disclosure` in the URL sets `disclosurePresent=false`
-- configured prohibited claim strings found in the URL are copied into `prohibitedClaimsFound`
+### `POST /brands:onboard`
 
-The response is wrapped in standard metadata as `data.evidence`. Failed
-verification is persisted with `status=FAILED` and returns
-`EVIDENCE_VERIFICATION_FAILED`.
-
-## 8. Health endpoints
-
-Each Cloud Run service exposes:
-
-```text
-GET /healthz
-GET /readyz
-GET /version
+```json
+{
+  "brand": {
+    "name": "Glow",
+    "sourceUrl": "...",
+    "productSnapshot": {}
+  },
+  "promotionDraft": {
+    "moodTags": ["설명형", "정보", "루틴"],
+    "totalBudgetUsdc": 2000,
+    "perDealCapUsdc": 800
+  }
+}
 ```
 
-`/version` returns service name, Git SHA, build time and schema version, but no secret or environment dump.
+Response:
+- brand
+- draft Promotion
+- Agent
+- onboarding state
 
-## 9. Error codes
+---
+
+## 4. Creator Source Analysis
+
+### `POST /creator-sources:analyze`
+
+```json
+{
+  "instagram": "@demobeauty"
+}
+```
+
+Response:
+
+```json
+{
+  "source": "REAL",
+  "profile": {
+    "handle": "demobeauty",
+    "displayName": "Mina",
+    "followerCount": 57922,
+    "averageViews": 98467,
+    "engagementRate": 2.8,
+    "reelsRatio": 65,
+    "styleTags": ["차분한 설명", "성분 중심", "루틴 공유"]
+  },
+  "collectedAt": "..."
+}
+```
+
+실제 수집이 불가능하면:
+
+```json
+{
+  "source": "USER_CONFIRMED",
+  "profile": {
+    "handle": "demobeauty",
+    "styleTags": []
+  },
+  "warnings": ["PUBLIC_METRICS_UNAVAILABLE"]
+}
+```
+
+### `POST /creators:onboard`
+
+```json
+{
+  "profile": {
+    "instagramHandle": "demobeauty",
+    "socialSnapshot": {},
+    "styleTags": []
+  },
+  "policy": {
+    "minimumBaseUsdc": 300,
+    "blockedCategories": ["gambling"]
+  }
+}
+```
+
+---
+
+## 5. Agent
+
+### `POST /agents/{agentId}:activate`
+
+Idempotent.
+
+Response:
+
+```json
+{
+  "agentId": "...",
+  "status": "ACTIVE",
+  "availability": "OFFLINE",
+  "acceptingOffers": false
+}
+```
+
+### `POST /agents/{agentId}:set-availability`
+
+```json
+{
+  "acceptingOffers": true
+}
+```
+
+Response:
+
+```json
+{
+  "availability": "AVAILABLE",
+  "acceptingOffers": true
+}
+```
+
+---
+
+## 6. Dashboard
+
+### `GET /me/dashboard`
+
+Role-specific response.
+
+Creator:
+
+```json
+{
+  "manager": {},
+  "actionItems": [],
+  "activeSponsorships": [],
+  "recentActivities": [],
+  "settlement": {
+    "claimableUsdc": 0,
+    "pendingUsdc": 300,
+    "releasedUsdc": 0
+  }
+}
+```
+
+Brand:
+
+```json
+{
+  "manager": {},
+  "actionItems": [],
+  "promotions": [],
+  "activeNegotiations": [],
+  "recentActivities": [],
+  "escrow": {
+    "lockedUsdc": 300,
+    "releasedUsdc": 0
+  }
+}
+```
+
+---
+
+## 7. Promotion
+
+### `POST /promotions`
+
+```json
+{
+  "title": "...",
+  "productSnapshot": {},
+  "moodTags": [],
+  "deliverables": [],
+  "usageRights": "ORGANIC_ONLY",
+  "deadline": "...",
+  "totalBudgetUsdc": 2000,
+  "perDealCapUsdc": 800,
+  "milestones": [
+    { "code": "AGREEMENT", "percentage": 30 },
+    { "code": "POST_VERIFIED", "percentage": 70 }
+  ]
+}
+```
+
+### `POST /promotions/{id}:run`
+
+- status DRAFT → MATCHING
+- Match Run 생성
+
+### `GET /promotions/{id}/candidates`
+
+Public candidate view only.
+
+---
+
+## 8. Negotiation
+
+### `POST /negotiations`
+
+```json
+{
+  "promotionId": "promotion-001",
+  "creatorAgentId": "creator-agent-001"
+}
+```
+
+Server:
+- Brand owner/Promotion 검증
+- Creator availability 검증
+- A2A initial OFFER
+- negotiation/task 생성
+
+### `GET /negotiations`
+
+Query:
+- status
+- role-derived owner
+- promotionId
+- cursor
+
+### `GET /negotiations/{id}`
+
+- summary
+- participants
+- public current terms
+- related Agreement/Escrow IDs
+- owner-specific own policy summary
+
+### `GET /negotiations/{id}/timeline`
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "activity-001",
+      "type": "OFFER",
+      "actor": "BRAND_AGENT",
+      "actorName": "Glow Agent",
+      "message": "릴스 1개에 240 USDC로 시작해볼게요.",
+      "amountUsdc": 240,
+      "status": "DONE",
+      "occurredAt": "..."
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+### `POST /negotiations/{id}:approve`
+
+```json
+{
+  "decision": "APPROVE"
+}
+```
+
+또는 수정:
+
+```json
+{
+  "decision": "MODIFY",
+  "terms": {}
+}
+```
+
+### `POST /negotiations/{id}:reject`
+
+```json
+{
+  "reasonCode": "USER_REJECTED"
+}
+```
+
+---
+
+## 9. Agreement
+
+### `GET /agreements/{id}`
+
+Returns canonical terms and user-safe metadata.
+
+Agreement creation is internal and exactly once after final Artifact.
+
+---
+
+## 10. Evidence
+
+### `POST /agreements/{id}/evidence`
+
+```json
+{
+  "type": "INSTAGRAM_URL",
+  "url": "https://instagram.com/reel/..."
+}
+```
+
+### `POST /evidence/{id}:verify`
+
+May be internal/system-triggered.
+
+Response:
+- observations
+- deterministic decision
+- milestone eligibility
+
+---
+
+## 11. Escrow
+
+### `POST /agreements/{id}/escrow:lock`
+
+Idempotency required.
+
+Request:
+
+```json
+{
+  "fundingWallet": "...",
+  "asset": "USDC",
+  "network": "SOLANA_DEVNET"
+}
+```
+
+Response:
+
+```json
+{
+  "escrowId": "...",
+  "status": "SUBMITTED",
+  "receiptId": "..."
+}
+```
+
+### `GET /escrows/{id}`
+
+- status
+- locked/released/remaining
+- milestones
+- receipts
+
+### `POST /escrows/{id}/milestones/{milestoneId}:release`
+
+Internal or authorized Brand/system operation.
+
+---
+
+## 12. Settlement
+
+### `GET /settlements/summary`
+
+Role-specific.
+
+### `POST /settlements/{id}:claim`
+
+Only if current architecture uses claim. Automatic payout architecture omits this CTA.
+
+---
+
+## 13. Transaction Receipt
+
+### `GET /transaction-receipts/{id}`
+
+```json
+{
+  "status": "CONFIRMED",
+  "network": "SOLANA_DEVNET",
+  "signature": "...",
+  "explorerUrl": "...",
+  "confirmedAt": "..."
+}
+```
+
+---
+
+## 14. Streaming
+
+Preferred:
+- SSE endpoint or A2A subscribe
+- fallback polling
+
+User API option:
 
 ```text
-AUTH_INVALID_TOKEN
-RESOURCE_NOT_FOUND
-VALIDATION_ERROR
-INVALID_STATE_TRANSITION
-IDEMPOTENCY_CONFLICT
-POLICY_VIOLATION
-NEGOTIATION_TERMINAL
-A2A_VERSION_NOT_SUPPORTED
-A2A_TENANT_MISMATCH
-A2A_TASK_CONTEXT_MISMATCH
-VERTEX_AI_UNAVAILABLE
-PAYSH_PAYMENT_FAILED
-SOLANA_RPC_FAILED
-SOLANA_TRANSACTION_REJECTED
-ESCROW_ALREADY_LOCKED
-MILESTONE_ALREADY_RELEASED
-EVIDENCE_VERIFICATION_FAILED
+GET /negotiations/{id}/events
+Accept: text/event-stream
 ```
+
+Event envelope:
+
+```json
+{
+  "sequence": 4,
+  "type": "ACTIVITY_UPDATED",
+  "negotiationId": "...",
+  "occurredAt": "..."
+}
+```
+
+Frontend re-fetches sanitized timeline or applies safe projection.
+
+---
+
+## 15. Status Codes
+
+- 200/201 success
+- 202 operation submitted
+- 400 validation
+- 401 unauthenticated
+- 403 wrong owner/role
+- 404 not found
+- 409 invalid state/idempotency conflict
+- 422 business policy invalid
+- 429 rate limit
+- 502 downstream A2A/Web3
+- 503 temporary unavailable
