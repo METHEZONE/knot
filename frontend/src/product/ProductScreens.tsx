@@ -8,10 +8,12 @@ import { useAuth } from "@/auth/AuthProvider";
 import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import {
   authConfigurationError,
+  createFirebaseAccount,
   firebaseAuthErrorMessage,
   firebaseConfigured,
   signInWithEmail,
   signInWithGoogle,
+  usingAuthEmulator,
 } from "@/auth/firebaseClient";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { ProductApiClient } from "@/product/apiClient";
@@ -23,6 +25,7 @@ export function LoginScreen() {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();
+  const authEmulator = usingAuthEmulator();
   const redirect = safeRedirectPath(searchParams.get("redirect"));
 
   async function submit(formData: FormData) {
@@ -73,11 +76,17 @@ export function LoginScreen() {
           <button
             type="button"
             onClick={google}
-            disabled={status === "saving" || !configured}
+            disabled={status === "saving" || !configured || authEmulator}
             className="sketch-pill ink border border-border-subtle bg-surface-raised px-5 py-3 text-sm font-semibold text-muted disabled:opacity-50"
           >
             Continue with Google
           </button>
+          {authEmulator && (
+            <p className="text-xs text-muted">
+              로컬 Auth emulator에서는 이메일 테스트 계정을 사용하세요. Google OAuth는 실제 Firebase 설정에서 검증합니다.
+            </p>
+          )}
+          {authEmulator && <DemoAccounts />}
           {!configured && <FormError message={authConfigurationError()} />}
           {error && <FormError message={error} />}
         </form>
@@ -92,11 +101,15 @@ export function LoginScreen() {
 
 export function SignupScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status: authStatus, context, error: authError, refresh } = useAuth();
   const [status, setStatus] = useState<"idle" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
+  const configured = firebaseConfigured();
+  const authEmulator = usingAuthEmulator();
+  const requestedRole = parseRole(searchParams.get("role"));
 
-  async function chooseRole(role: Role) {
+  async function chooseRole(role: Role, nextContextRefresh = true) {
     setStatus("saving");
     setError(null);
     try {
@@ -104,10 +117,38 @@ export function SignupScreen() {
         role === "brand" ? "BRAND" : "CREATOR",
         idempotencyKey(`select-role-${role}`),
       );
-      await refresh();
+      if (nextContextRefresh) await refresh();
       router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      setStatus("idle");
+    }
+  }
+
+  async function createAccount(formData: FormData) {
+    setStatus("saving");
+    setError(null);
+    const role = parseRole(String(formData.get("role") ?? "")) ?? requestedRole;
+    try {
+      if (!configured) throw new Error(authConfigurationError());
+      await createFirebaseAccount(
+        String(formData.get("email") ?? ""),
+        String(formData.get("password") ?? ""),
+        String(formData.get("displayName") ?? ""),
+      );
+      if (role) {
+        await new ProductApiClient().selectMyRole(
+          role === "brand" ? "BRAND" : "CREATOR",
+          idempotencyKey(`signup-role-${role}`),
+        );
+        await refresh();
+        router.push(role === "brand" ? "/brand/onboarding" : "/creator/onboarding");
+        return;
+      }
+      await refresh();
+      setStatus("idle");
+    } catch (caught) {
+      setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
     }
   }
@@ -122,12 +163,38 @@ export function SignupScreen() {
 
   if (authStatus === "unauthenticated") {
     return (
-      <AuthFrame eyebrow="Create account" title="먼저 로그인하세요" body="역할 선택은 Firebase Auth 계정에 연결됩니다.">
+      <AuthFrame eyebrow="Create account" title="회원가입" body="Firebase Auth 계정을 만든 뒤 Brand 또는 Creator 역할 온보딩으로 이어집니다.">
         <Panel>
-          <p className="text-sm text-muted">{authError ?? "이메일 또는 Google 계정으로 로그인할 수 있습니다."}</p>
-          <Link href="/login?redirect=%2Fsignup" className="sketch-pill mt-5 inline-flex bg-accent px-5 py-3 text-sm font-semibold text-background">
-            로그인
-          </Link>
+          <form action={createAccount} className="grid gap-4">
+            <Input label="Name" name="displayName" placeholder="KNOT demo user" required />
+            <Input label="Email" name="email" placeholder="you@company.com" type="email" required />
+            <Input label="Password" name="password" placeholder="6자 이상" type="password" minLength={6} required />
+            {requestedRole && <input type="hidden" name="role" value={requestedRole} />}
+            <button
+              type="submit"
+              disabled={status === "saving" || !configured}
+              className="sketch-pill bg-accent px-5 py-3 text-sm font-semibold text-background disabled:opacity-50"
+            >
+              {status === "saving"
+                ? "계정 생성 중..."
+                : requestedRole === "brand"
+                  ? "브랜드 계정 만들기"
+                  : requestedRole === "creator"
+                    ? "크리에이터 계정 만들기"
+                    : "계정 만들기"}
+            </button>
+          </form>
+          {authEmulator && <DemoAccounts />}
+          <p className="mt-5 text-sm text-muted">
+            이미 계정이 있으면{" "}
+            <Link className="font-semibold text-foreground" href={`/login?redirect=${encodeURIComponent(requestedRole ? `/signup?role=${requestedRole}` : "/signup")}`}>
+              로그인
+            </Link>
+            하세요.
+          </p>
+          {!configured && <FormError message={authConfigurationError()} />}
+          {authError && <FormError message={authError} />}
+          {error && <FormError message={error} />}
         </Panel>
       </AuthFrame>
     );
@@ -165,6 +232,7 @@ export function SignupScreen() {
           body="브랜드 정보와 제품 제안서를 만들고, Brand Agent가 크리에이터를 찾아 협상합니다."
           busy={status === "saving"}
           onSelect={() => chooseRole("brand")}
+          featured={requestedRole === "brand"}
         />
         <RoleChoiceCard
           role="creator"
@@ -172,6 +240,7 @@ export function SignupScreen() {
           body="SNS URL과 협상 기준을 정하면, Creator Agent가 제안을 선별합니다."
           busy={status === "saving"}
           onSelect={() => chooseRole("creator")}
+          featured={requestedRole === "creator"}
         />
       </div>
       {error && <FormError message={error} />}
@@ -184,16 +253,18 @@ function RoleChoiceCard({
   title,
   body,
   busy,
+  featured,
   onSelect,
 }: {
   role: Role;
   title: string;
   body: string;
   busy: boolean;
+  featured?: boolean;
   onSelect: () => void;
 }) {
   return (
-    <Panel>
+    <section className={`sketch ink border ${featured ? "border-accent bg-accent/10" : "border-border-subtle bg-surface"} p-5`}>
       <div className="flex items-center gap-4">
         <AgentCharacter agentId={`${role}-signup-agent`} side={role} category="wellness" pose="greet" size={86} />
         <div>
@@ -210,7 +281,7 @@ function RoleChoiceCard({
       >
         {busy ? "연결 중..." : "선택"}
       </button>
-    </Panel>
+    </section>
   );
 }
 
@@ -271,6 +342,21 @@ function FormError({ message }: { message: string }) {
       {message}
     </div>
   );
+}
+
+function DemoAccounts() {
+  return (
+    <div className="mt-4 rounded-none border border-border-subtle bg-surface-raised p-3 text-xs text-muted">
+      <p className="font-semibold text-foreground">로컬 테스트 계정</p>
+      <p className="mt-1">Brand: test1@knot.demo / knot-demo-1234</p>
+      <p>Creator: test3@knot.demo / knot-demo-1234</p>
+    </div>
+  );
+}
+
+function parseRole(value: string | null | undefined): Role | null {
+  if (value === "brand" || value === "creator") return value;
+  return null;
 }
 
 function idempotencyKey(action: string) {

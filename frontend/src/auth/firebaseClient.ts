@@ -31,6 +31,10 @@ export function authConfigurationError() {
   return "Firebase Auth 환경변수가 설정되지 않았습니다. NEXT_PUBLIC_FIREBASE_* 값을 확인해주세요.";
 }
 
+export function usingAuthEmulator() {
+  return Boolean(process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST);
+}
+
 export function firebaseAuth(): Auth {
   if (!firebaseConfigured()) {
     throw new Error(authConfigurationError());

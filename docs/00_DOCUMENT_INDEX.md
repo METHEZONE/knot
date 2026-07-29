@@ -70,7 +70,7 @@
 | `FIREBASE_AUTH_SETUP.md` | Firebase 설정과 탭별 세션 |
 | `IMPLEMENTATION_STATUS.md` | 실제 구현·검증 현황 |
 | `HANDOFF.md` | 팀 인수인계와 실행법 |
-| `README_REPLACE_EXISTING_DOCS.md` | 기존 docs 교체 방법 |
+| `V2_BRANCH_AND_API_AUDIT.md` | v2 통합 브랜치 기준과 API/UI 매핑 감사 |
 
 ---
 

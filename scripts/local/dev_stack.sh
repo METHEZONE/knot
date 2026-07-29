@@ -12,6 +12,7 @@
 #   Frontend (next dev)      :3000
 #
 # 환경: 루트 .env.local(KNOT_AUTH_MODE=emulator, 메모리 저장소) + frontend/.env.local.
+#   없으면 scripts/local/bootstrap_env.sh 로 생성한다.
 #   .env.local 을 `.env`로 옮기지 말 것 — config.py 가 pytest에도 주입해 테스트가 깨진다.
 # 온체인 에스크로 실측은 이 스크립트가 아니라 scripts/localnet_settlement.sh.
 # 로그: /tmp/knot-local/<서비스>.log
@@ -24,7 +25,11 @@ WITH_FE=1
 [[ "${1:-}" == "--no-fe" ]] && WITH_FE=0
 
 ENV_FILE="${KNOT_ENV_FILE:-.env.local}"
-[[ -f "$ROOT/$ENV_FILE" ]] || { echo "❌ $ENV_FILE 없음 (.env.example 참고해서 작성)"; exit 1; }
+if [[ ! -f "$ROOT/$ENV_FILE" || ( $WITH_FE == 1 && ! -f "$ROOT/frontend/.env.local" ) ]]; then
+  "$HERE/bootstrap_env.sh"
+fi
+[[ -f "$ROOT/$ENV_FILE" ]] || { echo "❌ $ENV_FILE 없음"; exit 1; }
+[[ $WITH_FE == 0 || -f "$ROOT/frontend/.env.local" ]] || { echo "❌ frontend/.env.local 없음"; exit 1; }
 [[ -x "$PY/uvicorn" ]] || { echo "❌ .venv 없음 → python3 -m venv .venv && .venv/bin/python -m pip install -e 'backend[dev]'"; exit 1; }
 
 # 서비스에 로컬 환경 주입 (파일명을 .env로 바꾸면 pytest까지 오염되므로 여기서 명시적으로 source)
@@ -45,6 +50,13 @@ trap cleanup EXIT INT TERM
 
 start() { local name="$1"; shift; echo "▸ $name"; ( "$@" >"$LOGS/$name.log" 2>&1 ) & pids+=("$!"); }
 wait_http() { local url="$1" n="${2:-60}"; for _ in $(seq 1 "$n"); do curl -fsS -m 1 "$url" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
+seed_auth_users() {
+  [[ "${KNOT_AUTH_MODE:-}" == "emulator" ]] || return 0
+  : >"$LOGS/auth-demo-users.log"
+  for uid in user-brand-1 user-brand-2 user-creator-1 user-creator-2; do
+    "$HERE/demo_login.sh" "$uid" >>"$LOGS/auth-demo-users.log" 2>&1 || return 1
+  done
+}
 
 # 에뮬레이터는 cwd에 firebase-debug.log 를 남기므로 로그 디렉터리에서 실행(레포 오염 방지)
 start auth-emulator sh -c "cd '$LOGS' && exec npx -y firebase-tools emulators:start --only auth --project demo-knot --config '$HERE/firebase.json'"
@@ -60,6 +72,12 @@ for probe in "product-api|http://127.0.0.1:18080/healthz" "creator-a2a|http://12
   if wait_http "$url"; then echo "  ✅ $name  $url"; else echo "  ❌ $name  $url  → $LOGS/$name.log"; fi
 done
 [[ $WITH_FE == 1 ]] && { wait_http http://127.0.0.1:3000 90 && echo "  ✅ frontend  http://127.0.0.1:3000" || echo "  ❌ frontend → $LOGS/frontend.log"; }
+
+if seed_auth_users; then
+  echo "  ✅ demo auth users  test1@knot.demo / test3@knot.demo  password: knot-demo-1234"
+else
+  echo "  ❌ demo auth users → $LOGS/auth-demo-users.log"
+fi
 
 echo
 echo "Auth 에뮬레이터 UI: http://127.0.0.1:4000   로그: $LOGS"

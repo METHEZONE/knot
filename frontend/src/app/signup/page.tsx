@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { SignupScreen } from "@/product/ProductScreens";
 
 export default function Page() {
-  return <SignupScreen />;
+  return (
+    <Suspense>
+      <SignupScreen />
+    </Suspense>
+  );
 }

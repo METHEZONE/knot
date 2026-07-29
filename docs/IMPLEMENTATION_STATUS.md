@@ -18,7 +18,7 @@
 
 | 영역 | 상태 | 증거 | 비고 |
 |---|---|---|---|
-| UI branch runs | VERIFIED | Worktree `/private/tmp/knot-v2-product-flow` from `origin/feat/two-user-session`; `cd frontend && npm run test`, `npm run typecheck`, `npm run build` passed on 2026-07-30 | Screenshot capture still pending because no headless browser is installed |
+| UI branch runs | VERIFIED | Worktree `/private/tmp/knot-v2-product-flow` from `origin/feat/two-user-session`; `cd frontend && npm run test`, `npm run typecheck`, `npm run build` passed on 2026-07-30; headless Chrome screenshots captured in `.agent/screenshots/` | Authenticated browser E2E still requires configured Firebase test users |
 | Stable backend identified | VERIFIED | `origin/main` selected as stable branch in `docs/V2_BRANCH_AND_API_AUDIT.md`; stable backend/API/Web3 code ported into this worktree on 2026-07-30; selected backend and web3 tests passed | Full suite still deferred to later phases |
 | Auth | VERIFIED | Frontend Firebase Auth provider/client and Product API token forwarding ported; `/api/v1/me` backend tests passed; frontend typecheck/test/build passed | Live Firebase account smoke requires configured credentials |
 | Firestore | IN_PROGRESS | `origin/main` repository, Firestore paths, seed tooling, and fixtures ported into this worktree | Repository tests are planned in later data-path phases |
@@ -87,12 +87,12 @@ NEXT ACTION: Request explicit approval before deployment or live devnet actions.
 ## 4. Latest Verified Build
 
 ```text
-Commit: f33fbc1 test: remove frontend mock flow and verify build; pending screenshot evidence commit
+Commit: 339237f test: add phase9 visual evidence; local runbook setup pending commit
 Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, dashboard, Promotion, Negotiation, Escrow, Evidence, Settlement, and mock-removal changes
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
-URL:
-Verified at: 2026-07-30 Phase 9 tests
+URL: Local dev target `http://127.0.0.1:3000` via `scripts/local/dev_stack.sh`
+Verified at: 2026-07-30 Phase 9 tests and unauthenticated screenshots
 Verifier: Codex
 ```
 
@@ -371,6 +371,38 @@ Not performed:
 - Authenticated browser E2E: requires Firebase credentials/test users.
 - Deployment: requires explicit user approval.
 - Live devnet on-chain smoke: requires explicit user approval.
+
+---
+
+## 15. Local Full-Stack Run Setup
+
+Changes:
+- Added `scripts/local/bootstrap_env.sh` to create local-only root `.env.local` and `frontend/.env.local` with Firebase Auth emulator, in-memory Product API, HTTP A2A, and simulated Web3 gateway settings.
+- Updated `scripts/local/dev_stack.sh` to auto-bootstrap missing local env files before starting services and seed Auth emulator demo accounts for fixture UIDs.
+- Replaced stale root and frontend README local instructions with the v2 API-backed full-stack runbook.
+- Clarified `scripts/local/agent_run.sh` as a CLI smoke for the same Product API/A2A path now available in the UI.
+- Restored `/signup/brand` and `/signup/creator` as compatibility redirects to the one-page v2 signup flow.
+- Restored real email/password account creation on `/signup`; Auth emulator local mode shows seeded demo accounts and disables Google OAuth to avoid confusing local behavior.
+
+Local services:
+
+```text
+Frontend              http://127.0.0.1:3000
+Firebase Auth UI      http://127.0.0.1:4000
+Firebase Auth API     http://127.0.0.1:9099
+Product API           http://127.0.0.1:18080
+Creator A2A           http://127.0.0.1:8081
+Web3 Gateway          http://127.0.0.1:8082
+Logs                  /tmp/knot-local/*.log
+```
+
+Verification:
+- `scripts/local/bootstrap_env.sh` created ignored local `.env.local` files.
+- `scripts/local/dev_stack.sh` started Product API, Creator A2A, Web3 gateway, Firebase Auth emulator, and frontend.
+- `curl -I http://127.0.0.1:3000` returned `HTTP/1.1 200 OK`.
+- `scripts/local/demo_login.sh user-brand-1` and `scripts/local/demo_login.sh user-creator-1` created Auth emulator accounts for fixture UIDs.
+- `/signup/brand` and `/signup/creator` returned `307` redirects to `/signup?role=brand|creator`.
+- `npm --prefix frontend run test`, `npm --prefix frontend run typecheck`, and `npm --prefix frontend run build` passed.
 
 ---
 

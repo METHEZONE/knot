@@ -1,64 +1,99 @@
-# KNOT Codex Development Pack v1
+# KNOT v2
 
-이 패키지는 KNOT 해커톤 MVP를 Codex에 위임하기 위한 개발 기준 문서 모음이다.
+KNOT v2 is a real-auth, role-onboarding, role-dashboard, Promotion/Offer,
+A2A negotiation, Agreement, and Solana devnet Escrow product flow.
 
-## 구현 현황 (2026-07-25)
+Read `docs/00_DOCUMENT_INDEX.md` first. Archived documents are not requirements.
 
-`be`(앱 백엔드) + `hyo/blockchain-setup`(온체인/결제)이 `integrate/be-blockchain`으로 병합됨 (PR #1).
+## Local Full Stack
 
-- ✅ Promotion → 매칭 → A2A 협상 → Agreement → Evidence → **에스크로 lock/release** API (결정론; `ruff`/`mypy`/`pytest` 59 passed)
-- ✅ Anchor 에스크로 프로그램 **devnet 배포**(`Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`) + **온체인 마일스톤 정산 검증** (에이전트가 cap 이내 사람 없이 릴리스)
-- ⬜ 남음: 실제 서명 배선(현재 escrow receipt는 SIMULATED) · pay.sh 흐름1 · Cloud Run · 프론트
+Prerequisites:
 
-상세: `docs/INTEGRATION_PLAN.md`, `docs/20_IMPLEMENTATION_STATUS.md`.
+```bash
+python3 --version   # Python 3.12+
+node --version      # Node 20.18+ preferred
+npm --version
+```
 
-## 핵심 원칙
+Install dependencies:
 
-- 제품 문서 버전은 **v1**이다.
-- **온보딩 로직은 현재 범위에서 제외**한다. 브랜드·크리에이터·에이전트 프로필은 seed fixture 또는 관리자 스크립트로 준비한다.
-- 모든 애플리케이션·에이전트·데이터·배포 인프라는 **Google Cloud 기반**으로 구현한다.
-- Solana, USDC, pay.sh/x402는 결제 실행 레이어로 사용한다.
-- 브랜드 홍보 사업 단위는 **프로모션(Promotion)** 으로 통일한다. 과거 명칭이나 별도 유사 용어를 새 코드와 문서에 사용하지 않는다.
-- Creator 탐색·매칭은 Brand Agent가 수행한다.
-- LLM은 제안과 설명을 생성하지만, 정책 검증과 결제 권한은 결정론적 코드가 통제한다.
-
-## 권장 사용 순서
-
-1. Codex가 저장소 루트의 `AGENTS.md`를 읽도록 한다.
-2. 신규 작업 시작 전 `docs/00_INDEX.md`에서 관련 기준 문서를 확인한다.
-3. 여러 파일과 서비스에 걸친 작업은 `PLANS.md` 형식으로 실행 계획을 먼저 갱신한다.
-4. 작업 프롬프트는 외부 프롬프트 파일을 참고하되, 프롬프트 파일 자체는 저장소에 추적하지 않는다.
-5. 완료 후 `docs/20_IMPLEMENTATION_STATUS.md`와 WBS를 업데이트한다.
-
-## 패키지 적용
-
-주요 코드 영역은 `frontend/`, `backend/`, `web3/` 세 곳이다. 현재 `frontend/`는 폴더만 유지하고 구현 파일은 두지 않는다. `infra/`, `scripts/`는 실제 배포나 seed/smoke 구현이 시작될 때 추가한다. 프롬프트 원본, `MANIFEST.json`, OS 임시 파일은 저장소에 넣지 않는다.
-
-## 로컬 개발
-
-```text
+```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e 'backend[dev]'
-.venv/bin/python -m ruff check backend
+npm --prefix frontend install
+npm --prefix web3/gateway install
+```
+
+Create safe local env files and start everything:
+
+```bash
+scripts/local/bootstrap_env.sh
+scripts/local/dev_stack.sh
+```
+
+Services:
+
+```text
+Frontend              http://127.0.0.1:3000
+Firebase Auth UI      http://127.0.0.1:4000
+Firebase Auth API     http://127.0.0.1:9099
+Product API           http://127.0.0.1:18080
+Creator A2A           http://127.0.0.1:8081
+Web3 Gateway          http://127.0.0.1:8082
+Logs                  /tmp/knot-local/*.log
+```
+
+The default local stack uses Firebase Auth emulator, in-memory Product API state,
+Creator A2A over HTTP, and simulated Web3 signing. It is enough to run the UI,
+signup/login, onboarding, dashboards, Promotion matching, A2A negotiation,
+Agreement, Evidence, and settlement UI without touching live credentials or
+mainnet.
+
+Local account flow:
+
+1. Open `http://127.0.0.1:3000/signup`.
+2. Create a Brand or Creator account with email/password.
+3. Complete the role onboarding.
+4. Use a second browser window/profile for the opposite role when testing the
+   two-window demo.
+
+Seeded local fixture accounts are created in the Auth emulator on startup:
+
+```text
+Brand    test1@knot.demo     knot-demo-1234
+Brand    test2@knot.demo     knot-demo-1234
+Creator  test3@knot.demo     knot-demo-1234
+Creator  test4@knot.demo     knot-demo-1234
+```
+
+Google OAuth is intentionally not the local emulator path. Use email/password
+locally; verify Google sign-in only against a configured Firebase project.
+
+Useful local smoke commands while `dev_stack.sh` is running:
+
+```bash
+scripts/local/api_smoke_wallet.sh CREATOR
+scripts/local/agent_run.sh --new
+```
+
+On-chain localnet settlement is separate and opt-in:
+
+```bash
+.venv/bin/python scripts/local/localnet_bootstrap.py
+scripts/local/dev_stack.sh
+scripts/local/settlement_smoke.sh
+```
+
+Do not run shared devnet, deployment, IAM, Secret, wallet funding, or on-chain
+transaction commands without explicit approval.
+
+## Verification
+
+```bash
+npm --prefix frontend run test
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
 .venv/bin/python -m pytest backend/tests
-.venv/bin/python -m mypy backend/apps backend/libs
-```
-
-```text
-.venv/bin/python scripts/seed_demo.py --target memory
-.venv/bin/python scripts/firestore_smoke.py --target memory
-GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
-  .venv/bin/python scripts/seed_demo.py --target firestore
-GOOGLE_CLOUD_PROJECT=<gcp-project-id> KNOT_REPOSITORY_BACKEND=firestore \
-  .venv/bin/python scripts/firestore_smoke.py --target firestore
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 GOOGLE_CLOUD_PROJECT=knot-dev-503505 \
-  .venv/bin/python -m pytest backend/tests/integration/test_firestore_emulator.py
-```
-
-```text
-cd web3/gateway
-npm install
-npm run lint
-npm test
-npm run build
+npm --prefix web3/gateway run test
+npm --prefix web3/gateway run build
 ```

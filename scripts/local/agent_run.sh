@@ -4,8 +4,8 @@
 #   scripts/local/agent_run.sh --new                 # 매칭되는 프로모션을 새로 만들고 협상까지
 #   scripts/local/agent_run.sh <promotionId>         # 기존 프로모션으로 협상까지
 #
-# 왜 필요한가: 현재 UI 에는 매칭·협상 시작 버튼이 없다(legacy 라우트가 리다이렉트로 바뀌며 사라졌다).
-# 정산 실행 화면은 복구했으므로, 이 스크립트로 합의까지 만들어두고 정산은 화면에서 클릭해 검증한다.
+# 왜 필요한가: UI 없이도 Product API → Creator A2A HTTP → Agreement 생성 경로를 빠르게 검증한다.
+# 브라우저에서는 /brand/promotions/new 에서 같은 협상 시작 경로를 실행할 수 있다.
 #
 # 전제: dev_stack.sh 기동 + localnet_bootstrap.py(게이트웨이 실서명) 완료.
 #       KNOT_AUTH_MODE=emulator 이므로 토큰을 직접 만들어 쓴다(로컬 전용).
