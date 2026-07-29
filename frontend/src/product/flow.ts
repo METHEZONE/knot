@@ -5,6 +5,7 @@ export const appRoutes = [
   "/",
   "/login",
   "/signup",
+  "/mypage",
   "/onboarding/creator",
   "/creator/onboarding",
   "/creator/connect",
@@ -28,9 +29,9 @@ export function roleEntry(role: Role) {
 /** 상단바에 노출할 것 — 홈(채팅창) 하나면 충분하다. */
 export const brandWorkspaceRoutes = [
   { href: "/brand", label: "내 매니저" },
-  { href: "/brand/settings", label: "설정" },
+  { href: "/mypage", label: "마이페이지" },
 ] as const;
 export const creatorWorkspaceRoutes = [
   { href: "/creator", label: "내 매니저" },
-  { href: "/creator/settings", label: "설정" },
+  { href: "/mypage", label: "마이페이지" },
 ] as const;

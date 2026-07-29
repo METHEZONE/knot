@@ -32,6 +32,7 @@ test("route surface includes v2 onboarding entries and UI reference routes", () 
     "/",
     "/login",
     "/signup",
+    "/mypage",
     "/onboarding/creator",
     "/creator/onboarding",
     "/creator/connect",
@@ -49,8 +50,8 @@ test("route surface includes v2 onboarding entries and UI reference routes", () 
 });
 
 test("each role's nav is just its own chat home", () => {
-  assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand", "/brand/settings"]);
-  assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator", "/creator/settings"]);
+  assert.deepEqual(brandWorkspaceRoutes.map((r) => r.href), ["/brand", "/mypage"]);
+  assert.deepEqual(creatorWorkspaceRoutes.map((r) => r.href), ["/creator", "/mypage"]);
   assert.equal(roleEntry("brand"), "/brand/onboarding");
   assert.equal(roleEntry("creator"), "/creator/onboarding");
 });

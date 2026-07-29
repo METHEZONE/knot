@@ -10,8 +10,7 @@ export function getDashboardPath(role: CurrentAccount["role"] | undefined | null
 }
 
 export function getMyPagePath(role: CurrentAccount["role"] | undefined | null) {
-  if (role === "BRAND") return "/brand/me";
-  if (role === "CREATOR") return "/creator/me";
+  if (role === "BRAND" || role === "CREATOR") return "/mypage";
   return "/signup";
 }
 

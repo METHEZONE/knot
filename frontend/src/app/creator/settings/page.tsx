@@ -1,5 +1,5 @@
-import { SettingsScreen } from "@/features/settings/SettingsScreen";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <SettingsScreen role="creator" />;
+  redirect("/mypage");
 }

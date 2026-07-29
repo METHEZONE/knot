@@ -226,7 +226,7 @@ Exit:
 - [x] Phase 1 UI reference baseline captured; screenshot artifact remains pending because no headless browser is available.
 - [x] Phase 2 Firebase Auth and role.
 - [x] Phase 3 onboarding API connection.
-- [ ] Phase 4 `/mypage`.
+- [x] Phase 4 `/mypage`.
 - [ ] Phase 5 dashboards.
 - [ ] Phase 6 promotion/candidates/lists.
 - [ ] Phase 7 A2A detail.
