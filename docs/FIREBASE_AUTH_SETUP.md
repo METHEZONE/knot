@@ -1,46 +1,111 @@
 # Firebase Auth Setup
 
-KNOT MVP frontend uses Firebase Authentication for browser login. The Firebase web
-configuration is public build configuration, but it must match the active Firebase
-project and every browser hostname must be authorized in Firebase Console.
+## 1. Web App
 
-## Console Checklist
+환경 변수:
 
-1. Open Firebase Console and select the same project as `NEXT_PUBLIC_FIREBASE_PROJECT_ID`.
-2. Go to `Authentication`.
-3. Enable Authentication if it is not already enabled.
-4. Open `Sign-in method`.
-5. Enable `Google` provider.
-6. Open `Authentication > Settings > Authorized domains`.
-7. Add local development hostnames such as `localhost` when using local dev.
-8. Add deployed hostnames for Cloud Run, Firebase Hosting, Vercel, or a custom domain.
-9. If both `www.example.com` and `example.com` are used, add both hostnames.
-10. Add only the hostname. Do not include protocol or path.
-11. Restart the frontend dev server or rebuild the frontend after environment variable changes.
+```text
+NEXT_PUBLIC_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_FIREBASE_APP_ID
+```
 
-## Required Public Environment Variables
+API key는 Firebase web config 특성상 클라이언트에 존재하지만, Security Rules와 backend authorization이 보안 경계다.
 
-These values are injected into the Next.js frontend build/runtime and must come
-from the Firebase Web App configuration:
+---
 
-- `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID`
+## 2. Authorized Domains
 
-KNOT MVP does not initialize Firebase Analytics. Authentication is the only
-required Firebase browser SDK feature.
+- localhost
+- Cloud Run custom/default domain
+- preview domain if used
 
-## Error Reference
+`auth/unauthorized-domain` 발생 시 Console에서 추가.
 
-- `auth/unauthorized-domain`: add the current browser hostname to Firebase
-  Authentication authorized domains.
-- `auth/popup-closed-by-user`: retry login after keeping the Google popup open.
-- `auth/popup-blocked`: allow popups for the current hostname.
-- `auth/network-request-failed`: check network connectivity and Firebase service access.
+---
 
-When `auth/unauthorized-domain` occurs in development, the frontend logs the
-hostname that must be added to Firebase Console. It does not print secrets.
+## 3. Persistence
+
+two-window demo:
+
+```ts
+await setPersistence(auth, browserSessionPersistence);
+```
+
+Sign-in 전에 적용한다.
+
+검증:
+- tab A Brand
+- tab B Creator
+- refresh 유지
+- tab close 후 session 종료
+- logout only current tab
+
+---
+
+## 4. Backend
+
+- Firebase Admin SDK
+- ID Token verify
+- project/audience
+- role from Firestore/backend
+- token claims alone에 모든 profile data를 넣지 않음
+
+---
+
+## 5. Role Bootstrap
+
+Signup:
+1. Firebase user
+2. backend user document
+3. role
+4. onboarding state
+
+Duplicate safe.
+
+---
+
+## 6. Emulator
+
+- Firebase Auth Emulator
+- Firestore Emulator
+- no production credentials in local test
+
+---
+
+## 7. Test Account Secrets
+
+실제 비밀번호를 repo에 커밋하지 않는다.
+
+```text
+E2E_BRAND_EMAIL
+E2E_BRAND_PASSWORD
+E2E_CREATOR_EMAIL
+E2E_CREATOR_PASSWORD
+```
+
+CI Secret 사용.
+
+---
+
+## 8. Common Issues
+
+`unauthorized-domain`:
+- authorized domain
+
+무한 `계정 확인 중`:
+- auth loading/signed-out 분리
+- `onAuthStateChanged` cleanup
+- `/me` timeout/error
+
+401:
+- token refresh
+- bearer header
+- backend Firebase project
+
+다른 탭 계정 덮어씀:
+- local persistence 제거
+- session persistence 확인

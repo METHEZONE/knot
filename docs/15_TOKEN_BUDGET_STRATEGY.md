@@ -1,39 +1,127 @@
-# Token Budget Strategy
+# Token & Spend Budget Strategy
 
-## Store context in the repository
+## 1. 목적
 
-Do not paste long PRDs repeatedly. Tell Codex to read one phase prompt.
+- Gemini 비용과 latency 통제
+- Codex 작업 컨텍스트 오염 방지
+- pay.sh API spend cap
+- Brand의 Promotion budget과 Agent API budget 분리
 
-## One phase per session
+---
 
-Audit, Auth, Onboarding/Dashboard, Resource Routes, A2A, Escrow, Dev Admin, Final E2E.
+## 2. Production Gemini
 
-## One writer
+Use case:
+- product/profile extraction
+- candidate explanation
+- negotiation proposal
+- evidence observation
 
-Use at most two read-only subagents. Multiple writers on shared contracts cost more tokens through conflicts.
+원칙:
+- structured output
+- 최소 context
+- cached profile/policy summaries
+- raw history 전체 대신 current terms + relevant last messages
+- deterministic policy outside model
+- retries limited
+- model tier by task
 
-## Compact handoff
+권장:
+- extraction: fast model
+- negotiation: fast/medium
+- complex fallback only when needed
 
-Update the active ExecPlan and implementation status. The next session reads those files, not the whole chat.
+---
 
-## Limit scope
+## 3. Context
 
-No UI redesign, dependency replacement, or infrastructure rewrite unless required.
+Negotiation prompt:
+- Promotion public data
+- own private policy
+- counterparty public profile
+- current terms
+- last relevant turns
+- max rounds
+- output schema
 
-## Phase-specific tests
+제외:
+- unrelated history
+- counterparty private policy
+- raw logs
+- secrets
+- entire Firestore documents
 
-Run only related tests until final E2E.
+---
 
-## Stop command
+## 4. Limits
+
+- max negotiation rounds: 5
+- max model retry: 2
+- max source content bytes
+- max evidence content
+- max candidates analyzed deeply
+- timeout
+- daily request quota
+
+---
+
+## 5. pay.sh/x402
+
+Separate budget:
 
 ```text
-Stop after the current milestone. Update the ExecPlan and handoff. Do not begin the next phase.
+agentApiSpendCapUsdc
 ```
 
-## Priority under severe limits
+Rules:
+- API allowlist
+- per-call max
+- daily max
+- receipt
+- Promotion Escrow budget에서 차감하지 않음
+
+---
+
+## 6. Brand Budget
 
 ```text
-Auth → one-page onboarding → real dashboards → resource routes → A2A → escrow → advanced admin
+totalBudgetUsdc
+perDealCapUsdc
+committedUsdc
+lockedUsdc
+releasedUsdc
+remainingUsdc
 ```
 
-Implement basic safe account deletion, but leave advanced admin charts and bulk actions for last.
+Agent cannot:
+- exceed per-deal cap
+- exceed remaining budget
+- use API spend as Creator compensation
+
+---
+
+## 7. Codex Development
+
+- one phase per session when context grows
+- read 00 index + relevant docs only
+- do not repeatedly load all archived docs
+- status and handoff at each phase
+- commits as checkpoints
+- visual tests before large refactor
+- use subagents by bounded task
+
+---
+
+## 8. Observability
+
+Track:
+- tokens by task
+- latency
+- retry
+- failure
+- cost estimate
+- API receipt
+- model version
+- prompt version
+
+Do not log full sensitive prompts.
