@@ -18,15 +18,15 @@
 
 | 영역 | 상태 | 증거 | 비고 |
 |---|---|---|---|
-| UI branch runs | NOT_STARTED | | |
-| Stable backend identified | NOT_STARTED | | |
-| Auth | NOT_STARTED | | |
-| Firestore | NOT_STARTED | | |
-| A2A | NOT_STARTED | | |
-| Agreement | NOT_STARTED | | |
-| Escrow | NOT_STARTED | | |
-| Settlement | NOT_STARTED | | |
-| Cloud Run | NOT_STARTED | | |
+| UI branch runs | VERIFIED | Worktree `/private/tmp/knot-v2-product-flow` from `origin/feat/two-user-session`; `cd frontend && npm run test`, `npm run typecheck`, `npm run build` passed on 2026-07-30 | Screenshot capture still pending because no headless browser is installed |
+| Stable backend identified | IN_PROGRESS | `origin/main` selected as stable candidate in `docs/V2_BRANCH_AND_API_AUDIT.md` | Test execution still required before `VERIFIED` |
+| Auth | IN_PROGRESS | `origin/main` has `backend/libs/auth/firebase.py`, `/api/v1/me`, frontend `src/auth/*`, and API token forwarding | Not yet ported into UI-base branch |
+| Firestore | IN_PROGRESS | `origin/main` has `backend/libs/repositories/*`, Firestore paths, seed tooling, and repository tests | Not yet verified in this worktree |
+| A2A | IN_PROGRESS | `origin/main` has Creator A2A HTTP service and Product API start-negotiation route; UI branch has `에이전트끼리 대화` visual | Not yet connected in UI-base branch |
+| Agreement | IN_PROGRESS | `origin/main` has Agreement routes and termsHash-related domain code | UI adapter not yet implemented |
+| Escrow | IN_PROGRESS | `origin/main` has Web3 gateway devnet path and Product API escrow lock/release routes | Devnet smoke requires explicit approval |
+| Settlement | IN_PROGRESS | `origin/main` has settlement policy/tests and release route | UI adapter not yet implemented |
+| Cloud Run | IN_PROGRESS | `origin/main` has `infra/cloudbuild/*.yaml` and deploy scripts | Not yet ported or deployed |
 
 ---
 
@@ -61,16 +61,25 @@
 
 ## 3. Known Blockers
 
-코드 감사 후 작성한다.
+No operational blocker yet. Implementation is intentionally paused before code changes until Phase 1 reference screenshots and baseline tests are captured.
 
-Template:
+Current risks:
 
 ```text
-BLOCKER:
-IMPACT:
-EVIDENCE:
-OWNER:
-NEXT ACTION:
+RISK: Phase 1 screenshot capture is pending.
+IMPACT: Visual reference is identified in code but not yet image-captured.
+EVIDENCE: `npm run build` generated routes; `curl` returned HTML for UI routes; local CLI has no `chromium`, `google-chrome`, or `playwright`.
+NEXT ACTION: Install/use a browser screenshot tool or capture manually before Phase 2 UI changes.
+
+RISK: UI branch uses sessionStorage/localStorage and setTimeout demo flows.
+IMPACT: Must not be treated as production business state or real success.
+EVIDENCE: docs/V2_BRANCH_AND_API_AUDIT.md section 4 and 5.
+NEXT ACTION: Replace with Product API ViewModels during Phases 2-4.
+
+RISK: Stable backend candidate is code-identified but not test-verified in this worktree.
+IMPACT: Cannot mark backend/Web3 as VERIFIED yet.
+EVIDENCE: origin/main route/test inventory in docs/V2_BRANCH_AND_API_AUDIT.md.
+NEXT ACTION: Run selected tests when backend code is ported or in an origin/main worktree.
 ```
 
 ---
@@ -78,14 +87,36 @@ NEXT ACTION:
 ## 4. Latest Verified Build
 
 ```text
-Commit:
-Frontend revision:
-Backend revision:
-Web3 version:
+Commit: c880538 docs: establish KNOT v2 source of truth
+Frontend revision: origin/feat/two-user-session @ 263c9d3 plus docs commit
+Backend revision: origin/main candidate, not ported into this branch
+Web3 version: origin/main candidate, not ported into this branch
 URL:
-Verified at:
-Verifier:
+Verified at: 2026-07-30 audit + frontend baseline tests
+Verifier: Codex
 ```
+
+## 6. Phase 1 Baseline Evidence
+
+Commands run in `/private/tmp/knot-v2-product-flow/frontend`:
+
+```text
+npm install
+npm run test
+npm run typecheck
+npm run build
+```
+
+Results:
+- `npm install`: completed with Node engine warning (`eslint-visitor-keys` wants newer Node than v20.13.0) and 12 high severity npm audit findings. No remediation was applied during baseline capture.
+- `npm run test`: 8 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed. Static routes generated: `/`, `/brand`, `/brand/mood`, `/brand/product`, `/brand/settings`, `/creator`, `/creator/connect`, `/creator/rules`, `/creator/settings`, `/dev/admin`, `/login`, `/signup`.
+- Local dev server smoke: `npm run dev -- --port 3100` started successfully; route HTML was fetched with `curl`.
+
+Screenshot status:
+- Pending. Local CLI has `/usr/sbin/screencapture` and `/usr/bin/open`, but no headless `chromium`, `google-chrome`, or `playwright`. Capturing role pages accurately requires a browser session because the current UI branch gates role pages through client-side `sessionStorage`.
+- Attempted `open http://127.0.0.1:3100/login` and `screencapture -x .agent/screenshots/phase1-login-reference.png`; the captured image showed only the desktop background, not the browser UI, so the invalid artifact was deleted.
 
 ---
 
