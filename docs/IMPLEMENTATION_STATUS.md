@@ -113,6 +113,7 @@ Results:
 - `npm run typecheck`: passed.
 - `npm run build`: passed. Static routes generated: `/`, `/brand`, `/brand/mood`, `/brand/product`, `/brand/settings`, `/creator`, `/creator/connect`, `/creator/rules`, `/creator/settings`, `/dev/admin`, `/login`, `/signup`.
 - Local dev server smoke: `npm run dev -- --port 3100` started successfully; route HTML was fetched with `curl`.
+- Landing adjustment after review: `/` now uses the production long landing from `origin/main` via `frontend/public/knot/index.html`; the UI-base React `LandingScreen` page was removed. Re-run `npm run test`, `npm run typecheck`, and `npm run build`: all passed.
 
 Screenshot status:
 - Pending. Local CLI has `/usr/sbin/screencapture` and `/usr/bin/open`, but no headless `chromium`, `google-chrome`, or `playwright`. Capturing role pages accurately requires a browser session because the current UI branch gates role pages through client-side `sessionStorage`.

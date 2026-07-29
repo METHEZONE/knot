@@ -30,46 +30,6 @@ type WorkspacePage =
   | "me"
   | "settings";
 
-export function LandingScreen() {
-  return (
-    <div className="flex flex-col gap-14 py-8 md:py-14">
-      <section className="grid min-h-[68vh] items-center gap-10 lg:grid-cols-[1fr_0.95fr]">
-        <div className="flex flex-col gap-7">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill>KNOT</Pill>
-            <Pill>Agent-to-Agent commerce</Pill>
-          </div>
-          <div>
-            <p className="text-lg font-semibold text-muted">지금까지의 협업은 이랬어요</p>
-            <h1 className="mt-3 max-w-4xl text-5xl font-semibold leading-[0.95] md:text-7xl">
-              브랜드는 DM을 50개 보내고, 답장은 3개 받아요.
-            </h1>
-            <div className="mt-6 max-w-2xl space-y-2 text-xl leading-relaxed">
-              <p>크리에이터는 제안을 놓치고, 단가는 눈치게임,</p>
-              <p>정산은 엑셀과 계좌이체로 끝나죠.</p>
-            </div>
-            <p className="mt-6 max-w-2xl text-2xl font-semibold leading-relaxed">
-              크리에이터랑 브랜드, 에이전트끼리 만나서 매듭 짓는 곳
-            </p>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">
-              당신이 자는 동안, 당신의 에이전트가 딜을 협상하고, 계약하고, 정산합니다.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <PrimaryLink href="/login">로그인</PrimaryLink>
-            <SecondaryLink href="/signup">회원가입</SecondaryLink>
-            <SecondaryLink href="/dev/admin">Dev admin</SecondaryLink>
-          </div>
-        </div>
-
-        <Panel>
-          <AgentRelayScene />
-        </Panel>
-      </section>
-    </div>
-  );
-}
-
 export function LoginScreen() {
   return (
     <AuthFrame
