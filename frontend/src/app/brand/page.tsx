@@ -1,5 +1,5 @@
-import { RoleHome } from "@/features/chat/RoleHome";
+import { RoleDashboard } from "@/features/dashboard/RoleDashboard";
 
 export default function Page() {
-  return <RoleHome role="brand" />;
+  return <RoleDashboard role="brand" />;
 }

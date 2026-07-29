@@ -14,7 +14,7 @@
  */
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/auth/AuthProvider";
 import { getDashboardPath } from "@/auth/authState";
 import type { Role } from "./types";
@@ -27,9 +27,12 @@ export function RoleGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { status, context, error } = useAuth();
   const expected = role === "brand" ? "BRAND" : "CREATOR";
   const active = context?.account.role ?? null;
+  const onboardingPath = `/${role}/onboarding`;
+  const inOnboarding = pathname === onboardingPath;
 
   useEffect(() => {
     if (status === "loading") return;
@@ -43,10 +46,18 @@ export function RoleGate({
     }
     if (active !== expected) {
       router.replace(getDashboardPath(active) ?? "/signup");
+      return;
     }
-  }, [active, expected, role, router, status]);
+    if (!inOnboarding && context?.account.onboardingStatus !== "COMPLETED") {
+      router.replace(onboardingPath);
+    }
+  }, [active, context, expected, inOnboarding, onboardingPath, role, router, status]);
 
-  if (status === "loading" || active !== expected) {
+  if (
+    status === "loading" ||
+    active !== expected ||
+    (!inOnboarding && context?.account.onboardingStatus !== "COMPLETED")
+  ) {
     return (
       <div className="py-24 text-center text-muted">
         {status === "unauthenticated"

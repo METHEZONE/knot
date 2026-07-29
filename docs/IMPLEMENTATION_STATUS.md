@@ -39,8 +39,8 @@
 | Creator onboarding | VERIFIED | Frontend `npm run typecheck`, `npm run test`, `npm run build`; backend `pytest tests/test_api_auth.py tests/test_api_onboarding.py` |
 | Manager connect | VERIFIED | `/me/role`, `/me/brand-profile`, `/me/creator-profile` create/activate role Agent without starting negotiation; Creator receiving offers defaults OFF |
 | MyPage unified | VERIFIED | `/mypage` added; `/brand/me`, `/creator/me`, `/brand/settings`, `/creator/settings` redirect; frontend `npm run test`, `npm run build`, `npm run typecheck` passed |
-| Creator dashboard | NOT_STARTED | |
-| Brand dashboard | NOT_STARTED | |
+| Creator dashboard | VERIFIED | `/creator` loads `GET /api/v1/creator/dashboard`; frontend test/typecheck/build and backend dashboard/resource tests passed |
+| Brand dashboard | VERIFIED | `/brand` loads `GET /api/v1/brand/dashboard`; frontend test/typecheck/build and backend dashboard/resource tests passed |
 | Creator availability | NOT_STARTED | |
 | Brand proposal run | NOT_STARTED | |
 | Candidate list | NOT_STARTED | |
@@ -92,12 +92,12 @@ NEXT ACTION: Replace fixture tests with API/E2E tests in Phase 9.
 ## 4. Latest Verified Build
 
 ```text
-Commit: 190172b feat: connect two-window onboarding to product api; pending Phase 4 commit
-Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding and MyPage adapter changes
+Commit: 31de3af refactor: unify mypage settings; pending Phase 5 commit
+Frontend revision: origin/feat/two-user-session UI plus Firebase Auth/Product API onboarding, MyPage, and dashboard adapters
 Backend revision: origin/main stable API/Auth/Firestore/A2A/Agreement/Escrow/Settlement baseline ported
 Web3 version: origin/main gateway baseline ported
 URL:
-Verified at: 2026-07-30 Phase 4 tests
+Verified at: 2026-07-30 Phase 5 tests
 Verifier: Codex
 ```
 
@@ -212,6 +212,34 @@ Results:
 - Frontend tests: 8 passed.
 - Frontend production build: passed; 22 app routes generated including `/mypage`, role me redirects, and role settings redirects.
 - Frontend typecheck: passed after build completed. A simultaneous first run raced with `.next/types` regeneration and failed on a missing generated `routes.js`; rerunning after build passed.
+
+Screenshot status:
+- Pending for the same local browser tooling reason recorded in Phase 1.
+
+---
+
+## 10. Phase 5 Role Dashboards
+
+Changes:
+- Replaced `/brand` and `/creator` first screens with API-backed dashboard views.
+- Dashboard shows Manager state, summary metrics, action-required panel, active/in-progress list, and recent activity.
+- `RoleGate` now redirects incomplete accounts from dashboard routes back to role onboarding while allowing onboarding routes.
+- Preserved `ManagerChat` for later Negotiation Detail work instead of using it as the Dashboard.
+
+Commands run:
+
+```text
+cd frontend && npm run test
+cd frontend && npm run build
+cd frontend && npm run typecheck
+cd backend && /Users/yewonchoi/Desktop/knot/.venv/bin/python -m pytest tests/test_api_dashboards.py tests/test_api_resource_routes.py
+```
+
+Results:
+- Frontend tests: 8 passed.
+- Frontend production build: passed.
+- Frontend typecheck: passed after build completed. Parallel typecheck/build can race on generated `.next/types`.
+- Backend dashboard/resource tests: 8 passed, 1 Starlette/httpx deprecation warning.
 
 Screenshot status:
 - Pending for the same local browser tooling reason recorded in Phase 1.

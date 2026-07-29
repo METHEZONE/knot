@@ -227,7 +227,7 @@ Exit:
 - [x] Phase 2 Firebase Auth and role.
 - [x] Phase 3 onboarding API connection.
 - [x] Phase 4 `/mypage`.
-- [ ] Phase 5 dashboards.
+- [x] Phase 5 dashboards.
 - [ ] Phase 6 promotion/candidates/lists.
 - [ ] Phase 7 A2A detail.
 - [ ] Phase 8 Agreement/Escrow/Evidence/Settlement.
