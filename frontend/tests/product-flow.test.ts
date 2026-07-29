@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { firebaseAuthErrorMessage } from "../src/auth/firebaseClient";
+import { firebaseAuthErrorMessage, firebasePersistenceScope } from "../src/auth/firebaseClient";
 import { getDashboardPath, headerMenuForAuth, postLoginPath, safeRedirectPath } from "../src/auth/authState";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { createKnotDataSource, resolveDataMode } from "../src/product/dataSource";
-import { ProductApiClient, ProductApiError, type ApiPromotion } from "../src/product/apiClient";
+import { ProductApiClient, ProductApiError, type ApiAgreement, type ApiNegotiation, type ApiNegotiationMessage, type ApiPromotion } from "../src/product/apiClient";
+import { mapNegotiationMessagesToActivities, nextActionForDeal } from "../src/product/agentExperience";
 import {
   calculateBrandEscrow,
   calculateCreatorSettlement,
@@ -24,16 +25,21 @@ test("product route surface exposes separated MVP role pages", () => {
     "/brand/promotions",
     "/brand/promotions/new",
     "/brand/promotions/[promotionId]",
+    "/brand/promotions/[promotionId]/negotiations/[negotiationId]",
     "/brand/negotiations/[negotiationId]",
     "/brand/agreements/[agreementId]",
     "/brand/products/new",
     "/brand/negotiate",
     "/brand/result",
     "/brand/settlement",
+    "/brand/settlements",
     "/brand/me",
     "/brand/settings",
+    "/brand/settings/agent",
     "/creator",
     "/creator/onboarding",
+    "/creator/deals",
+    "/creator/deals/[dealId]",
     "/creator/offers",
     "/creator/offers/[negotiationId]",
     "/creator/criteria",
@@ -43,6 +49,7 @@ test("product route surface exposes separated MVP role pages", () => {
     "/creator/settlements",
     "/creator/me",
     "/creator/settings",
+    "/creator/settings/agent",
     "/dev/admin",
   ]);
 });
@@ -52,14 +59,15 @@ test("workspace nav is menu-like and role-specific", () => {
     "/brand",
     "/brand/promotions",
     "/brand/promotions",
-    "/brand/promotions",
+    "/brand/settlements",
+    "/brand/settings/agent",
   ]);
   assert.deepEqual(creatorWorkspaceRoutes.map((route) => route.href), [
     "/creator",
-    "/creator/criteria",
     "/creator/offers",
-    "/creator/agreements",
+    "/creator/deals",
     "/creator/settlements",
+    "/creator/settings/agent",
   ]);
 });
 
@@ -118,6 +126,10 @@ test("Firebase auth errors map to user-facing messages", () => {
     firebaseAuthErrorMessage({ code: "auth/operation-not-allowed" }),
     "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.",
   );
+});
+
+test("Firebase auth persistence is scoped per browser tab session", () => {
+  assert.equal(firebasePersistenceScope(), "browser-session");
 });
 
 test("A2A task state maps to creator display status", () => {
@@ -196,6 +208,107 @@ test("data source defaults to API mode unless mock mode is explicitly requested"
       process.env.NEXT_PUBLIC_KNOT_DATA_MODE = previous;
     }
   }
+});
+
+test("agent activity mapper redacts private policy values and preserves live IDs", () => {
+  const negotiation: ApiNegotiation = {
+    negotiationId: "negotiation-activity",
+    matchRunId: "match-activity",
+    matchCandidateId: "candidate-activity",
+    promotionId: "promotion-activity",
+    brandAgentId: "brand-agent-activity",
+    creatorAgentId: "creator-agent-activity",
+    contextId: "context-activity",
+    taskId: "task-activity",
+    status: "COUNTERED",
+    currentRound: 2,
+    maxRounds: 5,
+    currentTerms: {
+      compensation: { structure: "fixed", baseAmountUsdc: 300 },
+      deliverables: [{ format: "reel", count: 1, postWindow: { start: "2026-08-05", end: "2026-08-10" } }],
+      usageRights: "organicOnly",
+      milestones: [{ id: "contract", trigger: "AGREEMENT_SIGNED", releasePct: 30 }],
+    },
+  };
+  const messages: ApiNegotiationMessage[] = [
+    {
+      messageId: "message-offer",
+      negotiationId: "negotiation-activity",
+      contextId: "context-activity",
+      taskId: "task-activity",
+      role: "ROLE_USER",
+      sequence: 1,
+      payload: { type: "OFFER", terms: negotiation.currentTerms, rationale: "brand max budget is 517 USDC" },
+      createdAt: "2026-07-30T00:00:00.000Z",
+    },
+    {
+      messageId: "message-counter",
+      negotiationId: "negotiation-activity",
+      contextId: "context-activity",
+      taskId: "task-activity",
+      role: "ROLE_AGENT",
+      sequence: 2,
+      payload: { type: "COUNTER", terms: negotiation.currentTerms, rationale: "creator minimum 287 USDC" },
+      createdAt: "2026-07-30T00:01:00.000Z",
+    },
+  ];
+
+  const activities = mapNegotiationMessagesToActivities({ role: "creator", negotiation, messages });
+  const serialized = JSON.stringify(activities);
+  assert.ok(activities.some((activity) => activity.developerMeta?.messageId === "message-offer"));
+  assert.ok(activities.some((activity) => activity.type === "POLICY_CHECK"));
+  assert.ok(!serialized.includes("517"));
+  assert.ok(!serialized.includes("287"));
+});
+
+test("agent next action distinguishes agreement created from escrow funded", () => {
+  const negotiation: ApiNegotiation = {
+    negotiationId: "negotiation-next",
+    matchRunId: "match-next",
+    matchCandidateId: "candidate-next",
+    promotionId: "promotion-next",
+    brandAgentId: "brand-agent-next",
+    creatorAgentId: "creator-agent-next",
+    contextId: "context-next",
+    taskId: "task-next",
+    status: "AGREED",
+    currentRound: 3,
+    maxRounds: 5,
+    currentTerms: {
+      compensation: { structure: "fixed", baseAmountUsdc: 300 },
+      deliverables: [{ format: "reel", count: 1, postWindow: { start: "2026-08-05", end: "2026-08-10" } }],
+      usageRights: "organicOnly",
+      milestones: [{ id: "contract", trigger: "AGREEMENT_SIGNED", releasePct: 30 }],
+    },
+  };
+  const agreement: ApiAgreement = {
+    agreementId: "agreement-next",
+    negotiationId: "negotiation-next",
+    taskId: "task-next",
+    artifactId: "artifact-next",
+    promotionId: "promotion-next",
+    brandAgentId: "brand-agent-next",
+    creatorAgentId: "creator-agent-next",
+    terms: negotiation.currentTerms,
+    canonicalTermsJson: "{}",
+    termsHash: "sha256:next",
+    status: "AGREED",
+  };
+
+  assert.equal(nextActionForDeal("brand", negotiation, agreement, null).label, "Escrow 예치");
+  assert.equal(
+    nextActionForDeal("creator", negotiation, agreement, {
+      escrowId: "escrow-next",
+      agreementId: "agreement-next",
+      promotionId: "promotion-next",
+      lockedAmountBaseUnits: "300000000",
+      releasedAmountBaseUnits: "0",
+      status: "LOCKED",
+      lockSignature: "devnet-signature",
+      lockReceiptId: "receipt-next",
+    }).label,
+    "게시물 링크 제출",
+  );
 });
 
 test("role route helpers point to current MVP entry points", () => {

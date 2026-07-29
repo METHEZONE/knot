@@ -729,3 +729,21 @@ Results:
 ## Next Phase
 
 No next reboot phase remains in this plan. Remaining external action is safe Solana devnet smoke once signer/RPC/program configuration is provided and approved.
+
+## Dashboard Agent Visualization
+
+Status: `FRONTEND_INTEGRATED`
+
+Current:
+
+- Brand and Creator dashboards keep the existing API-backed dashboard resources and add Manager cards, action-required summaries, recent Agent activity previews, and Escrow/Settlement context.
+- Negotiation detail surfaces map existing `ApiNegotiation`, A2A messages, optional Agreement, optional Escrow, and settlements into `AgentActivityItem[]` instead of rendering raw JSON as the main UI.
+- The same live activity mapper feeds dashboard previews and full detail views.
+- Final route aliases are available for `/creator/deals`, `/creator/deals/[dealId]`, `/brand/promotions/[promotionId]/negotiations/[negotiationId]`, `/brand/settings/agent`, and `/creator/settings/agent`.
+- Firebase sign-in/signup paths set browser-session persistence before authentication so Brand and Creator sessions can be tested in separate tabs.
+- Production API mode still does not fall back to mock data after live API failure.
+
+Limitations:
+
+- Automated screenshots were not generated in this worktree because no browser E2E runner or test account environment is configured.
+- Brand `/brand/settlements` currently redirects to the existing single-entry settlement surface.

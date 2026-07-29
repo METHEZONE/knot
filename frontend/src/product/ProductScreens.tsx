@@ -19,6 +19,7 @@ import {
 import {
   ProductApiClient,
   ProductApiError,
+  type ApiAgreementEscrowBundle,
   type ApiAgreement,
   type ApiNegotiation,
   type ApiNegotiationMessage,
@@ -28,6 +29,21 @@ import {
   type CurrentUserContext,
 } from "./apiClient";
 import { A2ANegotiationVisualizer } from "./A2AVisualizer";
+import {
+  ActionRequiredList,
+  AgentActivityPreview,
+  AgentConversationExperience,
+  AgentManagerCard,
+} from "./AgentExperienceComponents";
+import {
+  agreementEscrowView,
+  dashboardActivitiesFromBrand,
+  dashboardActivitiesFromCreator,
+  managerFromContext,
+  mapNegotiationMessagesToActivities,
+  nextActionForDeal,
+  type NextActionView,
+} from "./agentExperience";
 import { usePhantomWallet } from "@/features/wallet/usePhantomWallet";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import {
@@ -232,6 +248,15 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
               <Metric label="체결된 크리에이터" value={dashboard.summary.agreements} />
               <Metric label="에스크로 예치" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
             </div>
+            {(() => {
+              const activities = dashboardActivitiesFromBrand(dashboard.recentAgentActivity, dashboard.activePromotions);
+              return (
+                <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                  <AgentManagerCard manager={managerFromContext("brand", context, activities)} />
+                  <ActionRequiredList items={brandDashboardActions(dashboard)} />
+                </div>
+              );
+            })()}
             <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
               <Panel>
                 <SectionTitle eyebrow="Promotions" title="내 프로모션" />
@@ -258,22 +283,10 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
                   <PrimaryLink href="/brand/promotions/new">첫 프로모션 만들기</PrimaryLink>
                 </div>
               </Panel>
-              <Panel>
-                <SectionTitle eyebrow="Negotiations" title="최근 협상" />
-                {dashboard.recentAgentActivity.length ? (
-                  <div className="mt-4 grid gap-3">
-                    {dashboard.recentAgentActivity.slice(0, 5).map((event) => (
-                      <DashboardRow
-                        key={event.eventId}
-                        title={event.type}
-                        meta={event.createdAt}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState text={`${context.account.displayName ?? "Brand"} 계정에서 아직 협상 기록이 없습니다.`} />
-                )}
-              </Panel>
+              <AgentActivityPreview
+                activities={dashboardActivitiesFromBrand(dashboard.recentAgentActivity, dashboard.activePromotions)}
+                emptyText={`${context.account.displayName ?? "Brand"} 계정에서 아직 협상 기록이 없습니다.`}
+              />
             </div>
             <Panel>
               <SectionTitle eyebrow="Agreements" title="진행 중인 계약 및 에스크로" />
@@ -309,16 +322,29 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
 export function CreatorDashboardScreen({ context }: { context: CurrentUserContext }) {
   const [state, setState] = useDashboardState<CreatorDashboard>();
   const creatorLabel = context.account.displayName ?? "Creator";
+  const reload = useCallback(
+    () => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState),
+    [setState],
+  );
 
   useEffect(() => {
-    void loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState);
-  }, [setState]);
+    void reload();
+  }, [reload]);
 
   return (
     <WorkspaceShell role="creator" active="dashboard" title="크리에이터 대시보드" session={null}>
-      <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState)}>
+      <DashboardStatus state={state} retry={reload}>
         {(dashboard) => (
           <div className="grid gap-5">
+            {(() => {
+              const activities = dashboardActivitiesFromCreator(dashboard.recentAgentActivity, dashboard.offers);
+              return (
+                <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                  <AgentManagerCard manager={managerFromContext("creator", context, activities)} />
+                  <ActionRequiredList items={creatorDashboardActions(dashboard, context)} />
+                </div>
+              );
+            })()}
             <Panel>
               <SectionTitle eyebrow="Settlement" title="현재 정산 가능 금액" />
               {(() => {
@@ -388,23 +414,10 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
                 <EmptyState text={`${creatorLabel} 계정에서 아직 참여 중인 프로모션이 없습니다.`} />
               )}
             </Panel>
-            <Panel>
-              <SectionTitle eyebrow="Agent Deals" title="Agent 체결 내역" />
-              {dashboard.offers.length ? (
-                <div className="mt-4 grid gap-3">
-                  {dashboard.offers.map((offer) => (
-                    <DashboardRow
-                      key={String(offer.negotiationId)}
-                      title={`${String(offer.brandName ?? "Brand")} · ${String(offer.title ?? "Promotion")}`}
-                      meta={`${mapTaskStateToCreatorStatus(String(offer.taskState ?? ""), String(offer.status ?? ""))} · round ${String(offer.currentRound ?? "-")} · ${String(offer.currentAmountUsdc ?? offer.initialAmountUsdc ?? "-")} USDC`}
-                      href={`/creator/offers/${String(offer.negotiationId)}`}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState text="아직 Agent 협상 기록이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다." />
-              )}
-            </Panel>
+            <AgentActivityPreview
+              activities={dashboardActivitiesFromCreator(dashboard.recentAgentActivity, dashboard.offers)}
+              emptyText="아직 Agent 협상 기록이 없습니다. Agent 기준을 켜두면 적합한 제안을 자동으로 선별합니다."
+            />
           </div>
         )}
       </DashboardStatus>
@@ -828,16 +841,22 @@ export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: str
   const [state, setState] = useDashboardState<{
     detail: Awaited<ReturnType<ProductApiClient["getCreatorOfferDetail"]>>;
     messages: ApiNegotiationMessage[];
+    agreement: ApiAgreement | null;
+    escrowBundle: ApiAgreementEscrowBundle | null;
   }>();
 
   useEffect(() => {
     void loadDashboard(async () => {
       const client = new ProductApiClient();
-      const [detail, messages] = await Promise.all([
+      const [detail, messages, agreement] = await Promise.all([
         client.getCreatorOfferDetail(negotiationId),
         client.listNegotiationMessages(negotiationId),
+        client.getNegotiationAgreement(negotiationId).catch(() => null),
       ]);
-      return { detail, messages };
+      const escrowBundle = agreement
+        ? await client.getAgreementEscrow(agreement.agreementId).catch(() => null)
+        : null;
+      return { detail, messages, agreement, escrowBundle };
     }, setState);
   }, [negotiationId, setState]);
 
@@ -848,38 +867,42 @@ export function CreatorOfferDetailScreen({ negotiationId }: { negotiationId: str
         retry={() =>
           loadDashboard(async () => {
             const client = new ProductApiClient();
-            const [detail, messages] = await Promise.all([
+            const [detail, messages, agreement] = await Promise.all([
               client.getCreatorOfferDetail(negotiationId),
               client.listNegotiationMessages(negotiationId),
+              client.getNegotiationAgreement(negotiationId).catch(() => null),
             ]);
-            return { detail, messages };
+            const escrowBundle = agreement
+              ? await client.getAgreementEscrow(agreement.agreementId).catch(() => null)
+              : null;
+            return { detail, messages, agreement, escrowBundle };
           }, setState)
         }
       >
-        {({ detail, messages }) => {
+        {({ detail, messages, agreement, escrowBundle }) => {
           const events = normalizeNegotiationEvents(messages, fallbackForNegotiation(detail.negotiation));
+          const activities = mapNegotiationMessagesToActivities({
+            role: "creator",
+            negotiation: detail.negotiation,
+            messages,
+            agreement,
+            escrow: escrowBundle?.escrow ?? null,
+            settlements: escrowBundle?.settlements ?? [],
+          });
+          const nextAction = nextActionForDeal("creator", detail.negotiation, agreement, escrowBundle?.escrow ?? null);
           return (
-          <div className="grid gap-5">
-            <div className="grid gap-5 lg:grid-cols-[0.8fr_1fr]">
-            <Panel>
-              <SectionTitle eyebrow="Offer" title={String(detail.offer.title ?? "Offer")} />
-              <div className="mt-4 grid gap-3">
-                <InfoBox label="Negotiation ID" value={String(detail.offer.negotiationId)} />
-                <InfoBox label="Status" value={mapTaskStateToCreatorStatus(String(detail.offer.taskState ?? ""), String(detail.offer.status ?? detail.negotiation.status))} />
-                <InfoBox label="Round" value={String(detail.offer.currentRound ?? "-")} />
-                <InfoBox label="Latest offer" value={`${String(detail.offer.currentAmountUsdc ?? detail.negotiation.currentTerms?.compensation?.baseAmountUsdc ?? "-")} USDC`} />
-              </div>
-            </Panel>
-            <Panel>
-              <SectionTitle eyebrow="Sanitized terms" title="Agent 협상 상태" />
-              <pre className="mt-4 overflow-auto rounded border border-border-subtle bg-background p-4 text-xs">
-                {JSON.stringify(detail.negotiation.currentTerms ?? {}, null, 2)}
-              </pre>
-            </Panel>
+            <div className="grid gap-5">
+              <AgentConversationExperience
+                role="creator"
+                title={String(detail.offer.title ?? "Offer")}
+                activities={activities}
+                sidebar={agreementEscrowView(agreement, escrowBundle?.escrow ?? null, escrowBundle?.settlements ?? [], "creator")}
+                nextAction={nextAction}
+              />
+              <A2ANegotiationVisualizer events={events} />
             </div>
-            <A2ANegotiationVisualizer events={events} />
-          </div>
-        );}}
+          );
+        }}
       </DashboardStatus>
     </WorkspaceShell>
   );
@@ -889,15 +912,21 @@ export function BrandNegotiationDetailScreen({ negotiationId }: { negotiationId:
   const [state, setState] = useDashboardState<{
     negotiation: ApiNegotiation;
     messages: ApiNegotiationMessage[];
+    agreement: ApiAgreement | null;
+    escrowBundle: ApiAgreementEscrowBundle | null;
   }>();
 
   const load = useCallback(async () => {
     const client = new ProductApiClient();
-    const [negotiation, messages] = await Promise.all([
+    const [negotiation, messages, agreement] = await Promise.all([
       client.getNegotiation(negotiationId),
       client.listNegotiationMessages(negotiationId),
+      client.getNegotiationAgreement(negotiationId).catch(() => null),
     ]);
-    return { negotiation, messages };
+    const escrowBundle = agreement
+      ? await client.getAgreementEscrow(agreement.agreementId).catch(() => null)
+      : null;
+    return { negotiation, messages, agreement, escrowBundle };
   }, [negotiationId]);
 
   useEffect(() => {
@@ -907,26 +936,27 @@ export function BrandNegotiationDetailScreen({ negotiationId }: { negotiationId:
   return (
     <WorkspaceShell role="brand" active="negotiation" title="협상 상세" session={null}>
       <DashboardStatus state={state} retry={() => loadDashboard(load, setState)}>
-        {({ negotiation, messages }) => {
+        {({ negotiation, messages, agreement, escrowBundle }) => {
           const events = normalizeNegotiationEvents(messages, fallbackForNegotiation(negotiation));
+          const activities = mapNegotiationMessagesToActivities({
+            role: "brand",
+            negotiation,
+            messages,
+            agreement,
+            escrow: escrowBundle?.escrow ?? null,
+            settlements: escrowBundle?.settlements ?? [],
+          });
+          const nextAction = nextActionForDeal("brand", negotiation, agreement, escrowBundle?.escrow ?? null);
           return (
             <div className="grid gap-5">
-              <Panel>
-                <SectionTitle eyebrow="Negotiation" title={negotiation.negotiationId} />
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <InfoBox label="상태" value={negotiation.status} />
-                  <InfoBox label="라운드" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
-                  <InfoBox label="제안 금액" value={`${negotiation.currentTerms.compensation.baseAmountUsdc} USDC`} />
-                  <InfoBox label="A2A Task" value={negotiation.taskId} />
-                </div>
-              </Panel>
+              <AgentConversationExperience
+                role="brand"
+                title={negotiation.negotiationId}
+                activities={activities}
+                sidebar={agreementEscrowView(agreement, escrowBundle?.escrow ?? null, escrowBundle?.settlements ?? [], "brand")}
+                nextAction={nextAction}
+              />
               <A2ANegotiationVisualizer events={events} />
-              <Panel>
-                <SectionTitle eyebrow="Visible terms" title="최초 조건과 최신 조건" />
-                <pre className="mt-4 overflow-auto rounded border border-border-subtle bg-background p-4 text-xs">
-                  {JSON.stringify(negotiation.currentTerms, null, 2)}
-                </pre>
-              </Panel>
             </div>
           );
         }}
@@ -1133,7 +1163,7 @@ export function BrandOnboardingScreen() {
       <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="Brand profile" title="안정적인 브랜드 정보만 저장합니다" />
+            <SectionTitle eyebrow="Brand profile" title="최소 정보와 핵심 Agent 기준만 정합니다" />
             <Input label="Brand name" name="brandName" placeholder="Brand name" required />
             <Input label="Brand website URL" name="websiteUrl" placeholder="https://brand.example" required />
             <ChoiceGroup
@@ -1152,7 +1182,7 @@ export function BrandOnboardingScreen() {
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "Brand profile 저장"}
+              {status === "saving" ? "저장 중..." : "매니저 붙이기"}
             </button>
           </form>
         </Panel>
@@ -1413,7 +1443,8 @@ export function CreatorOnboardingScreen() {
       <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
         <Panel>
           <form action={submit}>
-            <SectionTitle eyebrow="Creator profile" title="프로필과 기본 Agent 기준을 저장합니다" />
+            <SectionTitle eyebrow="Creator profile" title="인스타그램만 연결하면 돼요" />
+            <p className="mb-4 text-sm text-muted">두 개만 정하면 끝이에요. 기준선과 안 하는 카테고리를 저장하면 Manager가 제안을 선별합니다.</p>
             <Input label="Creator display name" name="creatorName" placeholder="Creator name" required />
             <Input label="Instagram / TikTok / YouTube URL" name="snsUrl" placeholder="https://instagram.com/creator" required />
             <ChoiceGroup
@@ -1443,7 +1474,7 @@ export function CreatorOnboardingScreen() {
               disabled={status === "saving"}
               className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "Creator profile 저장"}
+              {status === "saving" ? "저장 중..." : "매니저 붙이기"}
             </button>
           </form>
         </Panel>
@@ -2431,6 +2462,81 @@ function creatorDashboardSettlement(agreements: Array<Record<string, unknown>>):
     },
     { paidAmount: 0, availableToClaimAmount: 0, pendingAmount: 0 },
   );
+}
+
+function brandDashboardActions(dashboard: BrandDashboard): NextActionView[] {
+  const actions: NextActionView[] = [];
+  const lockedAmount = Number(dashboard.summary.lockedEscrowBaseUnits);
+  if (dashboard.summary.negotiationsInProgress > 0) {
+    actions.push({
+      label: "에이전트 협상하기",
+      href: "/brand/promotions",
+      message: `${dashboard.summary.negotiationsInProgress}건의 Creator 협상이 진행 중입니다.`,
+    });
+  }
+  if (dashboard.summary.agreements > 0 && (!Number.isFinite(lockedAmount) || lockedAmount <= 0)) {
+    actions.push({
+      label: "Escrow 예치",
+      href: "/brand/promotions",
+      message: "Agreement가 생성된 Promotion의 escrow 예치 상태를 확인하세요.",
+    });
+  }
+  if (dashboard.activePromotions.length === 0) {
+    actions.push({
+      label: "새 Promotion 만들기",
+      href: "/brand/promotions/new",
+      message: "Promotion을 만들면 Brand Agent가 후보 탐색과 협상을 시작합니다.",
+    });
+  }
+  if (actions.length === 0) {
+    actions.push({
+      label: "Promotion 상세 보기",
+      href: "/brand/promotions",
+      message: "진행 중인 Promotion, Agreement, Escrow 상태를 검토하세요.",
+    });
+  }
+  return actions.slice(0, 3);
+}
+
+function creatorDashboardActions(dashboard: CreatorDashboard, context: CurrentUserContext): NextActionView[] {
+  const actions: NextActionView[] = [];
+  const settlement = creatorDashboardSettlement(dashboard.activeSponsorships);
+  if (dashboard.summary.newOffers > 0) {
+    actions.push({
+      label: "에이전트 협상하기",
+      href: "/creator/offers",
+      message: `${dashboard.summary.newOffers}건의 새 제안을 Creator Agent가 확인했습니다.`,
+    });
+  }
+  if (!context.account.walletAddress && dashboard.activeSponsorships.length > 0) {
+    actions.push({
+      label: "wallet 연결",
+      href: "/creator/settings",
+      message: "정산을 받으려면 지갑 주소가 필요합니다.",
+    });
+  }
+  if (settlement.availableToClaimAmount > 0) {
+    actions.push({
+      label: "정산받기",
+      href: "/creator/settlements",
+      message: `${settlement.availableToClaimAmount} USDC 정산 가능 상태입니다.`,
+    });
+  }
+  if (dashboard.activeSponsorships.length > 0 && settlement.availableToClaimAmount === 0) {
+    actions.push({
+      label: "게시물 링크 제출",
+      href: "/creator/agreements",
+      message: "마일스톤 검증이 필요한 딜의 게시물 링크를 확인하세요.",
+    });
+  }
+  if (actions.length === 0) {
+    actions.push({
+      label: "에이전트 설정",
+      href: "/creator/settings",
+      message: "Creator Agent 기준선과 제외 카테고리를 최신 상태로 유지하세요.",
+    });
+  }
+  return actions.slice(0, 3);
 }
 
 function stringList(value: unknown) {

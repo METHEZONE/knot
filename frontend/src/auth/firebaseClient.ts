@@ -1,10 +1,12 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
+  browserSessionPersistence,
   connectAuthEmulator,
   createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
+  setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -15,6 +17,7 @@ import {
 
 let emulatorConnected = false;
 let googleProvider: GoogleAuthProvider | null = null;
+let sessionPersistenceConfigured = false;
 
 export function firebaseConfigured() {
   return Boolean(
@@ -47,12 +50,16 @@ export async function currentIdToken() {
 }
 
 export async function signInWithEmail(email: string, password: string) {
-  const credential = await signInWithEmailAndPassword(firebaseAuth(), email, password);
+  const auth = firebaseAuth();
+  await ensureBrowserSessionPersistence(auth);
+  const credential = await signInWithEmailAndPassword(auth, email, password);
   return credential.user;
 }
 
 export async function createFirebaseAccount(email: string, password: string, displayName: string) {
-  const credential = await createUserWithEmailAndPassword(firebaseAuth(), email, password);
+  const auth = firebaseAuth();
+  await ensureBrowserSessionPersistence(auth);
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName.trim()) {
     await updateProfile(credential.user, { displayName: displayName.trim() });
   }
@@ -61,7 +68,9 @@ export async function createFirebaseAccount(email: string, password: string, dis
 
 export async function signInWithGoogle() {
   try {
-    const credential = await signInWithPopup(firebaseAuth(), googleAuthProvider());
+    const auth = firebaseAuth();
+    await ensureBrowserSessionPersistence(auth);
+    const credential = await signInWithPopup(auth, googleAuthProvider());
     return credential.user;
   } catch (error) {
     if (
@@ -75,6 +84,10 @@ export async function signInWithGoogle() {
     }
     throw error;
   }
+}
+
+export function firebasePersistenceScope() {
+  return "browser-session";
 }
 
 export async function signOutFirebase() {
@@ -100,6 +113,12 @@ function googleAuthProvider() {
   googleProvider ??= new GoogleAuthProvider();
   googleProvider.setCustomParameters({ prompt: "select_account" });
   return googleProvider;
+}
+
+async function ensureBrowserSessionPersistence(auth: Auth) {
+  if (sessionPersistenceConfigured) return;
+  await setPersistence(auth, browserSessionPersistence);
+  sessionPersistenceConfigured = true;
 }
 
 export function firebaseAuthErrorMessage(error: unknown) {
