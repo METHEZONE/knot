@@ -216,8 +216,13 @@ def test_lock_requires_web3_gateway_for_success() -> None:
     assert len(receipts) == 1
     assert receipts[0]["status"] == "FAILED"
     operations = repository.list_raw_documents("paymentOperations")
-    assert len(operations) == 1
-    assert operations[0]["status"] == "FAILED"
+    lock_operations = [
+        operation
+        for operation in operations
+        if operation["operationType"] == "ESCROW_LOCK"
+    ]
+    assert len(lock_operations) == 1
+    assert lock_operations[0]["status"] == "FAILED"
 
 
 def test_release_after_evidence_pass_settles_and_keeps_escrow_locked(monkeypatch) -> None:

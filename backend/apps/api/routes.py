@@ -1622,6 +1622,7 @@ def build_api_router(
                 document,
             )
         paid_verification = _run_paid_verification(
+            repository=repository,
             settings=settings,
             match_run_id=match_run_id,
             promotion_id=promotion_id,
@@ -4478,6 +4479,7 @@ def _candidate_explanation(
 
 def _run_paid_verification(
     *,
+    repository: KnotRepository,
     settings: Settings,
     match_run_id: str,
     promotion_id: str,
@@ -4485,43 +4487,106 @@ def _run_paid_verification(
 ) -> dict[str, object]:
     mode = settings.paysh_mode.lower()
     resource_id = settings.paysh_resource_id
-    correlation_id = f"paysh-{uuid4()}"
+    quote_amount = round(settings.paysh_quote_amount_usdc, 6)
+    operation_id = _paysh_operation_id(match_run_id, selected_creator_agent_id, resource_id)
+    receipt_id = f"receipt-{operation_id}"
+    existing_operation = repository.get_raw_document(FirestorePaths.payment_operation(operation_id))
+    if existing_operation is not None:
+        stored = existing_operation.get("paidVerification")
+        if isinstance(stored, dict):
+            return {**stored, "idempotencyReused": True}
     base: dict[str, object] = {
         "provider": "pay.sh",
         "protocol": "x402",
-        "purpose": "creator_verification",
+        "purpose": "CANDIDATE_VERIFICATION",
         "mode": mode,
         "resourceId": resource_id,
         "promotionId": promotion_id,
         "matchRunId": match_run_id,
         "selectedCreatorAgentId": selected_creator_agent_id,
-        "correlationId": correlation_id,
+        "operationId": operation_id,
+        "receiptId": None,
+        "quote": {
+            "amountUsdc": quote_amount,
+            "currency": "USDC",
+            "validated": False,
+        },
+        "spendCap": {
+            "perCallUsdc": settings.paysh_max_call_amount_usdc,
+            "perRunUsdc": settings.paysh_run_spend_cap_usdc,
+            "dailyUsdc": settings.paysh_daily_spend_cap_usdc,
+        },
+        "allowedResourcePrefixes": settings.paysh_allowed_resource_prefixes,
+        "failurePolicy": settings.paysh_failure_policy,
         "nonAuthoritative": True,
     }
     if mode in {"off", "disabled", "local", "none"}:
-        return {
-            **base,
-            "status": "DISABLED",
-            "detail": "pay.sh verification is disabled for this environment.",
-        }
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "DISABLED",
+                "detail": "pay.sh verification is disabled for this environment.",
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
     if selected_creator_agent_id is None:
-        return {
-            **base,
-            "status": "SKIPPED",
-            "detail": "No eligible creator candidate was selected for paid verification.",
-        }
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": "No eligible creator candidate was selected for paid verification.",
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
     if not resource_id or resource_id == "replace-me":
-        return {
-            **base,
-            "status": "SKIPPED",
-            "detail": "PAYSH_RESOURCE_ID is not configured.",
-        }
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": "PAYSH_RESOURCE_ID is not configured.",
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
     if mode not in {"sandbox", "live", "production"}:
-        return {
-            **base,
-            "status": "SKIPPED",
-            "detail": f"Unsupported PAYSH_MODE: {settings.paysh_mode}.",
-        }
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": f"Unsupported PAYSH_MODE: {settings.paysh_mode}.",
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
+    if not _paysh_resource_allowed(settings, resource_id):
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": "PAYSH_RESOURCE_ID is not allowlisted.",
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
+    cap_problem = _paysh_cap_problem(repository, settings, quote_amount)
+    if cap_problem:
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": cap_problem,
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
 
     try:
         result = fetch_paysh(
@@ -4530,21 +4595,185 @@ def _run_paid_verification(
             timeout_seconds=settings.paysh_timeout_seconds,
         )
     except PayCliNotFound as exc:
-        return {**base, "status": "SKIPPED", "detail": str(exc)}
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            result={
+                **base,
+                "status": "SKIPPED",
+                "detail": str(exc),
+                "continuation": "FREE_SIGNALS_ONLY",
+            },
+        )
     except TimeoutExpired:
-        return {**base, "status": "FAILED", "detail": "pay.sh request timed out."}
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            receipt_id=receipt_id,
+            result={
+                **base,
+                "status": "FAILED",
+                "receiptId": receipt_id,
+                "detail": "pay.sh request timed out.",
+                "continuation": _paysh_continuation(settings),
+            },
+        )
     except (OSError, RuntimeError) as exc:
-        return {**base, "status": "FAILED", "detail": _preview_text(str(exc), 240)}
+        return _record_paysh_operation(
+            repository,
+            operation_id=operation_id,
+            receipt_id=receipt_id,
+            result={
+                **base,
+                "status": "FAILED",
+                "receiptId": receipt_id,
+                "detail": _preview_text(str(exc), 240),
+                "continuation": _paysh_continuation(settings),
+            },
+        )
 
-    receipt_id = _extract_paysh_receipt_id(result.body) or correlation_id
-    return {
+    external_receipt_id = _extract_paysh_receipt_id(result.body)
+    status_value = "SETTLED" if result.ok else "FAILED"
+    paid_verification = {
         **base,
-        "status": "SETTLED" if result.ok else "FAILED",
+        "status": status_value,
         "receiptId": receipt_id,
+        "externalReceiptId": external_receipt_id,
         "returnCode": result.returncode,
         "responsePreview": _preview_text(result.body, 500),
         "errorPreview": _preview_text(result.stderr, 300) if result.stderr else None,
+        "quote": {
+            "amountUsdc": quote_amount,
+            "currency": "USDC",
+            "validated": True,
+        },
+        "resultDigest": sha256_prefixed(result.body),
+        "scoreImpact": {
+            "reliabilityFitBefore": None,
+            "reliabilityFitAfter": None,
+            "selectionChanged": False,
+        },
+        "continuation": "PAID_SIGNAL_RECORDED" if result.ok else _paysh_continuation(settings),
     }
+    return _record_paysh_operation(
+        repository,
+        operation_id=operation_id,
+        receipt_id=receipt_id,
+        result=paid_verification,
+    )
+
+
+def _paysh_operation_id(
+    match_run_id: str,
+    selected_creator_agent_id: str | None,
+    resource_id: str,
+) -> str:
+    operation_key = canonical_json(
+        {
+            "matchRunId": match_run_id,
+            "selectedCreatorAgentId": selected_creator_agent_id,
+            "resourceId": resource_id,
+            "purpose": "CANDIDATE_VERIFICATION",
+        }
+    )
+    return f"paysh-{uuid5(NAMESPACE_URL, operation_key)}"
+
+
+def _paysh_resource_allowed(settings: Settings, resource_id: str) -> bool:
+    return any(
+        resource_id.startswith(prefix)
+        for prefix in settings.paysh_allowed_resource_prefixes
+    )
+
+
+def _paysh_cap_problem(
+    repository: KnotRepository,
+    settings: Settings,
+    quote_amount: float,
+) -> str | None:
+    if quote_amount <= 0:
+        return "pay.sh quote amount must be positive."
+    if quote_amount > settings.paysh_max_call_amount_usdc:
+        return "pay.sh quote exceeds per-call spend cap."
+    if quote_amount > settings.paysh_run_spend_cap_usdc:
+        return "pay.sh quote exceeds per-run spend cap."
+    today_spend = _paysh_settled_spend_today(repository)
+    if today_spend + quote_amount > settings.paysh_daily_spend_cap_usdc:
+        return "pay.sh quote exceeds daily spend cap."
+    return None
+
+
+def _paysh_settled_spend_today(repository: KnotRepository) -> float:
+    today_prefix = _now()[:10]
+    total = 0.0
+    for operation in repository.list_raw_documents(COLLECTIONS.payment_operations):
+        if operation.get("operationType") != "PAYSH_CANDIDATE_VERIFICATION":
+            continue
+        if str(operation.get("createdAt", ""))[:10] != today_prefix:
+            continue
+        if operation.get("status") != "SETTLED":
+            continue
+        amount = operation.get("amountUsdc")
+        if isinstance(amount, (int, float)):
+            total += float(amount)
+    return total
+
+
+def _paysh_continuation(settings: Settings) -> str:
+    if settings.paysh_failure_policy.lower() == "stop":
+        return "STOP_MATCH_RUN"
+    return "FREE_SIGNALS_ONLY"
+
+
+def _record_paysh_operation(
+    repository: KnotRepository,
+    *,
+    operation_id: str,
+    result: dict[str, object],
+    receipt_id: str | None = None,
+) -> dict[str, object]:
+    now = _now()
+    quote = result.get("quote")
+    amount_usdc = quote.get("amountUsdc") if isinstance(quote, dict) else None
+    operation = {
+        "operationId": operation_id,
+        "operationType": "PAYSH_CANDIDATE_VERIFICATION",
+        "paymentType": "PAYSH_X402",
+        "provider": "pay.sh",
+        "protocol": "x402",
+        "matchRunId": result["matchRunId"],
+        "promotionId": result["promotionId"],
+        "selectedCreatorAgentId": result["selectedCreatorAgentId"],
+        "resourceId": result["resourceId"],
+        "receiptId": receipt_id,
+        "status": result["status"],
+        "amountUsdc": amount_usdc,
+        "resultDigest": result.get("resultDigest"),
+        "continuation": result.get("continuation"),
+        "paidVerification": result,
+        "createdAt": now,
+    }
+    repository.save_raw_document(FirestorePaths.payment_operation(operation_id), operation)
+    if receipt_id is not None:
+        receipt = {
+            "receiptId": receipt_id,
+            "paymentOperationId": operation_id,
+            "paymentType": "PAYSH_X402",
+            "provider": "pay.sh",
+            "protocol": "x402",
+            "network": f"pay.sh:{result['mode']}",
+            "signature": None,
+            "explorerUrl": None,
+            "externalReceiptId": result.get("externalReceiptId"),
+            "status": "CONFIRMED" if result["status"] == "SETTLED" else "FAILED",
+            "amountUsdc": amount_usdc,
+            "resourceId": result["resourceId"],
+            "resultDigest": result.get("resultDigest"),
+            "detail": result.get("detail"),
+            "createdAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.transaction_receipt(receipt_id), receipt)
+    return result
 
 
 def _extract_paysh_receipt_id(body: str) -> str | None:

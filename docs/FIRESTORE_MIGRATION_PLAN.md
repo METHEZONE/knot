@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 7 mapping. No live migration or backfill was executed.
+> Phase 8 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -32,8 +32,8 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `evidence` | Evidence submissions |
 | `escrows` | Escrow aggregate records |
 | `settlements` | Settlement records |
-| `paymentOperations` | Payment operation records |
-| `transactionReceipts` | Web3 transaction receipts |
+| `paymentOperations` | Escrow/release operation records and pay.sh/x402 candidate-verification operation records |
+| `transactionReceipts` | Web3 transaction receipts plus settled/failed pay.sh/x402 receipt records |
 | `auditEvents` | Audit events |
 | `idempotencyRecords` | Idempotency claims |
 | `onboardingSessions` | Authenticated card onboarding resume/draft state added in Phase 2 |
@@ -79,7 +79,7 @@ Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explic
 | `agreements` | `agreements` | Preserve | Add final one-milestone hash schema later |
 | `agreements/{id}/milestones` 30/70 legacy | one `POST_VERIFIED` 100% milestone | Migrate only in Agreement phase | Preserve old milestones for existing records |
 | `evidence` | `evidence` + `verificationResults` | Add verification result collection later | Existing evidence status remains readable |
-| `escrows`, `settlements`, `transactionReceipts` | same plus operation subrecords where needed | Preserve | Do not alter confirmed receipts |
+| `escrows`, `settlements`, `transactionReceipts` | same plus operation subrecords where needed | Preserve | Do not alter confirmed receipts; pay.sh receipts are labeled `paymentType: PAYSH_X402` and do not contain fabricated signatures |
 
 ## Backfill Strategy
 
@@ -113,6 +113,13 @@ Phase 7 adds no schema migration and executes no backfill. The frontend reads da
 - `creatorDiscoveryProfiles`
 
 The browser still does not write business data directly to Firestore. Creator Agent ON/OFF and Brand `탐색·협상 시작` actions go through owner-scoped Product API routes.
+
+Phase 8 adds no schema migration and executes no backfill. New writes are additive:
+
+- `paymentOperations/{operationId}` for every pay.sh verification decision, including disabled/skipped outcomes.
+- `transactionReceipts/{receiptId}` only for settled or failed pay.sh attempts, labeled with `paymentType: PAYSH_X402` and `network: pay.sh:{mode}`.
+
+Existing Web3 receipt consumers must check `paymentType` or `operationType` before treating a receipt as an escrow transaction.
 
 ## Index Requirements
 

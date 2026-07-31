@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 7 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 8 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -55,8 +55,8 @@
 | `GET /api/v1/promotions` | Legacy list all | Promotion list | Preserve | Medium: not owner-scoped |
 | `GET /api/v1/promotions/{promotion_id}` | Legacy get | Promotion get | Preserve | Low |
 | `POST /api/v1/promotions/{promotion_id}:activate` | DRAFT to ACTIVE | Promotion ready/active transition | Preserve | Low |
-| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous bounded discovery/ranking with idempotency and canonical events | Start Match Run | Updated in Phase 5 | Medium: worker dispatch still pending |
-| `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior with idempotency and canonical events | Start Match Run | Updated in Phase 5 | Medium: returns current synchronous result |
+| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous bounded discovery/ranking with canonical events and optional capped pay.sh verification | Start Match Run | Updated in Phase 8 | Medium: worker dispatch still pending |
+| `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior with idempotency, canonical events, and optional capped pay.sh verification | Start Match Run | Updated in Phase 8 | Medium: returns current synchronous result |
 | `GET /api/v1/match-runs/{match_run_id}` | Get raw Match Run | MatchRun detail | Preserve | Low |
 | `GET /api/v1/match-runs/{match_run_id}/timeline` | Promotion event projection by run | MatchRun timeline | Added in Phase 1 | Medium: event model not final sequence yet |
 | `GET /api/v1/match-runs/{match_run_id}/events` | Canonical Match Run event stream used by live/replay dashboard UI | MatchRun events | Consumed by Phase 7 frontend | Low |
@@ -117,6 +117,7 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 | Match Run `COMPLETED` after ranking | `QUEUED` through durable state machine | Preserve until Phase 5 |
 | Candidate `overallScore`/`componentScores` | final score components | Preserve; ranking refactor later |
 | Agreement milestones 30/70 in tests/legacy | one 100% `POST_VERIFIED` milestone | Migrate in Agreement/settlement phase |
+| pay.sh receipt fields | `paymentOperations` + `transactionReceipts` with `paymentType: PAYSH_X402` | Phase 8 records settled/failed attempts without fake blockchain signatures |
 
 ## Contract Tests Added in Phase 1
 
@@ -152,3 +153,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 
 - Frontend API data source projects canonical Match Run event replay and sanitized Technical Proof from Product API routes.
 - Dashboard controls stay on Product API resource routes; browser code does not write business data directly to Firestore.
+
+## Contract Tests Added in Phase 8
+
+- pay.sh verification records skipped, settled, failed, and cap/allowlist-blocked outcomes explicitly.
+- Settled pay.sh calls persist `paymentOperations` and `transactionReceipts` with `paymentType: PAYSH_X402`.
+- Duplicate Match Run start with the same idempotency key does not invoke pay.sh twice.

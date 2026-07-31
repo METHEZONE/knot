@@ -49,6 +49,12 @@ class Settings(BaseModel):
     paysh_mode: str = "sandbox"
     paysh_resource_id: str = "replace-me"
     paysh_timeout_seconds: int = 90
+    paysh_quote_amount_usdc: float = 0.02
+    paysh_max_call_amount_usdc: float = 0.02
+    paysh_run_spend_cap_usdc: float = 0.02
+    paysh_daily_spend_cap_usdc: float = 1.0
+    paysh_allowed_resource_prefixes: list[str] = ["https://debugger.pay.sh/mpp/quote/"]
+    paysh_failure_policy: str = "continue"
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
@@ -86,6 +92,14 @@ def get_settings(service_name: str | None = None) -> Settings:
         paysh_mode=os.getenv("PAYSH_MODE", "sandbox"),
         paysh_resource_id=os.getenv("PAYSH_RESOURCE_ID", "replace-me"),
         paysh_timeout_seconds=int(os.getenv("PAYSH_TIMEOUT_SECONDS", "90")),
+        paysh_quote_amount_usdc=float(os.getenv("PAYSH_QUOTE_AMOUNT_USDC", "0.02")),
+        paysh_max_call_amount_usdc=float(os.getenv("PAYSH_MAX_CALL_AMOUNT_USDC", "0.02")),
+        paysh_run_spend_cap_usdc=float(os.getenv("PAYSH_RUN_SPEND_CAP_USDC", "0.02")),
+        paysh_daily_spend_cap_usdc=float(os.getenv("PAYSH_DAILY_SPEND_CAP_USDC", "1.0")),
+        paysh_allowed_resource_prefixes=_csv(
+            os.getenv("PAYSH_ALLOWED_RESOURCE_PREFIXES", "https://debugger.pay.sh/mpp/quote/")
+        ),
+        paysh_failure_policy=os.getenv("PAYSH_FAILURE_POLICY", "continue"),
         escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),

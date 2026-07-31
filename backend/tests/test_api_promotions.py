@@ -222,7 +222,9 @@ def test_match_run_cancel_handles_non_terminal_and_terminal_runs() -> None:
 
 
 def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -> None:
-    client = client_with_seed(Settings(paysh_mode="sandbox", paysh_resource_id="replace-me"))
+    client, repository = client_and_repository_with_seed(
+        Settings(paysh_mode="sandbox", paysh_resource_id="replace-me")
+    )
 
     run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
     assert run_response.status_code == 201
@@ -235,6 +237,9 @@ def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
     assert api_payment["data"]["status"] == "SKIPPED"
+    operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
+    assert operations[0]["operationType"] == "PAYSH_CANDIDATE_VERIFICATION"
+    assert operations[0]["receiptId"] is None
 
 
 def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
@@ -250,7 +255,7 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
-    client = client_with_seed(
+    client, repository = client_and_repository_with_seed(
         Settings(
             paysh_mode="sandbox",
             paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
@@ -262,12 +267,105 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["paidVerification"]["status"] == "SETTLED"
-    assert match_run["paidVerification"]["receiptId"] == "receipt-pay-001"
+    assert match_run["paidVerification"]["externalReceiptId"] == "receipt-pay-001"
+    assert match_run["paidVerification"]["receiptId"].startswith("receipt-paysh-")
+    assert match_run["paidVerification"]["quote"] == {
+        "amountUsdc": 0.02,
+        "currency": "USDC",
+        "validated": True,
+    }
+    assert match_run["paidVerification"]["scoreImpact"]["selectionChanged"] is False
 
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
-    assert api_payment["data"]["receiptId"] == "receipt-pay-001"
+    assert api_payment["data"]["externalReceiptId"] == "receipt-pay-001"
     assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-001"
+    operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
+    receipts = repository.list_raw_documents(COLLECTIONS.transaction_receipts)
+    assert len(operations) == 1
+    assert len(receipts) == 1
+    assert operations[0]["paymentType"] == "PAYSH_X402"
+    assert operations[0]["paidVerification"]["resultDigest"].startswith("sha256:")
+    assert receipts[0]["paymentType"] == "PAYSH_X402"
+    assert receipts[0]["network"] == "pay.sh:sandbox"
+    assert receipts[0]["status"] == "CONFIRMED"
+
+
+def test_run_match_blocks_paysh_when_quote_exceeds_cap(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        raise AssertionError("pay.sh must not be called when quote exceeds cap")
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+            paysh_quote_amount_usdc=0.03,
+            paysh_max_call_amount_usdc=0.02,
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    paid = run_response.json()["data"]["matchRun"]["paidVerification"]
+    assert paid["status"] == "SKIPPED"
+    assert paid["detail"] == "pay.sh quote exceeds per-call spend cap."
+    assert paid["continuation"] == "FREE_SIGNALS_ONLY"
+    assert repository.list_raw_documents(COLLECTIONS.transaction_receipts) == []
+
+
+def test_run_match_blocks_paysh_when_resource_is_not_allowlisted(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        raise AssertionError("pay.sh must not be called for non-allowlisted resources")
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client = client_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://not-pay.example/mpp/quote/AAPL",
+            paysh_allowed_resource_prefixes=["https://debugger.pay.sh/mpp/quote/"],
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    paid = run_response.json()["data"]["matchRun"]["paidVerification"]
+    assert paid["status"] == "SKIPPED"
+    assert paid["detail"] == "PAYSH_RESOURCE_ID is not allowlisted."
+
+
+def test_run_match_idempotency_does_not_double_pay(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        calls.append(resource_id)
+        return PayResult(
+            ok=True,
+            returncode=0,
+            body='{"receiptId": "receipt-pay-idempotent"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+        )
+    )
+    headers = {"Idempotency-Key": "frontend-match-paid-once"}
+
+    first = client.post("/api/v1/promotions/promotion-001/matches:run", headers=headers)
+    second = client.post("/api/v1/promotions/promotion-001/matches:run", headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert calls == ["https://debugger.pay.sh/mpp/quote/AAPL"]
+    first_match_run = first.json()["data"]["matchRun"]
+    second_match_run = second.json()["data"]["matchRun"]
+    assert second_match_run["matchRunId"] == first_match_run["matchRunId"]
+    assert len(repository.list_raw_documents(COLLECTIONS.payment_operations)) == 1
+    assert len(repository.list_raw_documents(COLLECTIONS.transaction_receipts)) == 1
 
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
