@@ -2,6 +2,7 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from libs.a2a.registry import creator_agent_registry_entry
 from libs.domain.discovery import build_creator_discovery_projection
 from libs.domain.models import AgentPolicy, CreatorProfile, Promotion
 from libs.repositories.firestore_paths import FirestorePaths
@@ -64,6 +65,13 @@ def seed_demo_repository(
             FirestorePaths.creator_discovery_profile(creator.creator_id),
             build_creator_discovery_projection(
                 creator,
+                discovery_agent,
+                updated_at=_require_str(discovery_agent, "updatedAt"),
+            ),
+        )
+        repository.save_raw_document(
+            FirestorePaths.agent_registry_entry(creator.creator_agent_id),
+            creator_agent_registry_entry(
                 discovery_agent,
                 updated_at=_require_str(discovery_agent, "updatedAt"),
             ),

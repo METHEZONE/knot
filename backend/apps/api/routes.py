@@ -38,6 +38,7 @@ from libs.a2a.models import (
     NegotiationMessageType,
     NegotiationPayload,
 )
+from libs.a2a.registry import creator_agent_registry_entry
 from libs.a2a.store import InMemoryA2ATaskStore
 from libs.agents.brand import build_initial_terms
 from libs.agents.discovery import (
@@ -898,6 +899,10 @@ def build_api_router(
             FirestorePaths.creator_discovery_profile(creator.creator_id),
             discovery,
         )
+        repository.save_raw_document(
+            FirestorePaths.agent_registry_entry(_require_document_str(updated_agent, "agentId")),
+            creator_agent_registry_entry(updated_agent, updated_at=now),
+        )
         _append_audit(
             repository,
             action="CREATOR_AGENT_PUBLISHED",
@@ -937,6 +942,10 @@ def build_api_router(
         repository.save_raw_document(
             FirestorePaths.creator_discovery_profile(creator.creator_id),
             discovery,
+        )
+        repository.save_raw_document(
+            FirestorePaths.agent_registry_entry(_require_document_str(updated_agent, "agentId")),
+            creator_agent_registry_entry(updated_agent, updated_at=now),
         )
         _append_audit(
             repository,
@@ -1776,6 +1785,8 @@ def build_api_router(
         agent_policy = repository.get_agent_policy(creator_agent_id)
         if agent_policy is None:
             raise _not_found("agentPolicy", creator_agent_id)
+        registry_entry = _require_creator_agent_registry_entry(repository, creator_agent_id)
+        creator_a2a_base_url = _creator_a2a_base_url(settings, registry_entry)
 
         terms = build_initial_terms(promotion, creator)
         brand_decision = validate_brand_terms(promotion, creator, terms, current_round=1)
@@ -1817,10 +1828,12 @@ def build_api_router(
             currentMonthDeliverables=creator.active_deliverables_this_month,
             maxRounds=promotion.autonomy.max_negotiation_rounds,
         )
-        agent_card = _discover_creator_agent_card(settings=settings)
+        agent_card = _discover_creator_agent_card(settings=settings, base_url=creator_a2a_base_url)
+        _validate_creator_agent_card(agent_card, creator_agent_id)
         try:
             initial_task = _send_creator_a2a_task(
                 settings=settings,
+                base_url=creator_a2a_base_url,
                 creator_agent_id=creator_agent_id,
                 message=offer_message,
                 context=creator_context,
@@ -1940,6 +1953,7 @@ def build_api_router(
                 try:
                     a2a_task = _send_creator_a2a_task(
                         settings=settings,
+                        base_url=creator_a2a_base_url,
                         creator_agent_id=creator_agent_id,
                         message=accept_message,
                         context=creator_context,
@@ -2052,6 +2066,14 @@ def build_api_router(
                 "createdAt": now,
                 "updatedAt": now,
             },
+        )
+        _write_a2a_task_events(
+            repository,
+            task_id=task_id,
+            negotiation_id=negotiation_id,
+            persisted_messages=persisted_messages,
+            final_state=str(a2a_task.status.state.value),
+            created_at=now,
         )
         for message_document in persisted_messages:
             repository.save_raw_document(
@@ -4020,13 +4042,14 @@ def _require_document_str(document: dict[str, object], field_name: str) -> str:
 def _send_creator_a2a_task(
     *,
     settings: Settings,
+    base_url: str,
     creator_agent_id: str,
     message: A2AMessage,
     context: CreatorNegotiationContext,
 ) -> A2ATask:
     if settings.creator_a2a_mode == "http":
         return CreatorA2AClient(
-            settings.creator_agent_base_url,
+            base_url,
             timeout_seconds=settings.creator_a2a_timeout_seconds,
             service_token=settings.a2a_service_token,
         ).send_message(
@@ -4045,12 +4068,16 @@ def _send_creator_a2a_task(
     return store.send_message(creator_agent_id, message)
 
 
-def _discover_creator_agent_card(*, settings: Settings) -> dict[str, object] | None:
+def _discover_creator_agent_card(
+    *,
+    settings: Settings,
+    base_url: str,
+) -> dict[str, object] | None:
     if settings.creator_a2a_mode != "http":
         return None
     try:
         return CreatorA2AClient(
-            settings.creator_agent_base_url,
+            base_url,
             timeout_seconds=settings.creator_a2a_timeout_seconds,
             service_token=settings.a2a_service_token,
         ).agent_card()
@@ -4060,6 +4087,76 @@ def _discover_creator_agent_card(*, settings: Settings) -> dict[str, object] | N
             "A2A_CREATOR_AGENT_UNAVAILABLE",
             f"Creator A2A AgentCard discovery failed: {exc}",
         ) from exc
+
+
+def _require_creator_agent_registry_entry(
+    repository: KnotRepository,
+    creator_agent_id: str,
+) -> dict[str, object]:
+    registry_entry = repository.get_raw_document(
+        FirestorePaths.agent_registry_entry(creator_agent_id)
+    )
+    if registry_entry is None:
+        raise _not_found("agentRegistry", creator_agent_id)
+    if registry_entry.get("tenant") != creator_agent_id:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            "Creator Agent registry tenant does not match the selected Agent.",
+        )
+    if registry_entry.get("publicationStatus") != "PUBLISHED":
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            "Selected Creator Agent is not published.",
+        )
+    return registry_entry
+
+
+def _creator_a2a_base_url(settings: Settings, registry_entry: dict[str, object]) -> str:
+    base_url = registry_entry.get("baseUrl")
+    return base_url if isinstance(base_url, str) and base_url else settings.creator_agent_base_url
+
+
+def _validate_creator_agent_card(
+    agent_card: dict[str, object] | None,
+    creator_agent_id: str,
+) -> None:
+    if agent_card is None:
+        return
+    skills = agent_card.get("skills")
+    if isinstance(skills, list):
+        skill_ids = {
+            skill.get("id")
+            for skill in skills
+            if isinstance(skill, dict) and isinstance(skill.get("id"), str)
+        }
+        if not {"promotion-negotiation", "sponsorship-negotiation"}.intersection(skill_ids):
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "A2A_AGENT_CARD_INVALID",
+                "Creator AgentCard does not advertise sponsorship negotiation.",
+            )
+    interfaces = agent_card.get("supportedInterfaces")
+    if not isinstance(interfaces, list) or not interfaces:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "A2A_AGENT_CARD_INVALID",
+            "Creator AgentCard does not advertise a supported interface.",
+        )
+    for item in interfaces:
+        if not isinstance(item, dict):
+            continue
+        tenant = item.get("tenant")
+        if tenant not in {None, creator_agent_id}:
+            continue
+        if item.get("protocolBinding") == "HTTP+JSON" and item.get("protocolVersion") == "1.0":
+            return
+    raise _problem(
+        status.HTTP_409_CONFLICT,
+        "A2A_AGENT_CARD_INVALID",
+        "Creator AgentCard interface does not match the selected Agent.",
+    )
 
 
 def _decision_type_from_document(document: dict[str, object]) -> NegotiationMessageType:
@@ -4153,6 +4250,49 @@ def _a2a_artifact_document(
         "negotiationId": negotiation_id,
         "createdAt": created_at,
     }
+
+
+def _write_a2a_task_events(
+    repository: KnotRepository,
+    *,
+    task_id: str,
+    negotiation_id: str,
+    persisted_messages: Sequence[dict[str, object]],
+    final_state: str,
+    created_at: str,
+) -> None:
+    for message_document in persisted_messages:
+        sequence = _event_sequence(message_document)
+        role = message_document.get("role")
+        event_type = "A2A_USER_MESSAGE" if role == "ROLE_USER" else "A2A_AGENT_MESSAGE"
+        event_id = f"event-{sequence:04d}-{uuid4()}"
+        repository.save_raw_document(
+            FirestorePaths.a2a_task_event(task_id, event_id),
+            {
+                "eventId": event_id,
+                "taskId": task_id,
+                "negotiationId": negotiation_id,
+                "sequence": sequence,
+                "type": event_type,
+                "messageId": message_document.get("messageId"),
+                "role": role,
+                "createdAt": created_at,
+            },
+        )
+    terminal_sequence = len(persisted_messages) + 1
+    terminal_event_id = f"event-{terminal_sequence:04d}-{uuid4()}"
+    repository.save_raw_document(
+        FirestorePaths.a2a_task_event(task_id, terminal_event_id),
+        {
+            "eventId": terminal_event_id,
+            "taskId": task_id,
+            "negotiationId": negotiation_id,
+            "sequence": terminal_sequence,
+            "type": "A2A_TASK_STATE",
+            "state": final_state,
+            "createdAt": created_at,
+        },
+    )
 
 
 def _write_agreement_milestones(

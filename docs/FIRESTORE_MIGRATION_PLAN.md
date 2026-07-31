@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 5 mapping. No live migration or backfill was executed.
+> Phase 6 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -15,6 +15,7 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `analysisJobs` | Product/Creator URL analysis job records added in Phase 2 |
 | `agents` | Brand/Creator agent identity |
 | `agentPolicies` | Creator policy, some Brand/Creator policy-shaped data |
+| `agentRegistry` | Public Creator Agent A2A routing metadata written in Phase 6 |
 | `promotions` | Promotion source documents |
 | `promotions/{id}/events` | Promotion event timeline |
 | `matchRuns` | Match Run documents |
@@ -67,7 +68,7 @@ Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explic
 | Missing analysis job state | `analysisJobs/{analysisId}` | Added in Phase 2 | Stores digest and structured draft, not raw fetched content |
 | Missing Brand authority data | `agentAuthorities/{brandAgentId}` | Add in onboarding/escrow phase | Existing wallet fields remain readable |
 | Missing Creator authority data | `agentAuthorities/{creatorAgentId}` | Add in onboarding/settlement phase | Existing `walletAddress` remains readable |
-| Missing AgentCard registry projection | `agentRegistry/{agentId}` | Add in publication/A2A phase | Existing `agents.a2aEndpoint` remains readable |
+| Missing AgentCard registry projection | `agentRegistry/{agentId}` | Phase 6 writes public Creator Agent routing metadata | Existing `agents.a2aEndpoint` remains readable |
 | `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Phase 4 Product API matching now queries discovery projections first | Private Creator profile reads are bounded to Top 20 for eligibility/detail |
 | `matchRuns` flat run state | `matchRuns` final state machine fields | Add fields; do not rewrite old runs | Legacy completed runs remain readable |
 | `matchRuns/{id}/candidates` | same | Add final score component fields/version snapshots | Existing fields remain readable |

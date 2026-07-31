@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 5 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 6 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -23,7 +23,7 @@
 | Async worker | IN_PROGRESS | `backend/apps/api/routes.py` | Phase 5 tests | Canonical durable events/idempotency added; external worker pending |
 | Gemini analysis | IN_PROGRESS | `backend/libs/ai/gemini.py` | Audit complete | Final URL analysis flow pending |
 | Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
-| A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a` | Audit complete | HTTP boundary exists; durable Creator task store pending |
+| A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a`, `backend/libs/a2a/registry.py` | Phase 6 focused tests | Registry lookup, AgentCard validation, service auth, dedupe, terminal guard, task event persistence covered |
 | Agreement | IN_PROGRESS | `backend/apps/api/routes.py`, `backend/libs/domain/hashing.py` | Audit complete | Final one-milestone shape pending |
 | Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Audit complete | Devnet path exists; no Phase 1 on-chain action |
 | Cloud Run | IN_PROGRESS | `infra/cloudbuild/*.yaml` | Audit complete | No deployment in Phase 1 |
@@ -39,7 +39,7 @@
 | Deterministic ranking | N/A | IMPLEMENTED | IN_PROGRESS | N/A | NOT_STARTED | Phase 4 public score components and deterministic tie-breakers added |
 | Match Run orchestration | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 5 idempotency, cancel, state history, and canonical events added; worker pending |
 | Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
-| A2A counteroffer | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing tests/routes audited |
+| A2A counteroffer | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 6 registry-validated HTTP A2A counter/accept path tested |
 | Agreement Artifact/hash | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Agreement/hash code audited |
 | pay.sh verification | N/A | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing sandbox route/tests audited |
 | Devnet escrow | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Gateway/devnet config audited; no tx run |
@@ -123,7 +123,16 @@
 - Added `POST /api/v1/match-runs/{match_run_id}:cancel` with terminal-state guard.
 - Added `matchRuns` active lookup index source configuration.
 
-## 8. Query-Bound Proof
+## 8. Phase 6 Changes
+
+- Added `backend/libs/a2a/registry.py` for public Creator Agent routing projections.
+- Seed and Creator publish/pause write `agentRegistry/{agentId}` entries.
+- Product API negotiation start requires registry lookup before A2A send.
+- HTTP A2A AgentCard is validated for selected tenant, protocol binding, protocol version, and advertised negotiation skill when present.
+- Product API persists ordered `a2aTasks/{taskId}/events` alongside task/message/artifact documents.
+- Focused tests verify registry privacy and task event persistence.
+
+## 9. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -135,7 +144,7 @@ Maximum paid tool calls: current pay.sh operation is one selected creator path, 
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 9. Test Evidence
+## 10. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -186,8 +195,16 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 5 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
 | Phase 5 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 | Phase 5 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
+| Phase 6 backend focused tests | VERIFIED: 38 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_dashboards.py tests/test_api_a2a_http_integration.py tests/test_a2a_negotiation.py` from `backend` |
+| Phase 6 backend full pytest | VERIFIED: 108 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 6 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 6 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 6 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 6 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 6 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 6 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 
-## 10. Latest Verified E2E
+## 11. Latest Verified E2E
 
 ```text
 Commit:
@@ -208,9 +225,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E or live transaction was executed through Phase 5.
+No E2E or live transaction was executed through Phase 6.
 
-## 11. Known Blockers
+## 12. Known Blockers
 
 ```text
 BLOCKER: External Match Run worker dispatch is not implemented.
@@ -222,6 +239,15 @@ WORKAROUND FOR DEMO (truthfully labeled): Existing synchronous path can be used 
 ```
 
 ```text
+BLOCKER: Reservation and sequential fallback are not implemented.
+IMPACT: Candidate conflict/reject/expire does not yet advance through three ranked candidates automatically.
+EVIDENCE: Phase 6 hardens selected-candidate A2A only; no reservation lease collection or retry loop exists.
+OWNER: Backend/Agent phase.
+NEXT ACTION: Add reservation/concurrency or document MVP limitation before final E2E.
+WORKAROUND FOR DEMO (truthfully labeled): Current path negotiates one selected Creator Agent.
+```
+
+```text
 BLOCKER: Firestore rules and vector discovery index are not verified.
 IMPACT: Final bounded/vector discovery and security rules cannot be verified yet.
 EVIDENCE: Phase 4 uses composite discovery indexes in source, but no firestore.rules or deployed vector index was verified.
@@ -230,7 +256,7 @@ NEXT ACTION: Add rules and managed vector index verification in an infra phase.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 12. Update Rule
+## 13. Update Rule
 
 For each phase:
 

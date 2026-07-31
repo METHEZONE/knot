@@ -156,8 +156,6 @@ def test_creator_agent_publish_pause_resume_maintains_discovery_projection_priva
 
     initial = client.get("/api/v1/creator/agent", headers=headers)
     published = client.post("/api/v1/creator/agent:publish", headers=headers)
-    paused = client.post("/api/v1/creator/agent:pause", headers=headers)
-    resumed = client.post("/api/v1/creator/agent:resume", headers=headers)
 
     assert initial.status_code == 200
     assert initial.json()["data"]["agent"]["publicationStatus"] == "DRAFT"
@@ -178,10 +176,25 @@ def test_creator_agent_publish_pause_resume_maintains_discovery_projection_priva
     )
     assert stored_projection is not None
     assert stored_projection["creatorAgentId"] == creator["agentId"]
+    registry_entry = repository.get_raw_document(
+        FirestorePaths.agent_registry_entry(creator["agentId"])
+    )
+    assert registry_entry is not None
+    assert registry_entry["tenant"] == creator["agentId"]
+    assert registry_entry["publicationStatus"] == "PUBLISHED"
+    assert "minBaseUsdc" not in registry_entry
+    assert "blockedIndustries" not in registry_entry
 
+    paused = client.post("/api/v1/creator/agent:pause", headers=headers)
     assert paused.json()["data"]["agent"]["publicationStatus"] == "PAUSED"
     assert paused.json()["data"]["agent"]["acceptingOffers"] is False
     assert paused.json()["data"]["discoveryProfile"]["acceptingOffers"] is False
+    paused_registry = repository.get_raw_document(
+        FirestorePaths.agent_registry_entry(creator["agentId"])
+    )
+    assert paused_registry is not None
+    assert paused_registry["publicationStatus"] == "PAUSED"
+    resumed = client.post("/api/v1/creator/agent:resume", headers=headers)
     assert resumed.json()["data"]["agent"]["publicationStatus"] == "PUBLISHED"
 
 

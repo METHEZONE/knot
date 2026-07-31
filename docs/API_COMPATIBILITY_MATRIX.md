@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 5 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 6 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -63,7 +63,7 @@
 | `POST /api/v1/match-runs/{match_run_id}:cancel` | Cancel non-terminal Match Run | Match Run cancel | Added in Phase 5 | Low |
 | `GET /api/v1/match-runs/{match_run_id}/candidates` | Candidate snapshots with public score components and safe facts | Candidate snapshots | Updated in Phase 4 | Medium: durable event sequence pending |
 | `POST /api/v1/match-runs/{match_run_id}/candidates/{creator_agent_id}:select` | Manual candidate selection | Not final user behavior | Preserve only for compatibility/dev | High |
-| `POST /api/v1/match-runs/{match_run_id}:start-negotiation` | Starts A2A negotiation after selected candidate | Durable sequential candidate negotiation | Preserve | High: split from run orchestration |
+| `POST /api/v1/match-runs/{match_run_id}:start-negotiation` | Registry-validated A2A negotiation after selected candidate | Durable sequential candidate negotiation | Updated in Phase 6 | Medium: reservation/fallback pending |
 | `GET /api/v1/negotiations/{negotiation_id}` | Raw negotiation | Negotiation detail | Preserve | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/messages` | Persisted messages | Negotiation messages | Preserve | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/events` | Decision events | Negotiation timeline/events | Preserve | Low |
@@ -141,3 +141,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - Duplicate Match Run start with the same `Idempotency-Key` returns the same run.
 - Match Run events are persisted under `matchRuns/{runId}/events` with ordered sequence numbers.
 - Non-terminal Match Runs can be canceled; terminal runs reject cancellation.
+
+## Contract Tests Added in Phase 6
+
+- Creator Agent publish writes an `agentRegistry` projection without private policy.
+- Product API negotiation persists `a2aTasks/{taskId}/events`.
+- Real HTTP A2A counter/accept path still works with AgentCard discovery and service auth.

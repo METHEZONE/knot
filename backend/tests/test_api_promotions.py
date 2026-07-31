@@ -336,7 +336,7 @@ def test_select_candidate_reports_undiscovered_candidate() -> None:
 
 
 def test_start_negotiation_persists_messages_events_and_agreement() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
     ]
@@ -361,6 +361,14 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert messages_response.status_code == 200
     messages = messages_response.json()["data"]["messages"]
     assert [message["role"] for message in messages] == ["ROLE_USER", "ROLE_AGENT"]
+    task_events = repository.list_raw_documents(
+        f"{COLLECTIONS.a2a_tasks}/{negotiation['taskId']}/{COLLECTIONS.a2a_events}"
+    )
+    assert [event["type"] for event in task_events] == [
+        "A2A_USER_MESSAGE",
+        "A2A_AGENT_MESSAGE",
+        "A2A_TASK_STATE",
+    ]
 
     events_response = client.get(f"/api/v1/negotiations/{negotiation_id}/events")
     assert events_response.status_code == 200
@@ -581,7 +589,15 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
                 {
                     "name": "KNOT Creator Negotiation Agent",
                     "version": "1.0.0",
-                    "supportedInterfaces": [],
+                    "supportedInterfaces": [
+                        {
+                            "url": "http://creator-agent.test/a2a/v1",
+                            "protocolBinding": "HTTP+JSON",
+                            "protocolVersion": "1.0",
+                            "tenant": "creator-agent-001",
+                        }
+                    ],
+                    "skills": [{"id": "promotion-negotiation"}],
                 }
             )
 
