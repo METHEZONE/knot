@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 3 mapping. No live migration or backfill was executed.
+> Phase 4 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -67,7 +67,7 @@ Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explic
 | Missing Brand authority data | `agentAuthorities/{brandAgentId}` | Add in onboarding/escrow phase | Existing wallet fields remain readable |
 | Missing Creator authority data | `agentAuthorities/{creatorAgentId}` | Add in onboarding/settlement phase | Existing `walletAddress` remains readable |
 | Missing AgentCard registry projection | `agentRegistry/{agentId}` | Add in publication/A2A phase | Existing `agents.a2aEndpoint` remains readable |
-| `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Phase 3 adds projection writes and dry-run backfill script | Matching service dual-reads until index verified in Phase 4 |
+| `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Phase 4 Product API matching now queries discovery projections first | Private Creator profile reads are bounded to Top 20 for eligibility/detail |
 | `matchRuns` flat run state | `matchRuns` final state machine fields | Add fields; do not rewrite old runs | Legacy completed runs remain readable |
 | `matchRuns/{id}/candidates` | same | Add final score component fields/version snapshots | Existing fields remain readable |
 | `promotions/{id}/events` | `matchRuns/{id}/events` and/or canonical event projection | Add run event collection later | Phase 1 run timeline aliases project existing promotion events |
@@ -102,9 +102,10 @@ No `--write` run was executed in Phase 3.
 
 ## Index Requirements
 
-Phase 3 adds `firestore.indexes.json` composite index source configuration for:
+Phase 3 adds `firestore.indexes.json` composite index source configuration. Phase 4 adds the active Product API query family:
 
-- Published/accepting creator discovery by format, country/language, availability, capacity.
+- Published/accepting Creator discovery by country, availability, capacity, category, primary format, and next availability.
+- Published/accepting Creator discovery by format, country/language, availability, capacity.
 
 Future phases must still add or verify:
 

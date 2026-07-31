@@ -40,7 +40,16 @@ from libs.a2a.models import (
 )
 from libs.a2a.store import InMemoryA2ATaskStore
 from libs.agents.brand import build_initial_terms
-from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
+from libs.agents.discovery import (
+    DETAIL_READ_LIMIT,
+    DISCOVERY_LIMIT,
+    DISCOVERY_RANKING_VERSION,
+    FirestoreCreatorDiscoveryRepository,
+    RankedDiscoveryCandidate,
+    detail_candidates,
+    rank_discovery_candidates,
+)
+from libs.agents.matching import MATCHING_WEIGHTS_VERSION, hard_filter_creator
 from libs.agents.negotiation import CreatorNegotiationContext
 from libs.ai.gemini import AnalysisText, candidate_explanation, creator_rationale
 from libs.auth.firebase import AuthenticatedUser, AuthError, FirebaseTokenVerifier
@@ -1490,12 +1499,25 @@ def build_api_router(
     @router.post("/promotions/{promotion_id}/matches:run", status_code=status.HTTP_201_CREATED)
     def run_matches(promotion_id: str) -> dict[str, object]:
         promotion = _get_promotion(repository, promotion_id)
-        creators = repository.list_creator_profiles()
-        ranked = rank_creators(promotion, creators)
-        selected = next((candidate for candidate in ranked if candidate.eligible), None)
-        selected_creator = (
-            _creator_by_agent_id(creators, selected.creator_agent_id) if selected else None
+        discovery_repository = FirestoreCreatorDiscoveryRepository(repository)
+        search_result = discovery_repository.search(promotion, limit=DISCOVERY_LIMIT)
+        public_ranked = rank_discovery_candidates(promotion, search_result.projections)
+        detailed_candidates, detail_read_count = detail_candidates(
+            repository,
+            public_ranked,
+            limit=DETAIL_READ_LIMIT,
         )
+        ranked = _apply_private_eligibility(promotion, detailed_candidates)
+        selected_pair = next(
+            (
+                (candidate, creator)
+                for candidate, creator in ranked
+                if candidate.eligible
+            ),
+            None,
+        )
+        selected = selected_pair[0] if selected_pair else None
+        selected_creator = selected_pair[1] if selected_pair else None
         match_run_id = f"match-{uuid4()}"
         now = _now()
         match_run: dict[str, object] = {
@@ -1504,6 +1526,11 @@ def build_api_router(
             "brandAgentId": promotion.brand_agent_id,
             "status": "COMPLETED",
             "weightsVersion": MATCHING_WEIGHTS_VERSION,
+            "rankingVersion": DISCOVERY_RANKING_VERSION,
+            "discoveryLimit": search_result.metrics.query_limit,
+            "discoveryReturnedCount": search_result.metrics.returned_count,
+            "detailReadLimit": search_result.metrics.detail_read_limit,
+            "detailReadCount": detail_read_count,
             "selectedCreatorId": selected_creator.creator_id if selected_creator else None,
             "selectedCreatorAgentId": selected.creator_agent_id if selected else None,
             "createdAt": now,
@@ -1511,11 +1538,14 @@ def build_api_router(
         }
         match_run_path = FirestorePaths.match_run(match_run_id)
         repository.save_raw_document(match_run_path, match_run)
-        for candidate in ranked:
-            creator = _creator_by_agent_id(creators, candidate.creator_agent_id)
-            document = candidate.model_dump(by_alias=True, mode="json")
+        for candidate, creator in ranked:
+            document = _discovery_candidate_document(candidate)
             document["creatorId"] = creator.creator_id
             document["creatorProfilePath"] = FirestorePaths.creator_profile(creator.creator_id)
+            document["profileVersion"] = candidate.projection.get("profileVersion")
+            document["taxonomyVersion"] = candidate.projection.get("taxonomyVersion")
+            document["embeddingVersion"] = candidate.projection.get("embeddingVersion")
+            document["indexVersion"] = candidate.projection.get("indexVersion")
             explanation = _candidate_explanation(
                 settings=settings,
                 promotion=promotion,
@@ -3107,6 +3137,76 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
     }
 
 
+def _apply_private_eligibility(
+    promotion: Promotion,
+    detailed_candidates: Sequence[tuple[RankedDiscoveryCandidate, CreatorProfile]],
+) -> list[tuple[RankedDiscoveryCandidate, CreatorProfile]]:
+    results: list[tuple[RankedDiscoveryCandidate, CreatorProfile]] = []
+    rank = 1
+    for candidate, creator in detailed_candidates:
+        hard_filter_reasons = _dedupe_strings(
+            [
+                *candidate.hard_filter_reasons,
+                *hard_filter_creator(promotion, creator),
+            ]
+        )
+        eligible = candidate.eligible and not hard_filter_reasons
+        updated = RankedDiscoveryCandidate(
+            creator_id=candidate.creator_id,
+            creator_agent_id=candidate.creator_agent_id,
+            eligible=eligible,
+            score=candidate.score if eligible else 0.0,
+            score_components=candidate.score_components,
+            hard_filter_reasons=hard_filter_reasons,
+            rank=rank if eligible else None,
+            projection=candidate.projection,
+        )
+        if eligible:
+            rank += 1
+        results.append((updated, creator))
+    return results
+
+
+def _discovery_candidate_document(candidate: RankedDiscoveryCandidate) -> dict[str, object]:
+    components = candidate.score_components
+    legacy_components = {
+        "category": components["categoryAudienceFit"],
+        "budget": components["coarseBudgetFit"],
+        "schedule": components["scheduleFit"],
+        "deliverable": components["formatFit"],
+        "reputation": components["reliabilityFit"],
+    }
+    return {
+        "creatorAgentId": candidate.creator_agent_id,
+        "eligible": candidate.eligible,
+        "score": candidate.score,
+        "componentScores": legacy_components,
+        "scoreComponents": components,
+        "hardFilterReasons": candidate.hard_filter_reasons,
+        "rank": candidate.rank,
+        "rankingVersion": DISCOVERY_RANKING_VERSION,
+        "safeExplanationFacts": {
+            "categoryKeys": candidate.projection.get("categoryKeys"),
+            "formatKeys": candidate.projection.get("formatKeys"),
+            "availability": candidate.projection.get("availability"),
+            "publicRateBand": candidate.projection.get("publicRateBand"),
+            "nextAvailableAt": candidate.projection.get("nextAvailableAt"),
+            "verifiedDealsCount": candidate.projection.get("verifiedDealsCount"),
+        },
+    }
+
+
+def _dedupe_strings(values: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    results: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        results.append(value)
+    return results
+
+
 def _require_creator_agent_context(
     repository: KnotRepository,
     user: dict[str, object],
@@ -3986,17 +4086,6 @@ def _match_candidate_by_agent_id(
             creator_id = _require_document_str(candidate, "creatorId")
             return FirestorePaths.match_candidate(match_run_id, creator_id), candidate
     return "", None
-
-
-def _creator_by_agent_id(
-    creators: Sequence[CreatorProfile],
-    creator_agent_id: str,
-) -> CreatorProfile:
-    for creator in creators:
-        if creator.creator_agent_id == creator_agent_id:
-            return creator
-    raise ValueError(f"creator profile for {creator_agent_id} was not found")
-
 
 def _evidence_observations(
     *,

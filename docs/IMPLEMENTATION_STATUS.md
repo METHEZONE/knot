@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 3 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 4 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -22,7 +22,7 @@
 | Firestore/indexes | IN_PROGRESS | `backend/libs/repositories/firestore_paths.py`, `firestore.indexes.json` | `docs/FIRESTORE_MIGRATION_PLAN.md` | Creator discovery composite index config added; rules/vector verification pending |
 | Async worker | NOT_STARTED | none verified | `docs/INTEGRATION_AUDIT.md` | Current Match Run is synchronous |
 | Gemini analysis | IN_PROGRESS | `backend/libs/ai/gemini.py` | Audit complete | Final URL analysis flow pending |
-| Matching | IN_PROGRESS | `backend/libs/agents/matching.py` | Audit complete | Current matching scans all creator profiles |
+| Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
 | A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a` | Audit complete | HTTP boundary exists; durable Creator task store pending |
 | Agreement | IN_PROGRESS | `backend/apps/api/routes.py`, `backend/libs/domain/hashing.py` | Audit complete | Final one-milestone shape pending |
 | Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Audit complete | Devnet path exists; no Phase 1 on-chain action |
@@ -35,8 +35,8 @@
 | Brand card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs added; visual card flow still pending |
 | Creator card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs and Phase 3 publish API added; card UX wiring pending |
 | Creator Agent publish/pause | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | N/A | NOT_STARTED | Phase 3 owner-scoped APIs added; visual dashboard controls pending |
-| Discovery projection/index | N/A | IN_PROGRESS | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 3 projection writes, index config, and dry-run backfill script added |
-| Deterministic ranking | N/A | IN_PROGRESS | IN_PROGRESS | N/A | NOT_STARTED | Existing in-memory ranker |
+| Discovery projection/index | N/A | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 4 Product API matching consumes discovery projections with bounded query |
+| Deterministic ranking | N/A | IMPLEMENTED | IN_PROGRESS | N/A | NOT_STARTED | Phase 4 public score components and deterministic tie-breakers added |
 | Match Run orchestration | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | NOT_STARTED | Existing synchronous run; canonical aliases added |
 | Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
 | A2A counteroffer | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing tests/routes audited |
@@ -93,19 +93,35 @@
 - Added typed frontend API client methods for Creator Agent control.
 - Added tests for projection privacy, owner mismatch rejection, dry-run backfill, and idempotent backfill replay.
 
-## 6. Query-Bound Proof
+## 6. Phase 4 Changes
+
+- Added `CreatorDiscoveryRepository` and Firestore-backed bounded query implementation.
+- Added repository `query_raw_documents(..., limit=...)` primitive for in-memory and Firestore stores.
+- Updated Product API Match Run start routes to query `creatorDiscoveryProfiles` instead of scanning all `creatorProfiles`.
+- Added deterministic public ranking components:
+  - `semanticMoodFit`
+  - `categoryAudienceFit`
+  - `formatFit`
+  - `scheduleFit`
+  - `coarseBudgetFit`
+  - `reliabilityFit`
+- Candidate snapshots now store score components, ranking/index/profile version fields, safe explanation facts, and query metrics.
+- Demo seed explicitly writes public discovery projections for active seeded Creators.
+- Added no-scan and bounded query tests.
+
+## 7. Query-Bound Proof
 
 ```text
-Discovery implementation: current in-memory rank_creators over list_creator_profiles()
-Public hard-filter query: Firestore composite index config added; repository query not implemented yet
-Vector index: not implemented or deployed yet
-Top K: not enforced yet
-Maximum detailed profile reads: not enforced yet
+Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
+Public hard-filter query: agentStatus, acceptingOffers, availability, capacityAvailable, countryCode, categoryKeys, primaryFormatKey, nextAvailableAt
+Vector index: not implemented or deployed yet; semantic fit is deterministic neutral value
+Top K: discovery limit 100 enforced by interface
+Maximum detailed profile reads: Top 20 enforced by detail_candidates()
 Maximum paid tool calls: current pay.sh operation is one selected creator path, final Top 3 cap pending
-Test proving no unbounded scan: not implemented yet
+Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 7. Test Evidence
+## 8. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -138,8 +154,17 @@ Test proving no unbounded scan: not implemented yet
 | Phase 3 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 | Phase 3 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
 | Phase 3 backfill script syntax | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m py_compile scripts/backfill_creator_discovery_profiles.py` |
+| Phase 4 backend focused tests | VERIFIED: 30 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_creator_discovery.py tests/test_firestore_repositories.py tests/test_firestore_adapter.py tests/test_matching.py` from `backend` |
+| Phase 4 backend full pytest | VERIFIED: 106 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 4 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 4 backend mypy | VERIFIED: no issues in 49 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 4 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 4 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 4 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 4 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 4 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
 
-## 8. Latest Verified E2E
+## 9. Latest Verified E2E
 
 ```text
 Commit:
@@ -160,29 +185,29 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E or live transaction was executed through Phase 3.
+No E2E or live transaction was executed through Phase 4.
 
-## 9. Known Blockers
+## 10. Known Blockers
 
 ```text
 BLOCKER: Final durable Match Run is not implemented.
 IMPACT: Current run completes synchronously and cannot prove browser-closure-safe orchestration.
-EVIDENCE: backend/apps/api/routes.py uses repository.list_creator_profiles() inside matches:run.
+EVIDENCE: Product API uses bounded discovery in Phase 4 but still creates a completed run synchronously in the request.
 OWNER: Backend/Agent phase.
-NEXT ACTION: Phase 5 durable orchestration after discovery projection/ranking phases.
+NEXT ACTION: Phase 5 durable orchestration.
 WORKAROUND FOR DEMO (truthfully labeled): Existing synchronous path can be used only as legacy behavior, not final proof.
 ```
 
 ```text
 BLOCKER: Firestore rules and vector discovery index are not verified.
 IMPACT: Final bounded/vector discovery and security rules cannot be verified yet.
-EVIDENCE: Phase 3 adds firestore.indexes.json for composite Creator discovery queries, but no firestore.rules or deployed vector index was verified.
+EVIDENCE: Phase 4 uses composite discovery indexes in source, but no firestore.rules or deployed vector index was verified.
 OWNER: Backend/Infra phase.
-NEXT ACTION: Add rules and managed vector index verification in Phase 4 or infra phase.
+NEXT ACTION: Add rules and managed vector index verification in an infra phase.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 10. Update Rule
+## 11. Update Rule
 
 For each phase:
 

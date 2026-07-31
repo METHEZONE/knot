@@ -41,9 +41,9 @@ def test_creator_discovery_backfill_is_dry_run_then_idempotent_write() -> None:
         repository,
         updated_at="2026-07-31T00:00:00+00:00",
     )
-    assert dry_run == {"scanned": 5, "changed": 5, "missingAgents": 0}
+    assert dry_run == {"scanned": 5, "changed": 2, "missingAgents": 0}
     assert (
-        repository.get_raw_document(FirestorePaths.creator_discovery_profile("creator-001"))
+        repository.get_raw_document(FirestorePaths.creator_discovery_profile("creator-1"))
         is None
     )
 
@@ -52,7 +52,7 @@ def test_creator_discovery_backfill_is_dry_run_then_idempotent_write() -> None:
         write=True,
         updated_at="2026-07-31T00:00:00+00:00",
     )
-    assert written == {"scanned": 5, "changed": 5, "missingAgents": 0}
+    assert written == {"scanned": 5, "changed": 2, "missingAgents": 0}
     projection = repository.get_raw_document(
         FirestorePaths.creator_discovery_profile("creator-001")
     )

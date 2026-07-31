@@ -21,11 +21,11 @@ def test_product_api_runs_real_http_a2a_counter_accept_golden_path() -> None:
     token = "test-a2a-token"
 
     contexts = demo_creator_contexts()
-    selected_context = contexts["creator-agent-003"]
+    selected_context = contexts["creator-agent-001"]
     selected_context = selected_context.model_copy(
-        update={"policy": selected_context.policy.model_copy(update={"min_base_usdc": 650})}
+        update={"policy": selected_context.policy.model_copy(update={"min_base_usdc": 750})}
     )
-    contexts["creator-agent-003"] = selected_context
+    contexts["creator-agent-001"] = selected_context
 
     creator_app = create_creator_app(
         settings=Settings(
@@ -80,7 +80,7 @@ def test_product_api_runs_real_http_a2a_counter_accept_golden_path() -> None:
         assert negotiation["currentRound"] == 2
         assert negotiation["creatorPolicySnapshot"] == {"redacted": True}
         assert agreement["agreementId"].startswith("agreement-")
-        assert agreement["terms"]["compensation"]["baseAmountUsdc"] == 650
+        assert agreement["terms"]["compensation"]["baseAmountUsdc"] == 750
 
         messages = api_client.get(
             f"/api/v1/negotiations/{negotiation['negotiationId']}/messages"

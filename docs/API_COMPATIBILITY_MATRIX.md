@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 3 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 4 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -32,7 +32,7 @@
 | `GET /api/v1/brand/dashboard` | Brand dashboard projection | Final BrandDashboardView | Preserve | Medium: not full Agent Control Room yet |
 | `GET /api/v1/creator/dashboard` | Creator dashboard projection | Final CreatorDashboardView | Preserve | Medium: accepting-offers state incomplete |
 | `GET /api/v1/creator/agent` | Authenticated Creator Agent control state and discovery projection | Creator Agent control view | Added in Phase 3 | Low |
-| `POST /api/v1/creator/agent:publish` | Owner-scoped publish and discovery projection write | Creator publishes Agent for matching | Added in Phase 3 | Medium: matching does not consume projection until Phase 4 |
+| `POST /api/v1/creator/agent:publish` | Owner-scoped publish and discovery projection write | Creator publishes Agent for matching | Added in Phase 3 | Low |
 | `POST /api/v1/creator/agent:pause` | Owner-scoped pause and discovery projection write | Creator pauses Agent matching | Added in Phase 3 | Low |
 | `POST /api/v1/creator/agent:resume` | Owner-scoped resume via publish behavior | Creator resumes Agent matching | Added in Phase 3 | Low |
 | `GET /api/v1/brand/promotions` | Owner-scoped Brand promotions | Final promotions list | Preserve | Low |
@@ -55,12 +55,12 @@
 | `GET /api/v1/promotions` | Legacy list all | Promotion list | Preserve | Medium: not owner-scoped |
 | `GET /api/v1/promotions/{promotion_id}` | Legacy get | Promotion get | Preserve | Low |
 | `POST /api/v1/promotions/{promotion_id}:activate` | DRAFT to ACTIVE | Promotion ready/active transition | Preserve | Low |
-| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous in-memory matching, writes `COMPLETED` | Start Match Run | Preserve | High: final durable semantics pending |
-| `POST /api/v1/promotions/{promotion_id}/match-runs` | New alias to existing matching behavior | Start Match Run | Added in Phase 1 | High: returns current synchronous result |
+| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous bounded discovery/ranking, writes `COMPLETED` | Start Match Run | Updated in Phase 4 | High: final durable semantics pending |
+| `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior | Start Match Run | Added in Phase 1, updated in Phase 4 | High: returns current synchronous result |
 | `GET /api/v1/match-runs/{match_run_id}` | Get raw Match Run | MatchRun detail | Preserve | Low |
 | `GET /api/v1/match-runs/{match_run_id}/timeline` | Promotion event projection by run | MatchRun timeline | Added in Phase 1 | Medium: event model not final sequence yet |
 | `GET /api/v1/match-runs/{match_run_id}/events` | Alias of timeline | MatchRun events | Added in Phase 1 | Medium |
-| `GET /api/v1/match-runs/{match_run_id}/candidates` | Candidate snapshots | Candidate snapshots | Preserve | Medium: score schema final mismatch |
+| `GET /api/v1/match-runs/{match_run_id}/candidates` | Candidate snapshots with public score components and safe facts | Candidate snapshots | Updated in Phase 4 | Medium: durable event sequence pending |
 | `POST /api/v1/match-runs/{match_run_id}/candidates/{creator_agent_id}:select` | Manual candidate selection | Not final user behavior | Preserve only for compatibility/dev | High |
 | `POST /api/v1/match-runs/{match_run_id}:start-negotiation` | Starts A2A negotiation after selected candidate | Durable sequential candidate negotiation | Preserve | High: split from run orchestration |
 | `GET /api/v1/negotiations/{negotiation_id}` | Raw negotiation | Negotiation detail | Preserve | Low |
@@ -128,3 +128,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - Creator Agent publish/pause/resume maintains owner-scoped control state.
 - `creatorDiscoveryProfiles` projection excludes private minimum and blocked-policy fields.
 - Mismatched authenticated Creator/Agent ownership returns `403`.
+
+## Contract Tests Added in Phase 4
+
+- Product API Match Run uses `creatorDiscoveryProfiles` bounded query and does not scan `creatorProfiles`.
+- Firestore and in-memory stores support filtered limited queries.
+- Candidate snapshots include deterministic public score components and discovery metrics.

@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping
 import pytest
 
 from libs.repositories.firestore_adapter import FirestoreDocumentStore
-from libs.repositories.store import DocumentAlreadyExistsError
+from libs.repositories.store import DocumentAlreadyExistsError, DocumentQueryFilter
 
 
 class FakeSnapshot:
@@ -43,6 +43,55 @@ class FakeCollectionReference:
             if path.startswith(prefix) and "/" not in path.removeprefix(prefix):
                 yield FakeSnapshot(self._client.documents[path])
 
+    def where(
+        self,
+        field_path: str,
+        op_string: str,
+        value: object,
+    ) -> "FakeQuery":
+        return FakeQuery(self, [(field_path, op_string, value)], None)
+
+    def limit(self, count: int) -> "FakeQuery":
+        return FakeQuery(self, [], count)
+
+
+class FakeQuery:
+    def __init__(
+        self,
+        collection: FakeCollectionReference,
+        filters: list[tuple[str, str, object]],
+        limit_count: int | None,
+    ) -> None:
+        self._collection = collection
+        self._filters = filters
+        self._limit_count = limit_count
+
+    def where(
+        self,
+        field_path: str,
+        op_string: str,
+        value: object,
+    ) -> "FakeQuery":
+        return FakeQuery(
+            self._collection,
+            [*self._filters, (field_path, op_string, value)],
+            self._limit_count,
+        )
+
+    def limit(self, count: int) -> "FakeQuery":
+        return FakeQuery(self._collection, self._filters, count)
+
+    def stream(self) -> Iterable[FakeSnapshot]:
+        returned = 0
+        for snapshot in self._collection.stream():
+            document = snapshot.to_dict()
+            if document is None or not _matches(document, self._filters):
+                continue
+            yield snapshot
+            returned += 1
+            if self._limit_count is not None and returned >= self._limit_count:
+                return
+
 
 class FakeFirestoreClient:
     def __init__(self) -> None:
@@ -75,3 +124,53 @@ def test_firestore_adapter_sets_gets_lists_and_respects_create_only() -> None:
             {"promotionId": "promotion-001"},
             exists_ok=False,
         )
+
+
+def test_firestore_adapter_queries_with_filters_and_limit() -> None:
+    client = FakeFirestoreClient()
+    store = FirestoreDocumentStore(client)
+    store.set_document(
+        "creatorDiscoveryProfiles/creator-001",
+        {
+            "creatorId": "creator-001",
+            "agentStatus": "PUBLISHED",
+            "formatKeys": ["reel", "story"],
+        },
+    )
+    store.set_document(
+        "creatorDiscoveryProfiles/creator-002",
+        {
+            "creatorId": "creator-002",
+            "agentStatus": "DRAFT",
+            "formatKeys": ["reel"],
+        },
+    )
+
+    results = store.query_documents(
+        "creatorDiscoveryProfiles",
+        [
+            DocumentQueryFilter("agentStatus", "==", "PUBLISHED"),
+            DocumentQueryFilter("formatKeys", "array_contains", "reel"),
+        ],
+        limit=1,
+    )
+
+    assert results == [
+        {
+            "creatorId": "creator-001",
+            "agentStatus": "PUBLISHED",
+            "formatKeys": ["reel", "story"],
+        }
+    ]
+
+
+def _matches(document: Mapping[str, object], filters: list[tuple[str, str, object]]) -> bool:
+    for field_path, op_string, expected in filters:
+        value = document.get(field_path)
+        if op_string == "==" and value != expected:
+            return False
+        if op_string == "array_contains" and (
+            not isinstance(value, list) or expected not in value
+        ):
+            return False
+    return True

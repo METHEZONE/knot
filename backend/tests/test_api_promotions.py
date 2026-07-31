@@ -21,6 +21,13 @@ class FakeHttpResponse:
         return self._payload
 
 
+class NoCreatorProfileScanStore(InMemoryDocumentStore):
+    def list_documents(self, collection_path: str) -> list[dict[str, object]]:
+        if collection_path == COLLECTIONS.creator_profiles:
+            raise AssertionError("creatorProfiles collection scan is forbidden during discovery")
+        return super().list_documents(collection_path)
+
+
 def client_with_seed(settings: Settings | None = None) -> TestClient:
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
@@ -97,14 +104,14 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["status"] == "COMPLETED"
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-003"
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
 
     candidates_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/candidates")
     assert candidates_response.status_code == 200
     candidates = candidates_response.json()["data"]["candidates"]
-    assert candidates[0]["creatorAgentId"] == "creator-agent-003"
-    assert candidates[0]["creatorId"] == "creator-003"
-    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-003"
+    assert candidates[0]["creatorAgentId"] == "creator-agent-001"
+    assert candidates[0]["creatorId"] == "creator-001"
+    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-001"
     assert candidates[0]["rank"] == 1
     assert candidates[0]["eligible"] is True
     assert candidates[0]["analysisProvider"] == "deterministic"
@@ -115,6 +122,22 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
     assert "API_PAYMENT" in event_types
     assert "MATCH_RUN_COMPLETED" in event_types
+
+
+def test_run_match_uses_indexed_discovery_without_creator_profile_scan() -> None:
+    store = NoCreatorProfileScanStore()
+    repository = KnotRepository(store)
+    seed_demo_repository(repository)
+    client = TestClient(create_app(repository=repository))
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["discoveryLimit"] == 100
+    assert match_run["discoveryReturnedCount"] == 2
+    assert match_run["detailReadLimit"] == 20
+    assert match_run["detailReadCount"] == 2
 
 
 def test_canonical_match_run_alias_preserves_existing_matching_behavior() -> None:
@@ -182,7 +205,7 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
     assert api_payment["data"]["receiptId"] == "receipt-pay-001"
-    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-003"
+    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-001"
 
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
@@ -205,7 +228,7 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
 
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-003"
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
     start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
     assert start_response.status_code == 201
     assert start_response.json()["data"]["negotiation"]["status"] == "AGREED"
@@ -236,7 +259,7 @@ def test_start_negotiation_reports_no_eligible_creator() -> None:
     assert response.json()["detail"]["code"] == "NO_ELIGIBLE_CREATOR"
 
 
-def test_select_candidate_rejects_ineligible_candidate() -> None:
+def test_select_candidate_reports_undiscovered_candidate() -> None:
     client = client_with_seed()
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
@@ -246,8 +269,8 @@ def test_select_candidate_rejects_ineligible_candidate() -> None:
         f"/api/v1/match-runs/{match_run['matchRunId']}/candidates/creator-agent-002:select"
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "RESOURCE_NOT_FOUND"
 
 
 def test_start_negotiation_persists_messages_events_and_agreement() -> None:
@@ -264,8 +287,8 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement = body["agreement"]
     assert negotiation["status"] == "AGREED"
     assert negotiation["matchRunId"] == match_run["matchRunId"]
-    assert negotiation["matchCandidateId"] == "creator-003"
-    assert negotiation["creatorAgentId"] == "creator-agent-003"
+    assert negotiation["matchCandidateId"] == "creator-001"
+    assert negotiation["creatorAgentId"] == "creator-agent-001"
     assert agreement["status"] == "AGREED"
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
@@ -326,7 +349,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
                             "url": "http://creator-agent.test/a2a/v1",
                             "protocolBinding": "HTTP+JSON",
                             "protocolVersion": "1.0",
-                            "tenant": "creator-agent-003",
+                                "tenant": "creator-agent-001",
                         }
                     ],
                 }
@@ -425,7 +448,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         "Content-Type": "application/a2a+json",
     }
     assert captured["timeout"] == 60
-    assert captured["request"]["tenant"] == "creator-agent-003"  # type: ignore[index]
+    assert captured["request"]["tenant"] == "creator-agent-001"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
     assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"
@@ -713,7 +736,7 @@ def test_submit_evidence_rejects_wrong_creator_agent() -> None:
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
         json={
             "url": "https://social.example/post/with-brand-and-ad",
-            "submittedByAgentId": "creator-agent-001",
+            "submittedByAgentId": "creator-agent-003",
         },
     )
 

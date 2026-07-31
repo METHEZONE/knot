@@ -3,6 +3,7 @@ import pytest
 from libs.domain.models import CreatorProfile, Promotion
 from libs.repositories import (
     DocumentAlreadyExistsError,
+    DocumentQueryFilter,
     FirestorePaths,
     IdempotencyConflictError,
     InMemoryDocumentStore,
@@ -104,6 +105,44 @@ def test_repository_returns_copies_not_mutable_store_references() -> None:
     creator = repository.get_creator_profile("creator-001")
     assert isinstance(creator, CreatorProfile)
     assert creator.display_name == "Demo Beauty Creator"
+
+
+def test_in_memory_store_queries_with_filters_and_limit() -> None:
+    store = InMemoryDocumentStore()
+    repository = KnotRepository(store)
+    repository.save_raw_document(
+        FirestorePaths.creator_discovery_profile("creator-001"),
+        {
+            "creatorId": "creator-001",
+            "agentStatus": "PUBLISHED",
+            "formatKeys": ["reel", "story"],
+        },
+    )
+    repository.save_raw_document(
+        FirestorePaths.creator_discovery_profile("creator-002"),
+        {
+            "creatorId": "creator-002",
+            "agentStatus": "PUBLISHED",
+            "formatKeys": ["story"],
+        },
+    )
+
+    results = repository.query_raw_documents(
+        "creatorDiscoveryProfiles",
+        [
+            DocumentQueryFilter("agentStatus", "==", "PUBLISHED"),
+            DocumentQueryFilter("formatKeys", "array_contains", "reel"),
+        ],
+        limit=1,
+    )
+
+    assert results == [
+        {
+            "creatorId": "creator-001",
+            "agentStatus": "PUBLISHED",
+            "formatKeys": ["reel", "story"],
+        }
+    ]
 
 
 def test_idempotency_record_allows_replay_but_rejects_conflicting_payload() -> None:

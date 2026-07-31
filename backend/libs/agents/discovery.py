@@ -1,0 +1,310 @@
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date
+from hashlib import sha256
+from typing import Protocol
+
+from libs.domain.categories import category_set
+from libs.domain.models import CreatorProfile, Promotion
+from libs.repositories.firestore_paths import COLLECTIONS
+from libs.repositories.serialization import DocumentData
+from libs.repositories.store import DocumentQueryFilter, KnotRepository
+
+DISCOVERY_LIMIT = 100
+DETAIL_READ_LIMIT = 20
+DISCOVERY_RANKING_VERSION = "discovery-ranking-v1"
+
+
+@dataclass(frozen=True)
+class DiscoveryMetrics:
+    query_limit: int
+    returned_count: int
+    detail_read_limit: int
+    detail_read_count: int
+
+
+@dataclass(frozen=True)
+class DiscoverySearchResult:
+    projections: list[DocumentData]
+    metrics: DiscoveryMetrics
+
+
+class CreatorDiscoveryRepository(Protocol):
+    def search(
+        self,
+        promotion: Promotion,
+        *,
+        limit: int = DISCOVERY_LIMIT,
+    ) -> DiscoverySearchResult:
+        pass
+
+
+class FirestoreCreatorDiscoveryRepository:
+    def __init__(self, repository: KnotRepository) -> None:
+        self._repository = repository
+
+    def search(
+        self,
+        promotion: Promotion,
+        *,
+        limit: int = DISCOVERY_LIMIT,
+    ) -> DiscoverySearchResult:
+        if limit <= 0 or limit > DISCOVERY_LIMIT:
+            raise ValueError("creator discovery limit must be between 1 and 100")
+        filters = _public_filters(promotion)
+        projections = self._repository.query_raw_documents(
+            COLLECTIONS.creator_discovery_profiles,
+            filters,
+            limit=limit,
+        )
+        return DiscoverySearchResult(
+            projections=projections,
+            metrics=DiscoveryMetrics(
+                query_limit=limit,
+                returned_count=len(projections),
+                detail_read_limit=DETAIL_READ_LIMIT,
+                detail_read_count=0,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class RankedDiscoveryCandidate:
+    creator_id: str
+    creator_agent_id: str
+    eligible: bool
+    score: float
+    score_components: dict[str, float]
+    hard_filter_reasons: list[str]
+    rank: int | None
+    projection: DocumentData
+
+
+def rank_discovery_candidates(
+    promotion: Promotion,
+    projections: Sequence[Mapping[str, object]],
+) -> list[RankedDiscoveryCandidate]:
+    ranked = [_score_projection(promotion, projection) for projection in projections]
+    ranked.sort(
+        key=lambda candidate: (
+            not candidate.eligible,
+            -candidate.score,
+            -candidate.score_components["semanticMoodFit"],
+            str(candidate.projection.get("nextAvailableAt") or ""),
+            _stable_creator_tiebreak(candidate.creator_id),
+        )
+    )
+
+    rank = 1
+    results: list[RankedDiscoveryCandidate] = []
+    for candidate in ranked:
+        if candidate.eligible:
+            candidate = RankedDiscoveryCandidate(
+                creator_id=candidate.creator_id,
+                creator_agent_id=candidate.creator_agent_id,
+                eligible=candidate.eligible,
+                score=candidate.score,
+                score_components=candidate.score_components,
+                hard_filter_reasons=candidate.hard_filter_reasons,
+                rank=rank,
+                projection=candidate.projection,
+            )
+            rank += 1
+        results.append(candidate)
+    return results
+
+
+def detail_candidates(
+    repository: KnotRepository,
+    ranked: Sequence[RankedDiscoveryCandidate],
+    *,
+    limit: int = DETAIL_READ_LIMIT,
+) -> tuple[list[tuple[RankedDiscoveryCandidate, CreatorProfile]], int]:
+    bounded = ranked[:limit]
+    results: list[tuple[RankedDiscoveryCandidate, CreatorProfile]] = []
+    for candidate in bounded:
+        creator = repository.get_creator_profile(candidate.creator_id)
+        if creator is not None:
+            results.append((candidate, creator))
+    return results, len(bounded)
+
+
+def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:
+    return [
+        DocumentQueryFilter("agentStatus", "==", "PUBLISHED"),
+        DocumentQueryFilter("acceptingOffers", "==", True),
+        DocumentQueryFilter("availability", "==", "AVAILABLE"),
+        DocumentQueryFilter("capacityAvailable", "==", True),
+        DocumentQueryFilter("countryCode", "==", "KR"),
+        DocumentQueryFilter(
+            "categoryKeys",
+            "array_contains",
+            _primary_required_category(promotion),
+        ),
+        DocumentQueryFilter("primaryFormatKey", "==", _required_format(promotion)),
+        DocumentQueryFilter("nextAvailableAt", "<=", promotion.posting_window.start.isoformat()),
+    ]
+
+
+def _score_projection(
+    promotion: Promotion,
+    projection: Mapping[str, object],
+) -> RankedDiscoveryCandidate:
+    hard_filter_reasons = _projection_hard_filter_reasons(promotion, projection)
+    components = {
+        "semanticMoodFit": 0.5,
+        "categoryAudienceFit": _category_audience_fit(promotion, projection),
+        "formatFit": _format_fit(promotion, projection),
+        "scheduleFit": _schedule_fit(promotion, projection),
+        "coarseBudgetFit": _coarse_budget_fit(promotion, projection),
+        "reliabilityFit": _reliability_fit(projection),
+    }
+    score = round(
+        components["semanticMoodFit"] * 35
+        + components["categoryAudienceFit"] * 20
+        + components["formatFit"] * 15
+        + components["scheduleFit"] * 10
+        + components["coarseBudgetFit"] * 10
+        + components["reliabilityFit"] * 10,
+        6,
+    )
+    return RankedDiscoveryCandidate(
+        creator_id=_required_str(projection, "creatorId"),
+        creator_agent_id=_required_str(projection, "creatorAgentId"),
+        eligible=not hard_filter_reasons,
+        score=score if not hard_filter_reasons else 0.0,
+        score_components=components,
+        hard_filter_reasons=hard_filter_reasons,
+        rank=None,
+        projection=dict(projection),
+    )
+
+
+def _projection_hard_filter_reasons(
+    promotion: Promotion,
+    projection: Mapping[str, object],
+) -> list[str]:
+    reasons: list[str] = []
+    if projection.get("agentStatus") != "PUBLISHED":
+        reasons.append("AGENT_NOT_PUBLISHED")
+    if projection.get("acceptingOffers") is not True:
+        reasons.append("NOT_ACCEPTING_OFFERS")
+    if projection.get("availability") != "AVAILABLE":
+        reasons.append("AGENT_UNAVAILABLE")
+    if projection.get("capacityAvailable") is not True:
+        reasons.append("CAPACITY_UNAVAILABLE")
+    if _required_format(promotion) not in _string_list(projection.get("formatKeys")):
+        reasons.append("DELIVERABLE_FORMAT_UNSUPPORTED")
+    if not category_set(_required_categories(promotion)).intersection(
+        category_set(_string_list(projection.get("categoryKeys")))
+    ):
+        reasons.append("CATEGORY_MISMATCH")
+    next_available = projection.get("nextAvailableAt")
+    latest_start = promotion.posting_window.start.isoformat()
+    if isinstance(next_available, str) and next_available > latest_start:
+        reasons.append("SCHEDULE_UNAVAILABLE")
+    return reasons
+
+
+def _category_audience_fit(promotion: Promotion, projection: Mapping[str, object]) -> float:
+    required = category_set(_required_categories(promotion))
+    available = category_set(_string_list(projection.get("categoryKeys")))
+    if not required:
+        return 1.0
+    overlap = len(required.intersection(available)) / len(required)
+    primary = projection.get("primaryCategoryKey")
+    if isinstance(primary, str) and primary in required:
+        overlap = min(overlap + 0.15, 1.0)
+    return round(overlap, 6)
+
+
+def _format_fit(promotion: Promotion, projection: Mapping[str, object]) -> float:
+    requested = _required_format(promotion)
+    if projection.get("primaryFormatKey") == requested:
+        return 1.0
+    if requested in _string_list(projection.get("formatKeys")):
+        return 0.7
+    return 0.0
+
+
+def _schedule_fit(promotion: Promotion, projection: Mapping[str, object]) -> float:
+    next_available = projection.get("nextAvailableAt")
+    if not isinstance(next_available, str):
+        return 0.5
+    try:
+        available_from = date.fromisoformat(next_available)
+    except ValueError:
+        return 0.5
+    if available_from > promotion.posting_window.end:
+        return 0.0
+    if available_from <= promotion.posting_window.start:
+        return 1.0
+    window_days = max((promotion.posting_window.end - promotion.posting_window.start).days, 1)
+    delay_days = (available_from - promotion.posting_window.start).days
+    return round(max(1 - delay_days / window_days, 0.0), 6)
+
+
+def _coarse_budget_fit(promotion: Promotion, projection: Mapping[str, object]) -> float:
+    band = projection.get("publicRateBand")
+    if not isinstance(band, str):
+        return 0.5
+    max_budget = promotion.budget.max_per_creator_usdc
+    band_floor = {
+        "under_250": 0,
+        "250_400": 250,
+        "400_700": 400,
+        "700_plus": 700,
+    }.get(band)
+    if band_floor is None:
+        return 0.5
+    if max_budget < band_floor:
+        return 0.2
+    return {
+        "under_250": 1.0,
+        "250_400": 0.9,
+        "400_700": 0.75,
+        "700_plus": 0.55,
+    }[band]
+
+
+def _reliability_fit(projection: Mapping[str, object]) -> float:
+    completed = projection.get("verifiedDealsCount")
+    completion_rate = projection.get("completionRate")
+    on_time_rate = projection.get("onTimeRate")
+    cancellation_rate = projection.get("cancellationRate")
+    completed_score = min(completed / 20, 1.0) if isinstance(completed, int) else 0.25
+    completion = completion_rate if isinstance(completion_rate, int | float) else 0.75
+    on_time = on_time_rate if isinstance(on_time_rate, int | float) else 0.75
+    cancellation = cancellation_rate if isinstance(cancellation_rate, int | float) else 0.0
+    adjusted = completed_score * 0.35 + completion * 0.3 + on_time * 0.25 + (1 - cancellation) * 0.1
+    return round(max(min(adjusted, 1.0), 0.2), 6)
+
+
+def _required_categories(promotion: Promotion) -> list[str]:
+    return promotion.constraints.required_categories or [promotion.category]
+
+
+def _primary_required_category(promotion: Promotion) -> str:
+    categories = sorted(category_set(_required_categories(promotion)))
+    return categories[0] if categories else ""
+
+
+def _required_format(promotion: Promotion) -> str:
+    return promotion.deliverables[0].format if promotion.deliverables else ""
+
+
+def _required_str(document: Mapping[str, object], field_name: str) -> str:
+    value = document.get(field_name)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _stable_creator_tiebreak(creator_id: str) -> str:
+    return sha256(creator_id.encode("utf-8")).hexdigest()

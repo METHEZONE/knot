@@ -136,12 +136,12 @@ Current implementation:
 
 - `backend/libs/agents/matching.py`
 - `rank_creators(promotion, creators)` scores in memory.
-- `POST /api/v1/promotions/{promotion_id}/matches:run` calls `repository.list_creator_profiles()` and writes a completed Match Run.
+- Phase 4 `POST /api/v1/promotions/{promotion_id}/matches:run` queries `creatorDiscoveryProfiles` through `CreatorDiscoveryRepository`, applies `limit=100`, and bounds full Creator profile reads to Top 20.
 - Candidate documents are written under `matchRuns/{run}/candidates/{creatorId}`.
 
 Final gap:
 
-- Needs `creatorDiscoveryProfiles`, bounded indexed/vector retrieval, Top K read limits, reservation, durable state machine, and sequential candidate fallback in later phases.
+- Needs live vector retrieval, reservation, durable state machine, and sequential candidate fallback in later phases.
 
 ## A2A
 

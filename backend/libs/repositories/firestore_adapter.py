@@ -2,7 +2,7 @@ from collections.abc import Iterable, Mapping
 from typing import Protocol
 
 from libs.repositories.serialization import DocumentData
-from libs.repositories.store import DocumentAlreadyExistsError
+from libs.repositories.store import DocumentAlreadyExistsError, DocumentQueryFilter
 
 
 class FirestoreDocumentSnapshot(Protocol):
@@ -23,6 +23,33 @@ class FirestoreDocumentReference(Protocol):
 
 
 class FirestoreCollectionReference(Protocol):
+    def stream(self) -> Iterable[FirestoreDocumentSnapshot]:
+        pass
+
+    def where(
+        self,
+        field_path: str,
+        op_string: str,
+        value: object,
+    ) -> "FirestoreQuery":
+        pass
+
+    def limit(self, count: int) -> "FirestoreQuery":
+        pass
+
+
+class FirestoreQuery(Protocol):
+    def where(
+        self,
+        field_path: str,
+        op_string: str,
+        value: object,
+    ) -> "FirestoreQuery":
+        pass
+
+    def limit(self, count: int) -> "FirestoreQuery":
+        pass
+
     def stream(self) -> Iterable[FirestoreDocumentSnapshot]:
         pass
 
@@ -66,5 +93,29 @@ class FirestoreDocumentStore:
         return [
             dict(snapshot.to_dict() or {})
             for snapshot in self._client.collection(collection_path).stream()
+            if snapshot.exists
+        ]
+
+    def query_documents(
+        self,
+        collection_path: str,
+        filters: Iterable[DocumentQueryFilter],
+        *,
+        limit: int,
+    ) -> list[DocumentData]:
+        if limit <= 0:
+            raise ValueError("query limit must be positive")
+        query: FirestoreCollectionReference | FirestoreQuery = self._client.collection(
+            collection_path
+        )
+        for query_filter in filters:
+            query = query.where(
+                query_filter.field_path,
+                query_filter.op,
+                query_filter.value,
+            )
+        return [
+            dict(snapshot.to_dict() or {})
+            for snapshot in query.limit(limit).stream()
             if snapshot.exists
         ]
