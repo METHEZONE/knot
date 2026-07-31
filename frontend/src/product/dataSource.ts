@@ -22,6 +22,7 @@ import {
 } from "./apiClient";
 import type {
   AgentTask,
+  AgentRunEvent,
   BrandProduct,
   CreatorCriteria,
   CreatorDeal,
@@ -41,6 +42,11 @@ type NegotiationQuery = {
   promotionId?: string;
   negotiationId?: string;
   agreementId?: string;
+};
+
+type NegotiationFlow = ApiNegotiationBundle & {
+  matchRunEvents: ApiTimelineEvent[];
+  negotiationEvents: ApiTimelineEvent[];
 };
 
 export interface KnotDataSource {
@@ -207,14 +213,21 @@ class ApiKnotDataSource implements KnotDataSource {
     return promotion;
   }
 
-  private async resolveNegotiationFlow(query: NegotiationQuery): Promise<ApiNegotiationBundle> {
+  private async resolveNegotiationFlow(query: NegotiationQuery): Promise<NegotiationFlow> {
     let promotion = await this.resolvePromotion(query.promotionId);
     const timeline = await this.client.getTimeline(promotion.promotionId);
     const negotiationId =
       query.negotiationId ?? latestTimelineString(timeline, "NEGOTIATION_STARTED", "negotiationId");
 
     if (!negotiationId) {
-      return pendingNegotiationFlow(promotion, timeline);
+      const matchRunId = latestTimelineString(timeline, "MATCH_RUN_COMPLETED", "matchRunId");
+      if (!matchRunId) return pendingNegotiationFlow(promotion, timeline);
+      const [matchRun, candidates, matchRunEvents] = await Promise.all([
+        this.client.getMatchRun(matchRunId),
+        this.client.listCandidates(matchRunId),
+        this.client.listMatchRunEvents(matchRunId),
+      ]);
+      return pendingNegotiationFlow(promotion, timeline, matchRun, candidates, matchRunEvents);
     }
 
     const negotiation = await this.client.getNegotiation(negotiationId);
@@ -226,8 +239,12 @@ class ApiKnotDataSource implements KnotDataSource {
         ? await this.client.getAgreement(query.agreementId)
         : await this.client.getNegotiationAgreement(negotiationId).catch(() => null);
     const matchRun = await this.client.getMatchRun(negotiation.matchRunId);
-    const candidates = await this.client.listCandidates(matchRun.matchRunId);
-    return { promotion, matchRun, candidates, negotiation, agreement, timeline };
+    const [candidates, matchRunEvents, negotiationEvents] = await Promise.all([
+      this.client.listCandidates(matchRun.matchRunId),
+      this.client.listMatchRunEvents(matchRun.matchRunId),
+      this.client.listNegotiationEvents(negotiationId).catch(() => []),
+    ]);
+    return { promotion, matchRun, candidates, negotiation, agreement, timeline, matchRunEvents, negotiationEvents };
   }
 }
 
@@ -260,12 +277,14 @@ function promotionToBrandProduct(promotion: ApiPromotion): BrandProduct {
   };
 }
 
-function negotiationFlowToView(flow: ApiNegotiationBundle, role: Role): NegotiationView {
+function negotiationFlowToView(flow: NegotiationFlow, role: Role): NegotiationView {
   const candidate = selectedCandidate(flow);
   const creatorLabel = creatorDisplayName(candidate);
   const agreement = flow.agreement;
   const terms = agreement?.terms ?? flow.negotiation.currentTerms;
   const completed = flow.negotiation.status === "AGREED" || flow.negotiation.status === "REJECTED";
+  const runEvents = runEventsToView(flow.matchRunEvents);
+  const lastEvent = latestEvent(flow.negotiationEvents) ?? latestEvent(flow.matchRunEvents) ?? latestEvent(flow.timeline);
   return {
     role,
     promotionId: flow.promotion.promotionId,
@@ -294,13 +313,17 @@ function negotiationFlowToView(flow: ApiNegotiationBundle, role: Role): Negotiat
             `${brandDisplayName()} 제안을 Agent가 처리했습니다.`,
             "브랜드의 hard maximum과 내부 matching score는 Creator 화면에 노출하지 않습니다.",
             "결과에는 공개 가능한 조건과 Agreement 상태만 표시합니다.",
-          ],
+    ],
     terms: termsToRows(terms),
     termsHash: agreement?.termsHash ?? "pending-agreement-artifact",
+    runStatus: flow.matchRun.status,
+    lastEventAt: lastEvent?.createdAt ?? null,
+    runEvents,
+    technicalProof: technicalProofItems(flow, runEvents),
   };
 }
 
-function negotiationFlowToCreatorDeal(flow: ApiNegotiationBundle): CreatorDeal {
+function negotiationFlowToCreatorDeal(flow: NegotiationFlow): CreatorDeal {
   const agreement = flow.agreement;
   const terms = agreement?.terms ?? flow.negotiation.currentTerms;
   return {
@@ -322,7 +345,7 @@ function negotiationFlowToCreatorDeal(flow: ApiNegotiationBundle): CreatorDeal {
 }
 
 function settlementFlowToCreatorDeal(
-  flow: ApiNegotiationBundle & { agreement: ApiAgreement },
+  flow: NegotiationFlow & { agreement: ApiAgreement },
   escrow: ApiEscrow | null,
   settlement: ApiSettlement | null,
 ): CreatorDeal {
@@ -334,7 +357,7 @@ function settlementFlowToCreatorDeal(
   };
 }
 
-function apiTasks(flow: ApiNegotiationBundle, completed: boolean): AgentTask[] {
+function apiTasks(flow: NegotiationFlow, completed: boolean): AgentTask[] {
   const hasMatch = hasTimeline(flow.timeline, "MATCH_RUN_COMPLETED");
   const apiPayment = latestTimelineEvent(flow.timeline, "API_PAYMENT");
   const hasNegotiation = hasTimeline(flow.timeline, "NEGOTIATION_STARTED");
@@ -465,7 +488,10 @@ function latestTimelineString(
 function pendingNegotiationFlow(
   promotion: ApiPromotion,
   timeline: ApiTimelineEvent[],
-): ApiNegotiationBundle {
+  matchRun?: ApiMatchRun,
+  candidates: ApiCandidate[] = [],
+  matchRunEvents: ApiTimelineEvent[] = [],
+): NegotiationFlow {
   const terms: ApiAgreementTerms = {
     compensation: {
       structure: "flat",
@@ -489,8 +515,8 @@ function pendingNegotiationFlow(
   return {
     promotion,
     timeline,
-    candidates: [],
-    matchRun: {
+    candidates,
+    matchRun: matchRun ?? {
       matchRunId: "not-run",
       promotionId: promotion.promotionId,
       brandAgentId: promotion.brandAgentId,
@@ -513,14 +539,16 @@ function pendingNegotiationFlow(
       currentTerms: terms,
     },
     agreement: null,
+    matchRunEvents,
+    negotiationEvents: [],
   };
 }
 
-function isPendingNegotiation(negotiation: ApiNegotiationBundle["negotiation"]) {
+function isPendingNegotiation(negotiation: NegotiationFlow["negotiation"]) {
   return negotiation.negotiationId === "not-started";
 }
 
-function selectedCandidate(flow: ApiNegotiationBundle) {
+function selectedCandidate(flow: NegotiationFlow) {
   return (
     flow.candidates.find((candidate) => candidate.creatorAgentId === flow.matchRun.selectedCreatorAgentId) ??
     flow.candidates[0]
@@ -543,7 +571,7 @@ function candidateSummary(candidate: ApiCandidate, matchRun: ApiMatchRun) {
   };
 }
 
-function creatorDealStatus(status: ApiNegotiationBundle["negotiation"]["status"]): CreatorDeal["status"] {
+function creatorDealStatus(status: NegotiationFlow["negotiation"]["status"]): CreatorDeal["status"] {
   if (status === "AGREED" || status === "REJECTED" || status === "COUNTERED") return status;
   return "IN_PROGRESS";
 }
@@ -573,6 +601,69 @@ function milestoneTitle(trigger: string) {
 
 function baseUnitsToUsdc(value: string) {
   return Math.floor(Number(value) / USDC_BASE_UNIT);
+}
+
+function runEventsToView(events: ApiTimelineEvent[]): AgentRunEvent[] {
+  return events.map((event, index) => ({
+    id: event.eventId,
+    type: event.type,
+    label: runEventLabel(event),
+    createdAt: event.createdAt,
+    sequence: typeof event.sequence === "number" ? event.sequence : index + 1,
+    status: event.type.includes("FAILED") || event.type.includes("CANCELED") ? "warning" : "ok",
+  }));
+}
+
+function runEventLabel(event: ApiTimelineEvent) {
+  switch (event.type) {
+    case "MATCH_RUN_READY":
+      return "조건을 검색 기준으로 바꿨어요.";
+    case "MATCH_RUN_DISCOVERING":
+      return "제안 가능한 Creator Agent를 찾았어요.";
+    case "MATCH_RUN_RANKING":
+      return "제품 분위기와 가까운 후보를 비교했어요.";
+    case "MATCH_RUN_SELECTING":
+      return "최종 후보를 선택하고 있어요.";
+    case "MATCH_RUN_COMPLETED": {
+      const selected = typeof event.data.selectedCreatorAgentId === "string" ? event.data.selectedCreatorAgentId : null;
+      return selected ? `${selected}를 선택했어요.` : "조건에 맞는 후보를 찾지 못했어요.";
+    }
+    case "MATCH_RUN_CANCELED":
+      return "사용자가 Match Run을 취소했어요.";
+    default:
+      return event.type;
+  }
+}
+
+function technicalProofItems(flow: NegotiationFlow, runEvents: AgentRunEvent[]) {
+  const selected = selectedCandidate(flow);
+  return [
+    { label: "Data source", value: "LIVE", status: "ok" as const },
+    { label: "Match Run ID", value: flow.matchRun.matchRunId, status: proofStatus(flow.matchRun.matchRunId !== "not-run") },
+    {
+      label: "Candidate snapshot",
+      value: `${flow.candidates.length} candidates · selected ${selected?.creatorAgentId ?? "none"}`,
+      status: proofStatus(flow.candidates.length > 0),
+    },
+    {
+      label: "Run event sequence",
+      value: runEvents.map((event) => `${event.sequence ?? "-"}:${event.type}`).join(" -> ") || "pending",
+      status: proofStatus(runEvents.length > 0),
+    },
+    { label: "A2A context ID", value: flow.negotiation.contextId || "pending", status: proofStatus(Boolean(flow.negotiation.contextId)) },
+    { label: "A2A Task ID", value: flow.negotiation.taskId || "pending", status: proofStatus(Boolean(flow.negotiation.taskId)) },
+    { label: "Negotiation events", value: String(flow.negotiationEvents.length), status: proofStatus(flow.negotiationEvents.length > 0) },
+    { label: "Agreement ID", value: flow.agreement?.agreementId ?? "pending", status: proofStatus(Boolean(flow.agreement)) },
+    { label: "Agreement termsHash", value: flow.agreement?.termsHash ?? "pending", status: proofStatus(Boolean(flow.agreement?.termsHash)) },
+  ];
+}
+
+function proofStatus(ok: boolean) {
+  return ok ? "ok" as const : "pending" as const;
+}
+
+function latestEvent(events: ApiTimelineEvent[]) {
+  return events.at(-1) ?? null;
 }
 
 function errorMessage(error: unknown) {

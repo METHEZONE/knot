@@ -1,731 +1,383 @@
-# KNOT Implementation Status
+# KNOT Final Implementation Status
 
-Last updated: 2026-07-27
+> Updated for Phase 10 on 2026-07-31. Do not mark a capability verified without evidence.
 
-## MVP QA 2 Summary
+## Status Legend
 
-Status: `IMPLEMENTED_LOCAL_VERIFIED`
+- `NOT_STARTED`
+- `IN_PROGRESS`
+- `BLOCKED`
+- `IMPLEMENTED`
+- `VERIFIED`
+- `DEPLOYED`
 
-Implemented:
+## 1. Baseline Audit
 
-- `AuthProvider` now mounts at the app root and avoids resetting the whole app to auth loading during route changes after initial initialization.
-- Landing uses the shared authenticated header instead of a separate static header.
-- Completed Brand and Creator accounts resolve to `/brand` and `/creator`; completed Brands are no longer forced into Promotion creation after login.
-- Brand Promotion creation is simplified to product-name-first with real default values for budget, offer caps, deliverable, usage right, deadline, and OPEN status.
-- Brand Promotion creation now sends an `Idempotency-Key`; Product API uses deterministic idempotent Promotion IDs for replay-safe create requests.
-- Product API validates Promotion amount relationships and future deadline server-side.
-- Brand Promotion deletion is soft delete only, owner-scoped, idempotency guarded, and blocked when an Agreement exists.
-- Deleted Promotions are excluded from Brand dashboard/list/detail helpers.
-- Creator dashboard now prioritizes settlement summary, participating Promotions, and Agent deal history instead of raw negotiation/protocol data.
-- Added `/creator/settlements` with settlement summaries and no fake claim success.
-- Agreement milestone utilities now read `agreement.milestones` snapshots when available for status, target count, completed count, progress, and settlement totals.
-- Brand Promotion detail now supports multiple connected Agreements/Creators through an `agreements` projection.
-- Demo seed fixtures now include deterministic Brand/Creator users, Promotions, Negotiations, Agreements, Escrows, Milestones, and Settlement history for video QA.
-- Demo business-flow seed is opt-in via `include_business_flow=True`; default backend test seed remains core catalog-compatible.
-- Firestore demo seed requires `ALLOW_DEMO_DATA_RESET=true`, matching `DEMO_PROJECT_ID`, and `--confirm=RESET_KNOT_DEMO_DATA`.
+| Area | Status | Existing source | Evidence | Notes |
+|---|---|---|---|---|
+| Stable/deployed base identified | IMPLEMENTED | `origin/main` | `e58aa9b9b13b2776962bfe0f56a38d44acfd0940` | Latest merged backend/API/Web3 wallet and settlement line |
+| Existing design reference captured | IMPLEMENTED | `origin/feat/two-user-session` | `263c9d3859c5979c51b418542e953637339e6583` | Screenshot baseline not captured in Phase 1 |
+| Auth | IMPLEMENTED | `backend/libs/auth/firebase.py`, `/api/v1/me` | Audit complete | Tests pending in this phase |
+| Product API | IMPLEMENTED | `backend/apps/api/routes.py` | `docs/API_COMPATIBILITY_MATRIX.md` | Canonical Match Run aliases added |
+| Firestore/indexes | IN_PROGRESS | `backend/libs/repositories/firestore_paths.py`, `firestore.indexes.json` | `docs/FIRESTORE_MIGRATION_PLAN.md` | Creator discovery composite index config added; rules/vector verification pending |
+| Async worker | IN_PROGRESS | `backend/apps/api/routes.py` | Phase 5 tests | Canonical durable events/idempotency added; external worker pending |
+| Gemini analysis | IN_PROGRESS | `backend/libs/ai/gemini.py` | Audit complete | Final URL analysis flow pending |
+| Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
+| A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a`, `backend/libs/a2a/registry.py` | Phase 6 focused tests | Registry lookup, AgentCard validation, service auth, dedupe, terminal guard, task event persistence covered |
+| Agreement | IN_PROGRESS | `backend/apps/api/routes.py`, `backend/libs/domain/hashing.py` | Audit complete | Final one-milestone shape pending |
+| Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Audit complete | Devnet path exists; no Phase 1 on-chain action |
+| Cloud Run | IN_PROGRESS | `infra/cloudbuild/*.yaml` | Audit complete | No deployment in Phase 1 |
 
-Demo accounts represented in fixture data:
+## 2. Capability Matrix
 
-- `test1@knot.demo`: Brand 1, 루미에르 뷰티
-- `test2@knot.demo`: Brand 2, 바삭데이
-- `test3@knot.demo`: Creator 1, 민지의 뷰티룸
-- `test4@knot.demo`: Creator 2, 하루한입
-- Demo password hint remains `0000`; Firebase Auth accounts must still be created or mapped separately for real Firebase login.
+| Capability | UI | API | Firestore | External/A2A/On-chain | E2E | Evidence |
+|---|---|---|---|---|---|---|
+| Brand card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs added; visual card flow still pending |
+| Creator card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs and Phase 3 publish API added; card UX wiring pending |
+| Creator Agent publish/pause | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | N/A | NOT_STARTED | Phase 7 Creator Dashboard control calls owner-scoped publish/pause/resume APIs |
+| Discovery projection/index | N/A | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 4 Product API matching consumes discovery projections with bounded query |
+| Deterministic ranking | N/A | IMPLEMENTED | IN_PROGRESS | N/A | NOT_STARTED | Phase 4 public score components and deterministic tie-breakers added |
+| Match Run orchestration | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 5 idempotency, cancel, state history, and canonical events added; worker pending |
+| Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
+| A2A counteroffer | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 6 registry-validated HTTP A2A counter/accept path tested |
+| Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
+| pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
+| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 9 fake-gateway/local tests verify amount/hash/receipt binding; real devnet lock not executed because on-chain action requires approval |
+| Evidence verification | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 requires funded escrow, validates external https source URLs, stores source digest, records verification results, and blocks failed evidence |
+| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 release requires passed evidence, records evidence/source digest on settlement and timeline, and prevents duplicate payout |
+| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
+| Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
+| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Phase 11 local QA passed; Cloud Run deploy/live smoke requires explicit approval |
 
-Verification:
+## 3. Phase 1 Changes
 
-```text
-cd frontend && npm run test
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run build
-../.venv/bin/python -m pytest backend/tests
-.venv/bin/python scripts/seed_demo.py --target memory
-```
+- Updated `AGENTS.md` to use `docs/KNOT_PRODUCT_MASTER_SPEC_FINAL.md`.
+- Added final canonical status enums and `UsageRights` compatibility helpers.
+- Added canonical Firestore collection/path constants.
+- Added canonical Product API aliases:
+  - `POST /api/v1/promotions/{promotion_id}/match-runs`
+  - `GET /api/v1/match-runs/{match_run_id}/timeline`
+  - `GET /api/v1/match-runs/{match_run_id}/events`
+- Created:
+  - `docs/INTEGRATION_AUDIT.md`
+  - `docs/API_COMPATIBILITY_MATRIX.md`
+  - `docs/FIRESTORE_MIGRATION_PLAN.md`
+  - `.agent/execplans/01-final-compatibility-domain.md`
 
-Results:
+## 4. Phase 2 Changes
 
-- Frontend tests: 17 passed.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend production build: passed.
-- Backend pytest: 94 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
-- Demo memory seed: 40 documents loaded with full business-flow fixture data.
+- Added authenticated onboarding state APIs:
+  - `GET /api/v1/onboarding`
+  - `PATCH /api/v1/onboarding`
+- Added authenticated analysis APIs:
+  - `POST /api/v1/analyses/product`
+  - `POST /api/v1/analyses/creator-profile`
+  - `GET /api/v1/analyses/{analysisId}`
+  - `POST /api/v1/analyses/{analysisId}:confirm`
+  - `POST /api/v1/onboarding/brand/analyze-source`
+- Added `analysisJobs` and `onboardingSessions` path helpers.
+- Added typed frontend API client methods.
+- Added tests for owner scoping, idempotent analysis, confirmation, and unsafe URL rejection.
 
-Not performed:
+## 5. Phase 3 Changes
 
-- Firestore reset/seed was not executed because it is destructive demo-environment data work.
-- Cloud Run deployment was not executed in this local verification pass.
-- Real Solana claim/release was not executed; settlement UI remains honest about wallet/claim readiness.
+- Added authenticated Creator Agent control APIs:
+  - `GET /api/v1/creator/agent`
+  - `POST /api/v1/creator/agent:publish`
+  - `POST /api/v1/creator/agent:pause`
+  - `POST /api/v1/creator/agent:resume`
+- New Creator Agent writes include publication, accepting-offers, availability, and capacity fields.
+- Publishing/pause/resume writes `creatorDiscoveryProfiles/{creatorId}` through a shared public projection builder.
+- Added `firestore.indexes.json` composite index source configuration for Creator discovery query families.
+- Added `scripts/backfill_creator_discovery_profiles.py`; it is dry-run by default and was not executed against live Firestore.
+- Added typed frontend API client methods for Creator Agent control.
+- Added tests for projection privacy, owner mismatch rejection, dry-run backfill, and idempotent backfill replay.
 
-## MVP Frontend Auth Dashboard QA Summary
+## 6. Phase 4 Changes
 
-Status: `COMPLETED`
+- Added `CreatorDiscoveryRepository` and Firestore-backed bounded query implementation.
+- Added repository `query_raw_documents(..., limit=...)` primitive for in-memory and Firestore stores.
+- Updated Product API Match Run start routes to query `creatorDiscoveryProfiles` instead of scanning all `creatorProfiles`.
+- Added deterministic public ranking components:
+  - `semanticMoodFit`
+  - `categoryAudienceFit`
+  - `formatFit`
+  - `scheduleFit`
+  - `coarseBudgetFit`
+  - `reliabilityFit`
+- Candidate snapshots now store score components, ranking/index/profile version fields, safe explanation facts, and query metrics.
+- Demo seed explicitly writes public discovery projections for active seeded Creators.
+- Added no-scan and bounded query tests.
 
-Implemented:
+## 7. Phase 5 Changes
 
-- Added global frontend auth state helpers for loading, authenticated, and unauthenticated header states.
-- Header now shows login/signup for logged-out users and dashboard/mypage/logout for logged-in users.
-- Dashboard links resolve by verified account role.
-- Route guards preserve a safe redirect path for unauthenticated users.
-- Firebase Google sign-in uses a singleton `GoogleAuthProvider` and `signInWithPopup`.
-- Firebase Auth errors now map to user-facing Korean messages.
-- Added `docs/FIREBASE_AUTH_SETUP.md` for Google provider and authorized-domain setup.
-- Brand dashboard now centers on Promotions instead of Agent lists.
-- Added `/brand/promotions` and `/brand/negotiations/{negotiationId}` resource pages.
-- Added `/creator/offers` and `/creator/agreements` resource pages.
-- Promotion detail separates overview, negotiation records, contracted creators, and escrow/milestone state.
-- Agreement detail shows final terms, escrow amounts, and milestone state from Agreement terms.
-- Creator dashboard separates Agent negotiation history, agreed negotiations, and milestone activity.
-- Added A2A negotiation visualizer driven by stored negotiation messages.
-- Added URL/PDF source analysis contract for Brand Promotion creation; failed API analysis falls back only to an explicit `demo` draft.
-- MVP UI does not expose new Agent creation; one Brand/Creator Agent per account remains the surfaced model.
+- Added `matchRuns/{runId}/events/{eventId}` path helper and canonical run events.
+- Match Run starts now write ordered state events:
+  - `MATCH_RUN_READY`
+  - `MATCH_RUN_DISCOVERING`
+  - `MATCH_RUN_RANKING`
+  - `MATCH_RUN_SELECTING`
+  - `MATCH_RUN_COMPLETED`
+- Match Run starts accept optional `Idempotency-Key` and replay the same run for duplicate starts.
+- Added active non-terminal run guard for a Promotion.
+- Added `POST /api/v1/match-runs/{match_run_id}:cancel` with terminal-state guard.
+- Added `matchRuns` active lookup index source configuration.
 
-Verification:
+## 8. Phase 6 Changes
 
-```text
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-```
+- Added `backend/libs/a2a/registry.py` for public Creator Agent routing projections.
+- Seed and Creator publish/pause write `agentRegistry/{agentId}` entries.
+- Product API negotiation start requires registry lookup before A2A send.
+- HTTP A2A AgentCard is validated for selected tenant, protocol binding, protocol version, and advertised negotiation skill when present.
+- Product API persists ordered `a2aTasks/{taskId}/events` alongside task/message/artifact documents.
+- Focused tests verify registry privacy and task event persistence.
 
-Current fixture/demo boundaries:
+## 9. Phase 7 Changes
 
-- Brand source analysis uses Product API when available. If unavailable, the frontend marks the generated draft as `demo`.
-- Existing mock data source remains available only when `NEXT_PUBLIC_KNOT_DATA_MODE=mock` is explicitly selected.
+- Added frontend Product API client methods for:
+  - `GET /api/v1/match-runs/{match_run_id}/events`
+  - `GET /api/v1/negotiations/{negotiation_id}/events`
+- Extended frontend ViewModels with canonical run events, run status, last event time, and sanitized Technical Proof items.
+- Brand Dashboard now includes an Agent Control Room card:
+  - `탐색·협상 시작` calls Product API only.
+  - Candidate cards are rendered from stored candidate snapshots.
+  - Replay is rendered from stored Match Run events, not timers.
+  - Technical Proof is collapsed by default.
+- Creator Dashboard now includes:
+  - `제안 받기 ON/OFF` control wired to Creator Agent publish/pause/resume APIs.
+  - Recent negotiation replay loaded from the same canonical Match Run event stream.
+- Added frontend tests proving API mode reads canonical Match Run event replay and proof through Product API routes.
 
-## Phase 0 Audit Summary
+## 10. Phase 8 Changes
 
-This status file records the repository audit from `prompts/00_REPOSITORY_AUDIT.md`.
-No application code was changed during the audit.
+- Added pay.sh/x402 verification policy settings:
+  - `PAYSH_QUOTE_AMOUNT_USDC`
+  - `PAYSH_MAX_CALL_AMOUNT_USDC`
+  - `PAYSH_RUN_SPEND_CAP_USDC`
+  - `PAYSH_DAILY_SPEND_CAP_USDC`
+  - `PAYSH_ALLOWED_RESOURCE_PREFIXES`
+  - `PAYSH_FAILURE_POLICY`
+- Match Run paid verification now validates allowlist and configured quote/caps before invoking `pay fetch`.
+- pay.sh operations use a deterministic operation ID for the Match Run, selected Creator Agent, resource, and purpose; duplicate idempotent Match Run starts do not call pay.sh twice.
+- `paymentOperations` records every pay.sh decision, including disabled/skipped paths.
+- `transactionReceipts` records settled/failed pay.sh attempts with `paymentType: PAYSH_X402` and `network: pay.sh:{mode}`; no blockchain signature is fabricated.
+- `API_PAYMENT` timeline data now carries quote, spend cap, result digest, score impact metadata, receipt ID, external receipt ID, and continuation policy.
+- No real pay.sh call was executed in this environment; `tests/test_paysh_sandbox.py` skipped because the configured sandbox prerequisites were unavailable.
 
-Read:
+## 11. Phase 9 Changes
 
-- `AGENTS.md`
-- `PLANS.md`
-- `prompts/00_REPOSITORY_AUDIT.md`
-- `docs/00_DOCUMENT_INDEX.md`
-- `docs/01_PRODUCT_PRD.md`
-- `docs/02_SCOPE_AND_GLOSSARY.md`
-- `docs/03_INFORMATION_ARCHITECTURE_AND_ROUTES.md`
-- `docs/12_MIGRATION_AND_CUTOVER.md`
-- `docs/13_TEST_AND_ACCEPTANCE.md`
+- `build_initial_terms` now creates the MVP settlement schedule:
+  - one `content` milestone;
+  - `trigger: contentLiveVerified`;
+  - `releasePct: 100`.
+- Agreement creation recomputes canonical `termsHash` and rejects A2A Artifact hash mismatch with `TERMS_HASH_MISMATCH`.
+- Agreement documents now store `hashAlgorithm: sha256` and `hashVersion: knot.agreement-terms.v1`.
+- Agreement milestone subdocuments are written from the canonical one-milestone terms.
+- Escrow release idempotency now checks an existing settlement before rejecting a completed aggregate, so duplicate release requests with the same key return the original receipt.
+- Frontend fixture milestone UI was updated away from legacy 30/70 examples.
+- Web3 Gateway build/unit/lint passed. No live devnet transaction was submitted in this phase.
 
-Created:
+## 12. Phase 10 Changes
 
-- `.agent/execplans/00-reboot-audit.md`
-- `docs/IMPLEMENTATION_STATUS.md`
+- Evidence submission now requires a funded Agreement escrow with `status: LOCKED` and a confirmed `lockSignature`.
+- Evidence submitter authorization is checked before escrow state and source URL validation.
+- Evidence source URLs are normalized through the external-https URL guard and stored with a `sha256:` `sourceDigest`.
+- Duplicate evidence submissions for the same Agreement milestone are rejected with `EVIDENCE_ALREADY_SUBMITTED`.
+- Evidence verification persists a separate `verificationResults/{id}` document with provider, observations, policy decision, status, and source digest.
+- Settlement release now requires a passed evidence document and stores `evidenceId` plus `sourceDigest` on the settlement, released milestone, and `MILESTONE_RELEASED` timeline event.
+- Failed evidence remains persisted but does not authorize release or create a settlement.
+- No live devnet release transaction was submitted in this phase because on-chain actions require explicit approval.
 
-## Phase 1 Auth Summary
+## 13. Phase 11 Changes
 
-Status: `COMPLETED_FOR_APPROVED_MILESTONE`
+- Final local QA matrix was run across backend, frontend, and Web3 Gateway.
+- A tracked-file secret pattern scan found no matches for the configured high-risk token/key patterns.
+- No Cloud Run deployment, IAM/Secret change, wallet funding, program deployment, or on-chain transaction was executed.
+- No final live two-window E2E was claimed because deployment and devnet signatures remain approval-gated.
+- README was not edited in this phase because it already has unrelated local changes outside this phase.
 
-Implemented from `prompts/01_AUTH_AND_REAL_ACCOUNT.md`:
-
-- Added backend Firebase ID token verification with explicit `KNOT_AUTH_MODE`.
-- Added explicit emulator token mode for local/test only.
-- Added authenticated current-user endpoints:
-  - `GET /api/v1/me`
-  - `POST /api/v1/me/role`
-  - `POST /api/v1/me/brand-profile`
-  - `POST /api/v1/me/creator-profile`
-  - `POST /api/v1/logout/revoke`
-- First verified `/me` request now idempotently creates or updates `users/{uid}` with schema-version-2 fields.
-- Role and profile creation derive identity from the verified Firebase UID; no frontend UID is accepted on the new path.
-- Brand and Creator profile creation persist `ownerUid`.
-- Frontend login/signup now use Firebase Auth client helpers instead of local demo accounts.
-- Frontend API client attaches the current Firebase ID token.
-- Next API proxy forwards `Authorization`.
-- Firebase client and backend auth env vars were documented in `.env.example` and `backend/.env.example`.
-
-Verification:
-
-```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests/test_api_auth.py
-cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_health_apps.py tests/test_api_onboarding.py
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
-```
-
-Results:
-
-- Backend Ruff: passed.
-- Backend selected pytest: 9 passed, 1 Starlette/httpx deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 10 passed.
-- Frontend production build: passed.
-
-Remaining after Phase 1:
-
-- Existing legacy `POST /api/v1/users:bootstrap`, `POST /api/v1/brands:onboard`, and `POST /api/v1/creators:onboard` remain for compatibility but are no longer used by the new login/signup/onboarding path.
-- Dashboard/resource APIs are not yet ownership-scoped; that belongs to later resource-route phases.
-- Existing workspace pages still use some local UI session values for convenience; server authorization is established only for the new current-user endpoints.
-- Real Firebase project/web-app config must be supplied through environment variables before local production-mode sign-in works.
-- No deployment, IAM, Secret Manager, data migration, or destructive Firestore work was performed.
-
-## Phase 2 Onboarding And Dashboard Summary
-
-Status: `COMPLETED`
-
-Implemented from `prompts/02_ONBOARDING_AND_DASHBOARDS.md`:
-
-- Brand onboarding is now one compact page for stable Brand profile data only.
-- Brand onboarding excludes product name, Promotion budget, deliverables, usage rights, and deadline.
-- Creator onboarding is now one compact page for Creator profile plus basic private Agent criteria.
-- Brand and Creator onboarding support category multi-select plus custom category input.
-- Brand and Creator profile writes go through authenticated Product API endpoints and persist `ownerUid`.
-- Completed Brand users redirect to `/brand`.
-- Completed Creator users redirect to `/creator`.
-- `/brand` renders an authenticated Brand dashboard.
-- `/creator` renders an authenticated Creator dashboard.
-- Added `GET /api/v1/brand/dashboard`.
-- Added `GET /api/v1/creator/dashboard`.
-- Dashboard API queries are scoped by the authenticated user's Brand ownership or Creator participation.
-- Frontend guarded routes use `/api/v1/me` account context and expose loading, unauthenticated, forbidden, not-found, and recoverable error states.
-- API mode dashboard reads do not use hardcoded user IDs, global latest records, Glow Bar fixtures, or successful mock fallback.
-
-Verification:
-
-```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_health_apps.py tests/test_api_onboarding.py
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
-```
-
-Results:
-
-- Backend Ruff: passed.
-- Backend selected pytest: 12 passed, 1 Starlette/httpx deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 11 passed.
-- Frontend production build: passed.
-
-Remaining after Phase 2:
-
-- Resource routes are not migrated yet; legacy step routes still exist.
-- Promotion creation still belongs to Phase 3.
-- Real HTTP A2A, escrow, and dev admin are not implemented in this phase.
-- Full server-cookie middleware is not implemented; current route guards are Firebase-client based and call `/api/v1/me`.
-
-## Phase 3 Resource Routes And Real Data Summary
-
-Status: `COMPLETED`
-
-Implemented from `prompts/03_RESOURCE_ROUTES_AND_REAL_DATA.md`:
-
-- Added `/brand/promotions/new`.
-- Added `/brand/promotions/{promotionId}`.
-- Added `/brand/agreements/{agreementId}`.
-- Added `/creator/offers/{negotiationId}`.
-- Replaced `/creator/agreements/{agreementId}` with authenticated resource-backed detail.
-- Added authenticated Brand Promotion create/list/detail/activity Product API routes.
-- Added authenticated Brand Agreement list/detail Product API routes.
-- Added authenticated Creator Offer list/detail Product API routes.
-- Added authenticated Creator Agreement list/detail Product API routes.
-- Promotion fields now belong in Promotion creation rather than Brand onboarding.
-- Legacy demo-step routes redirect instead of rendering the old active implementation.
-- Removed active Creator brand-detail fixture dependency by redirecting `/creator/brands/{brandId}` to `/creator`.
-- Resource APIs use verified Firebase account context and ownership/participation checks.
-
-Verification:
+## 14. Query-Bound Proof
 
 ```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd backend && ../.venv/bin/python -m pytest tests/test_api_auth.py tests/test_api_dashboards.py tests/test_api_resource_routes.py tests/test_health_apps.py
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
+Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
+Public hard-filter query: agentStatus, acceptingOffers, availability, capacityAvailable, countryCode, categoryKeys, primaryFormatKey, nextAvailableAt
+Vector index: not implemented or deployed yet; semantic fit is deterministic neutral value
+Top K: discovery limit 100 enforced by interface
+Maximum detailed profile reads: Top 20 enforced by detail_candidates()
+Maximum paid tool calls: one selected creator path in the current synchronous MVP, with configured per-call/per-run/daily caps and idempotent operation reuse
+Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-Results:
+## 15. Test Evidence
 
-- Backend Ruff: passed.
-- Backend selected pytest: 12 passed, 1 Starlette/httpx deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 12 passed.
-- Frontend production build: passed.
+| Command/suite | Result | Commit | Date | Artifact/log |
+|---|---|---|---|---|
+| Backend Phase 1 focused tests | VERIFIED: 20 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_domain_models.py tests/test_api_promotions.py` from `backend` |
+| Backend full pytest | VERIFIED: 97 passed, 5 skipped, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Backend mypy | VERIFIED: no issues in 47 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
+| Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
+| Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 2 onboarding API focused tests | VERIFIED: 5 passed, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_onboarding.py` from `backend` |
+| Phase 2 backend full pytest | VERIFIED: 100 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 2 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 2 backend mypy | VERIFIED: no issues in 47 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 2 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 2 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 2 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 2 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 3 backend focused tests | VERIFIED: 7 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_dashboards.py tests/test_creator_discovery.py` from `backend` |
+| Phase 3 backend full pytest | VERIFIED: 103 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 3 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 3 backend mypy | VERIFIED: no issues in 48 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 3 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 3 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 3 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 3 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 3 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
+| Phase 3 backfill script syntax | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m py_compile scripts/backfill_creator_discovery_profiles.py` |
+| Phase 4 backend focused tests | VERIFIED: 30 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_creator_discovery.py tests/test_firestore_repositories.py tests/test_firestore_adapter.py tests/test_matching.py` from `backend` |
+| Phase 4 backend full pytest | VERIFIED: 106 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 4 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 4 backend mypy | VERIFIED: no issues in 49 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 4 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 4 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 4 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 4 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 4 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
+| Phase 5 backend focused tests | VERIFIED: 27 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_firestore_repositories.py` from `backend` |
+| Phase 5 backend full pytest | VERIFIED: 108 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 5 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 5 backend mypy | VERIFIED: no issues in 49 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 5 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 5 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 5 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 5 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 5 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
+| Phase 6 backend focused tests | VERIFIED: 38 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_dashboards.py tests/test_api_a2a_http_integration.py tests/test_a2a_negotiation.py` from `backend` |
+| Phase 6 backend full pytest | VERIFIED: 108 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 6 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 6 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 6 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 6 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 6 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 6 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 7 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 7 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 7 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 7 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 8 backend focused tests | VERIFIED: 35 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py` from `backend` |
+| Phase 8 backend full pytest | VERIFIED: 111 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 8 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 8 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 8 pay.sh sandbox smoke | SKIPPED | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_paysh_sandbox.py` from `backend`: 1 skipped |
+| Phase 8 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 8 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 8 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 8 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 9 backend focused tests | VERIFIED: 52 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py tests/test_domain_models.py` from `backend` |
+| Phase 9 backend full pytest | VERIFIED: 112 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 9 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 9 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 9 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 9 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 9 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 9 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 9 Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
+| Phase 9 Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
+| Phase 9 Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 10 backend focused tests | VERIFIED: 40 passed, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py` from `backend` |
+| Phase 10 backend full pytest | VERIFIED: 116 passed, 5 skipped, 3 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 10 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 10 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 11 backend full pytest | VERIFIED: 116 passed, 5 skipped, 3 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 11 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 11 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 11 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 11 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 11 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 11 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 11 Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
+| Phase 11 Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
+| Phase 11 Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 11 tracked-file secret pattern scan | VERIFIED: no matches | working tree | 2026-07-31 | `git grep` over tracked files for high-risk token/key patterns |
+| Phase 11 Cloud Run deploy/live smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for deployment/IAM/Secret changes |
+| Phase 11 devnet lock/release smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for wallet funding/on-chain transactions |
 
-Remaining after Phase 3:
-
-- Real HTTP A2A negotiation internals are not implemented yet.
-- Agreement creation still depends on the existing local/A2A orchestration path until Phase 4.
-- Escrow execution is still Phase 5.
-- Some old component code remains unused and will be removed during Phase 7 cleanup.
-
-## Phase 4 Real HTTP A2A Summary
-
-Status: `COMPLETED`
-
-Implemented from `prompts/04_REAL_A2A.md`:
-
-- Product API discovers the Creator A2A AgentCard before HTTP negotiation.
-- Product API sends A2A HTTP requests with `A2A-Version: 1.0`, `application/a2a+json`, and bearer service auth when `KNOT_A2A_SERVICE_TOKEN` is configured.
-- Creator A2A message and task APIs enforce the same service token when configured.
-- Initial Brand OFFER is sent without `taskId`.
-- Creator A2A Service creates the Task and returns `taskId`.
-- Creator COUNTER responses are evaluated by deterministic Brand policy.
-- If Brand policy allows the COUNTER, Product API sends ACCEPT on the same `contextId` and `taskId`.
-- Creator completes the Task and returns an Agreement Artifact.
-- Product API persists Negotiation, Messages, Decisions, A2A Task, A2A Artifact, Agreement, Milestones, and sanitized Promotion Activity.
-- New Negotiation documents redact Creator private policy snapshots instead of persisting raw Creator policy values.
-- HTTP failure returns an honest error and does not create a fake Agreement.
-
-Verification:
+## 16. Latest Verified E2E
 
 ```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py
-cd backend && ../.venv/bin/python -m pytest tests/test_a2a_negotiation.py tests/test_api_promotions.py tests/test_api_a2a_http_integration.py tests/test_api_resource_routes.py tests/test_health_apps.py
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
+Commit:
+Frontend revision:
+Product API revision:
+A2A revision:
+Web3 revision:
+Live URL:
+Verified at:
+Verifier:
+Brand test account:
+Creator test account:
+Match Run ID:
+Negotiation ID:
+A2A Task ID:
+Agreement ID:
+Escrow lock signature:
+Settlement release signature:
 ```
 
-Results:
+No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 11.
 
-- Backend Ruff: passed.
-- Backend selected pytest: 31 passed, 1 Starlette/httpx deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 12 passed.
-- Frontend production build: passed.
-
-Remaining after Phase 4:
-
-- Escrow lock/release remains Phase 5.
-- Dev Admin remains Phase 6.
-- Legacy mock/dead-code cleanup remains Phase 7.
-- `KNOT_CREATOR_A2A_MODE=local` still exists for local tests and development; API mode must use `http` when exercising the real service boundary.
-
-## Phase 5 Devnet Escrow Summary
-
-Status: `COMPLETED_WITH_EXTERNAL_BLOCKERS`
-
-Implemented from `prompts/05_ESCROW.md`:
-
-- Product API escrow lock/release now requires the restricted Web3 Gateway.
-- Product API no longer treats missing gateway or simulated/non-confirmed gateway receipts as successful escrow execution.
-- Lock success requires a `CONFIRMED` gateway receipt with a non-empty Solana signature.
-- Release success requires a `CONFIRMED` gateway receipt with a non-empty Solana signature.
-- Product API validates receipt Agreement ID, Escrow ID, milestone ID when applicable, amount, mint, program, network, and `termsHash`.
-- Gateway unavailable or invalid receipt failures persist `FAILED` TransactionReceipt and PaymentOperation records.
-- Canonical Agreement terms and deterministic `termsHash` remain the lock/release binding.
-- Creator evidence submission and deterministic verification remain the release gate.
-- Duplicate lock and duplicate release remain idempotent.
-- Frontend escrow action copy now states that success requires a confirmed Solana Devnet signature.
-
-Verification:
+## 17. Known Blockers
 
 ```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd backend && ../.venv/bin/python -m pytest tests/test_api_escrow.py tests/test_settlement.py tests/test_domain_models.py tests/test_api_promotions.py tests/test_api_resource_routes.py tests/test_health_apps.py
-cd web3/gateway && npm run build
-cd web3/gateway && npm run lint
-cd web3/gateway && npm run test
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
+BLOCKER: External Match Run worker dispatch is not implemented.
+IMPACT: Current run has durable records/events but still completes synchronously in the request.
+EVIDENCE: Phase 5 adds canonical events/idempotency/cancel, but no queue or worker claim process is present.
+OWNER: Backend/Agent phase.
+NEXT ACTION: Add worker dispatch/claim/retry or document synchronous MVP limit before final E2E.
+WORKAROUND FOR DEMO (truthfully labeled): Existing synchronous path can be used only as legacy behavior, not final proof.
 ```
-
-Results:
-
-- Backend Ruff: passed.
-- Backend selected pytest: 39 passed, 1 Starlette/httpx deprecation warning.
-- Web3 Gateway build: passed.
-- Web3 Gateway lint: passed.
-- Web3 Gateway tests: 9 passed, 1 Node `punycode` deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 12 passed.
-- Frontend production build: passed.
-
-External blocker:
-
-- Devnet smoke was not run because the current process does not have safe existing devnet signing configuration: `KNOT_WEB3_SIGNING_MODE`, `KNOT_ESCROW_PROGRAM_ID`, `KNOT_USDC_MINT`, `SOLANA_RPC_URL`, `KNOT_BRAND_KEYPAIR_JSON`, `KNOT_CREATOR_KEYPAIR_JSON`, and `KNOT_AGENT_KEYPAIR_JSON` are missing.
-- No wallet funding, Secret Manager, IAM, program deployment, or on-chain transaction was performed.
-
-Remaining after Phase 5:
-
-- Dev Admin remains Phase 6.
-- Final mock/dead-code cleanup and safe E2E remain Phase 7.
-- Web3 Gateway still supports explicit local simulated mode for local boundary tests; Product API rejects that mode as escrow success.
-
-## Phase 6 Protected Dev Admin Summary
-
-Status: `COMPLETED`
-
-Implemented from `prompts/06_DEV_ADMIN.md`:
-
-- Added `KNOT_DEV_ADMIN_ENABLED`.
-- Added `KNOT_DEV_ADMIN_ALLOWLIST`.
-- Backend dev-admin authorization now requires verified Firebase auth plus `admin: true` custom claim or strict server allowlist.
-- Added protected `/api/v1/dev-admin/overview`.
-- Added protected user search/detail endpoints.
-- Added protected user disable/enable actions with audit events.
-- Added deletion dry run.
-- Added demo-only confirmed deletion job that redacts disposable demo user projection and preserves financial/audit records.
-- Added deletion job lookup.
-- Added protected Commerce, Agents & A2A, Escrow, and Audit projections.
-- Added scoped demo seed/reset using `seedBatchId` and `environment=demo`.
-- Frontend `/dev/admin` now calls the protected Product API overview with Firebase bearer auth.
-
-Verification:
 
 ```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd backend && ../.venv/bin/python -m pytest tests/test_api_dev_admin.py tests/test_api_auth.py tests/test_health_apps.py tests/test_api_resource_routes.py
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
+BLOCKER: Reservation and sequential fallback are not implemented.
+IMPACT: Candidate conflict/reject/expire does not yet advance through three ranked candidates automatically.
+EVIDENCE: Phase 6 hardens selected-candidate A2A only; no reservation lease collection or retry loop exists.
+OWNER: Backend/Agent phase.
+NEXT ACTION: Add reservation/concurrency or document MVP limitation before final E2E.
+WORKAROUND FOR DEMO (truthfully labeled): Current path negotiates one selected Creator Agent.
 ```
-
-Results:
-
-- Backend Ruff: passed.
-- Backend selected pytest: 15 passed, 1 Starlette/httpx deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 12 passed.
-- Frontend production build: passed.
-
-Remaining after Phase 6:
-
-- Final E2E and cleanup remains Phase 7.
-- Firebase Admin SDK disable/delete calls are not exercised in automated tests; emulator-mode tests verify Firestore state transitions and authorization.
-
-## Phase 7 Final E2E And Cleanup Summary
-
-Status: `COMPLETED_WITH_EXTERNAL_BLOCKERS`
-
-Implemented from `prompts/07_FINAL_E2E_AND_CLEANUP.md`:
-
-- README rewritten for the current KNOT v1 architecture, environment, checks, and deployment notes.
-- Removed stale README claim that escrow success is simulated.
-- Changed legacy bootstrap `authProvider` label from `local-demo` to `legacy-bootstrap`.
-- Removed misleading active mock fixture names and fake devnet signature placeholders from frontend mock data.
-- Updated mock-data test IDs after fixture cleanup.
-- Updated this implementation status to replace stale Phase 0 audit gaps with current Phase 7 status.
-- Confirmed legacy route files remain redirect-only compatibility shims.
-
-Verification:
 
 ```text
-cd backend && ../.venv/bin/python -m ruff check apps libs tests
-cd backend && ../.venv/bin/python -m pytest tests
-cd web3/gateway && npm run build
-cd web3/gateway && npm run lint
-cd web3/gateway && npm run test
-cd frontend && npm run typecheck
-cd frontend && npm run lint
-cd frontend && npm run test
-cd frontend && npm run build
+BLOCKER: Firestore rules and vector discovery index are not verified.
+IMPACT: Final bounded/vector discovery and security rules cannot be verified yet.
+EVIDENCE: Phase 4 uses composite discovery indexes in source, but no firestore.rules or deployed vector index was verified.
+OWNER: Backend/Infra phase.
+NEXT ACTION: Add rules and managed vector index verification in an infra phase.
+WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
-
-Results:
-
-- Backend Ruff: passed.
-- Backend full pytest: 91 passed, 5 skipped, 1 Starlette/httpx deprecation warning.
-- Web3 Gateway build: passed.
-- Web3 Gateway lint: passed.
-- Web3 Gateway tests: 9 passed, 1 Node `punycode` deprecation warning.
-- Frontend typecheck: passed.
-- Frontend lint: passed.
-- Frontend tests: 12 passed.
-- Frontend production build: passed.
-
-Remaining allowed mock inventory:
-
-- `frontend/src/product/mockData.ts`: allowed only in explicit `NEXT_PUBLIC_KNOT_DATA_MODE=mock`.
-- `backend/fixtures/*.json`: seed/test fixtures.
-- `web3/gateway` simulated signing mode: allowed only for gateway boundary tests; Product API rejects simulated receipts as escrow success.
-- Gemini fallback text: non-authoritative display fallback only; deterministic policy still controls decisions and payments.
-
-External blockers:
-
-- Solana devnet smoke remains blocked by missing safe existing signer/RPC/program configuration.
-- No deployment, IAM, Secret Manager, wallet funding, program deployment, mainnet action, or real-value transfer was performed.
-
-## Current Product Gap
-
-Target MVP:
 
 ```text
-Real authentication
--> one-page role onboarding
--> role dashboard
--> Promotion / Offer
--> real A2A negotiation
--> Agreement
--> Solana devnet Escrow
+BLOCKER: Live devnet escrow release signature is not verified.
+IMPACT: Settlement release is verified only through fake-gateway/local tests, not a live Solana devnet transaction.
+EVIDENCE: Phase 10 adds evidence-gated release tests but does not submit an on-chain transaction without approval.
+OWNER: Web3/Payments phase.
+NEXT ACTION: Run an approved devnet lock/release smoke with funded test wallet and record the signature/Explorer URL.
+WORKAROUND FOR DEMO (truthfully labeled): Use fake-gateway/local evidence-gated release proof only.
 ```
 
-Current implementation is still partially demo-oriented beyond the completed Auth foundation:
-
-- Login/signup use Firebase Auth and `/api/v1/me` for account context.
-- Current primary Brand and Creator dashboards and resource pages use authenticated route guards.
-- Primary Brand and Creator resource reads are ownership or participation scoped.
-- Legacy step pages redirect, but some unused legacy component code remains until Phase 7 cleanup.
-- Real A2A HTTP negotiation is implemented and tested through an actual localhost service boundary.
-- Escrow lock/release requires confirmed gateway receipts; external devnet smoke is blocked by missing safe signing configuration.
-- Dev Admin backend APIs and protected frontend overview are implemented.
-
-## Repository Structure
-
-```text
-frontend/                 Next.js app
-backend/                  Product API, Creator Agent, shared Python libs
-web3/gateway/             TypeScript private transaction gateway
-programs/knot-escrow/     Anchor/Rust Solana program
-infra/cloudbuild/         Cloud Build configs
-scripts/                  deploy, seed, smoke helpers
-docs/                     current source-of-truth docs
-prompts/                  phase prompts
-.agent/execplans/         execution plans
-```
-
-## Auth And Session
-
-Status: `ADAPT`
-
-Observed files:
-
-- `frontend/src/product/ProductScreens.tsx`
-- `frontend/src/product/apiClient.ts`
-- `frontend/src/app/api/v1/[...path]/route.ts`
-- `backend/apps/api/routes.py`
-- `backend/apps/api/schemas.py`
-
-Phase 1 behavior:
-
-- Frontend login/signup use Firebase Auth email/password and Google sign-in helpers.
-- Frontend API calls attach a Firebase ID token via `ProductApiClient`.
-- Next proxy forwards the `Authorization` header to Product API.
-- Backend verifies ID tokens in `KNOT_AUTH_MODE=firebase`.
-- `KNOT_AUTH_MODE=emulator` supports explicit local/test emulator tokens.
-- `GET /api/v1/me` creates or updates `users/{uid}` with schema-version-2 account fields.
-- `POST /api/v1/me/role` records one role per account and creates a DRAFT Agent shell.
-- `POST /api/v1/me/brand-profile` and `/me/creator-profile` create owner-scoped profiles with `ownerUid`.
-
-Current status:
-
-- Primary role guards use Firebase client state and `/api/v1/me`.
-- Wrong-role and wrong-owner API 403 behavior is covered for current resource routes.
-- Promotion/Offer/Agreement resource reads are ownership or participation scoped.
-- Legacy bootstrap remains for compatibility only and is not used by the current login/signup path.
-
-## Routes
-
-Status: `IMPLEMENTED_WITH_LEGACY_REDIRECTS`
-
-Current active routes:
-
-```text
-/
-/login
-/signup
-/signup/brand
-/signup/creator
-/brand
-/brand/onboarding
-/brand/products/new
-/brand/negotiate
-/brand/result
-/brand/settlement
-/brand/me
-/brand/settings
-/creator
-/creator/onboarding
-/creator/criteria
-/creator/result
-/creator/agreements/{agreementId}
-/creator/me
-/creator/settings
-/dev/admin
-```
-
-Redirect-only legacy routes also exist:
-
-```text
-/brand/matching
-/creator/brands/{brandId}
-/creator/negotiate
-/creator/offers
-/creator/milestones
-```
-
-Current primary resource routes exist for Brand Promotion, Brand Agreement, Creator Offer, and Creator Agreement. Legacy step pages redirect and are retained only as compatibility shims until final product route polish.
-
-## Frontend Visual System
-
-Status: `KEEP` / `ADAPT`
-
-Keep:
-
-- `frontend/src/app/globals.css`
-- `frontend/src/app/layout.tsx`
-- `frontend/src/components/AgentCharacter.tsx`
-- `frontend/src/components/SquiggleFilters.tsx`
-- `frontend/src/lib/agentIdentity.ts`
-- `frontend/src/product/apiClient.ts`
-- `frontend/src/product/types.ts`
-
-Adapt:
-
-- `frontend/src/components/TopBar.tsx`
-- `frontend/src/product/ProductScreens.tsx`
-- `frontend/src/product/dataSource.ts`
-- `frontend/src/product/flow.ts`
-- `frontend/tests/product-flow.test.ts`
-
-Note: `DESIGN.md` is referenced by `AGENTS.md` but was not present in the current tree. The effective visual source is the current CSS/component system.
-
-## Mock, Fixture, Hardcoded, Timer, Fallback Audit
-
-Status: `REVIEWED`
-
-Frontend:
-
-- `frontend/src/product/mockData.ts`: allowed only in explicit `NEXT_PUBLIC_KNOT_DATA_MODE=mock`.
-- `frontend/src/product/ProductScreens.tsx`: fallback role session helpers are used only where a page lacks authenticated role context.
-- `frontend/src/product/apiClient.ts`: evidence submission helper uses a deterministic test URL only when the user presses the escrow action button; Phase 7 E2E records this as a demo input, not fake success.
-- `frontend/src/product/dataSource.ts`: API mode uses Product API resources; remaining mock `roleSessions` / `creatorCriteria` are display defaults for legacy helper views.
-- No `setTimeout` or `setInterval` paths were found in `frontend/src`.
-
-Backend:
-
-- `backend/apps/api/repository_factory.py`: memory mode auto-seeds fixtures.
-- `backend/apps/api/schemas.py`: `PromotionCreateRequest` defaults to `brand-001` and `brand-agent-001`.
-- `backend/libs/settings/config.py`: defaults to memory repository, local A2A, local web3, Gemini off.
-- `backend/libs/agents/demo_context.py`: in-memory creator policy contexts.
-- `backend/fixtures/*.json`: seed data for users, brands, creators, agents, policies, promotions.
-- `backend/apps/api/routes.py`: Gemini explanation/rationale fallbacks are acceptable only as non-authoritative display text.
-- `backend/apps/api/routes.py`: Product API now rejects missing/simulated Web3 Gateway receipts as escrow success and persists failures.
-
-Web3:
-
-- `web3/gateway/src/config.ts`: signing defaults to simulated unless `KNOT_WEB3_SIGNING_MODE=devnet`.
-- `web3/gateway/src/escrow.ts`: simulated lock/release remains local gateway boundary behavior only; Product API rejects it as successful escrow.
-
-## Firestore Ownership
-
-Status: `IMPLEMENTED_FOR_ACTIVE_RESOURCES`
-
-Current collections/path helpers exist in:
-
-- `backend/libs/repositories/firestore_paths.py`
-- `backend/libs/repositories/store.py`
-- `backend/libs/repositories/firestore_adapter.py`
-
-Current status:
-
-- Current-user path writes `users/{firebaseUid}` and schema-version-2 fields.
-- Brand/Creator profile creation writes `ownerUid`.
-- Authenticated Brand Promotion creation derives Brand context server-side.
-- Active dashboard/resource APIs enforce ownership or participation.
-- Legacy unscoped endpoints remain for compatibility and tests until a later full API cutover.
-
-## A2A
-
-Status: `IMPLEMENTED`
-
-Keep:
-
-- `backend/libs/a2a/models.py`
-- `backend/libs/a2a/client.py`
-- `backend/apps/creator_agent/main.py`
-- A2A Task/Message/Artifact persistence from Product API orchestration.
-
-Current status:
-
-- Product API supports actual HTTP A2A when `KNOT_CREATOR_A2A_MODE=http`.
-- HTTP A2A path is tested with AgentCard discovery, service auth, server-created Task, shared `contextId`/`taskId`, COUNTER, Brand ACCEPT, final Artifact, and Agreement creation.
-- Creator A2A resolves real Firestore `creatorAgentId` tenants when deployed with `KNOT_REPOSITORY_BACKEND=firestore`; seed demo tenants remain available only as explicit development fixtures.
-- Brand Promotion creation stores the submitted deadline as the initial posting window so creator lead-time policy can produce an Agreement instead of defaulting to immediate escalation.
-- Local `InMemoryA2ATaskStore` remains explicit test/development mode.
-- New negotiation documents redact Creator private policy snapshots.
-
-## Escrow And Web3
-
-Status: `IMPLEMENTED_WITH_EXTERNAL_BLOCKER`
-
-Keep:
-
-- Backend termsHash recomputation before lock.
-- Idempotency key requirement.
-- Evidence gate before release.
-- Gateway client boundary.
-- Gateway devnet signing path.
-- Anchor program workspace.
-
-Current status:
-
-- Product API requires confirmed Web3 Gateway receipts and non-empty Solana signatures for successful lock/release.
-- Gateway simulated mode remains explicit local/test mode only.
-- Devnet smoke remains blocked by missing safe signer/RPC/program configuration.
-
-## Dev Admin
-
-Status: `IMPLEMENTED`
-
-Current:
-
-- `/dev/admin` frontend calls protected Product API overview with Firebase bearer auth.
-- Backend dev-admin APIs require admin claim or allowlist.
-- User list/detail, disable/enable, deletion dry run, demo-only deletion job, scoped seed/reset, audit, commerce, agents, and escrow projections are implemented.
-- Confirmed receipts, settlements, payment operations, and audit records are retained.
-
-## Document Status
-
-Current source of truth:
-
-- `docs/00_DOCUMENT_INDEX.md`
-- `docs/01_PRODUCT_PRD.md`
-- `docs/02_SCOPE_AND_GLOSSARY.md`
-- `docs/03_INFORMATION_ARCHITECTURE_AND_ROUTES.md`
-- `docs/04_AUTH_ONBOARDING_DASHBOARD.md`
-- `docs/05_PAGE_SPEC.md`
-- `docs/06_DATA_MODEL.md`
-- `docs/07_API_CONTRACTS.md`
-- `docs/08_A2A_AGENT_RUNTIME.md`
-- `docs/09_ESCROW_AND_SETTLEMENT.md`
-- `docs/10_DEV_ADMIN.md`
-- `docs/11_SECURITY_AND_AUTHORIZATION.md`
-- `docs/12_MIGRATION_AND_CUTOVER.md`
-- `docs/13_TEST_AND_ACCEPTANCE.md`
-- `docs/14_CODEX_EXECUTION_GUIDE.md`
-- `docs/15_TOKEN_BUDGET_STRATEGY.md`
-
-Legacy tracked docs are already deleted in the current working tree and are classified as `ARCHIVE_DOC`. This audit does not restore or move them.
-
-## Verification
-
-Commands run:
-
-```text
-cd frontend && npm run test
-cd frontend && npm run typecheck
-cd backend && ../.venv/bin/python -m pytest tests/test_health_apps.py tests/test_api_onboarding.py tests/test_api_promotions.py tests/test_a2a_negotiation.py tests/test_api_escrow.py
-```
-
-Results:
-
-- Frontend tests: 9 passed.
-- Frontend typecheck: passed.
-- Backend selected tests: 39 passed.
-- Warning: Starlette/httpx deprecation warning from FastAPI test client.
-
-## Next Phase
-
-No next reboot phase remains in this plan. Remaining external action is safe Solana devnet smoke once signer/RPC/program configuration is provided and approved.
+## 18. Update Rule
+
+For each phase:
+
+1. audit or plan;
+2. implement;
+3. run checks;
+4. capture evidence/screenshots/IDs;
+5. commit;
+6. update this file;
+7. deploy only from verified commit.

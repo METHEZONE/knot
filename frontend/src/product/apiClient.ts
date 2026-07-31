@@ -40,6 +40,9 @@ export type ApiPromotion = {
     autoRelease?: boolean;
   };
   status: string;
+  productName?: string;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
 };
 
 export type ApiUser = {
@@ -206,6 +209,46 @@ export type BrandSourceAnalysisDraft = {
   };
 };
 
+export type AnalysisJob = {
+  analysisId: string;
+  ownerUid: string;
+  role: "BRAND" | "CREATOR";
+  analysisType: "PRODUCT" | "CREATOR_PROFILE";
+  status: "READY_FOR_CONFIRMATION" | "CONFIRMED" | string;
+  sourceUrl: string;
+  sourceDigest: string;
+  provider: string;
+  model: string | null;
+  fallbackReason: string | null;
+  draft: Record<string, unknown>;
+  confirmedFields: string[];
+};
+
+export type OnboardingSession = {
+  ownerUid: string;
+  role: "BRAND" | "CREATOR" | null;
+  status: "IN_PROGRESS" | "COMPLETED" | string;
+  currentCard: string;
+  completedCards: string[];
+  analysisJobId: string | null;
+  draft: Record<string, unknown>;
+  draftVersion: number;
+};
+
+export type CreatorAgentControl = {
+  agentId: string;
+  creatorId: string;
+  publicationStatus: "DRAFT" | "PUBLISHED" | "PAUSED" | "SUSPENDED" | string;
+  acceptingOffers: boolean;
+  availability: "AVAILABLE" | "RESERVED" | "NEGOTIATING" | "AT_CAPACITY" | "UNAVAILABLE" | string;
+  activeNegotiations: number;
+  maxConcurrentNegotiations: number;
+  activeCollaborations: number;
+  maxActiveCollaborations: number;
+  capacityAvailable: boolean;
+  updatedAt?: string;
+};
+
 export type ApiMatchRun = {
   matchRunId: string;
   promotionId: string;
@@ -260,8 +303,13 @@ export type ApiNegotiation = {
   matchRunId: string;
   matchCandidateId: string;
   promotionId: string;
+  promotionTitle?: string;
+  productName?: string;
+  brandId?: string;
   brandAgentId: string;
+  creatorId?: string;
   creatorAgentId: string;
+  creatorDisplayName?: string;
   contextId: string;
   taskId: string;
   status:
@@ -276,6 +324,10 @@ export type ApiNegotiation = {
   currentRound: number;
   maxRounds: number;
   currentTerms: ApiAgreementTerms;
+  initialAmountUsdc?: number;
+  currentAmountUsdc?: number;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
 };
 
 export type ApiAgreement = {
@@ -284,9 +336,18 @@ export type ApiAgreement = {
   taskId: string;
   artifactId: string;
   promotionId: string;
+  promotionTitle?: string;
+  productName?: string;
+  brandId?: string;
   brandAgentId: string;
+  creatorId?: string;
   creatorAgentId: string;
+  creatorDisplayName?: string;
   terms: ApiAgreementTerms;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
+  promotionSnapshot?: Record<string, unknown> | null;
+  creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
   termsHash: string;
   status: "AGREED" | "REJECTED";
@@ -298,6 +359,7 @@ export type ApiTimelineEvent = {
   type: string;
   data: Record<string, unknown>;
   createdAt: string;
+  sequence?: number;
 };
 
 export type ApiNegotiationMessage = {
@@ -551,6 +613,63 @@ export class ProductApiClient {
     });
   }
 
+  async getOnboarding() {
+    const response = await this.request<{ onboarding: OnboardingSession }>("/api/v1/onboarding");
+    return response.onboarding;
+  }
+
+  async patchOnboarding(input: Partial<OnboardingSession> & { role: "BRAND" | "CREATOR" }) {
+    const response = await this.request<{ onboarding: OnboardingSession }>("/api/v1/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    return response.onboarding;
+  }
+
+  async analyzeProduct(sourceUrl: string, idempotencyKey: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>("/api/v1/analyses/product", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ sourceUrl }),
+    });
+    return response.analysis;
+  }
+
+  async analyzeCreatorProfile(sourceUrl: string, idempotencyKey: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      "/api/v1/analyses/creator-profile",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ sourceUrl }),
+      },
+    );
+    return response.analysis;
+  }
+
+  async getAnalysis(analysisId: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      `/api/v1/analyses/${analysisId}`,
+    );
+    return response.analysis;
+  }
+
+  async confirmAnalysis(
+    analysisId: string,
+    input: { confirmedFields: string[]; edits?: Record<string, unknown> },
+    idempotencyKey: string,
+  ) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      `/api/v1/analyses/${analysisId}:confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ ...input, edits: input.edits ?? {} }),
+      },
+    );
+    return response.analysis;
+  }
+
   async getBrandPromotionDetail(promotionId: string) {
     return this.request<BrandPromotionDetail>(`/api/v1/brand/promotions/${promotionId}`);
   }
@@ -603,6 +722,34 @@ export class ProductApiClient {
       "/api/v1/creator/dashboard",
     );
     return response.dashboard;
+  }
+
+  async getCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown> | null;
+    }>("/api/v1/creator/agent");
+  }
+
+  async publishCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:publish", { method: "POST" });
+  }
+
+  async pauseCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:pause", { method: "POST" });
+  }
+
+  async resumeCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:resume", { method: "POST" });
   }
 
   async bootstrapUser(input: BootstrapUserInput) {
@@ -675,6 +822,13 @@ export class ProductApiClient {
     return response.matchRun;
   }
 
+  async listMatchRunEvents(matchRunId: string) {
+    const response = await this.request<{ events: ApiTimelineEvent[] }>(
+      `/api/v1/match-runs/${matchRunId}/events`,
+    );
+    return response.events;
+  }
+
   async getNegotiation(negotiationId: string) {
     const response = await this.request<{ negotiation: ApiNegotiation }>(
       `/api/v1/negotiations/${negotiationId}`,
@@ -687,6 +841,13 @@ export class ProductApiClient {
       `/api/v1/negotiations/${negotiationId}/messages`,
     );
     return response.messages;
+  }
+
+  async listNegotiationEvents(negotiationId: string) {
+    const response = await this.request<{ events: ApiTimelineEvent[] }>(
+      `/api/v1/negotiations/${negotiationId}/events`,
+    );
+    return response.events;
   }
 
   async startNegotiation(matchRunId: string) {
@@ -748,13 +909,14 @@ export class ProductApiClient {
       | ApiAgreement
       | { agreementId: string; creatorAgentId: string },
     milestoneId: string,
+    url = "https://social.example/post/with-brand-and-ad",
   ) {
     const response = await this.request<{ evidence: ApiEvidence }>(
       `/api/v1/agreements/${agreement.agreementId}/evidence`,
       {
         method: "POST",
         body: JSON.stringify({
-          url: "https://social.example/post/with-brand-and-ad",
+          url,
           submittedByAgentId: agreement.creatorAgentId,
           milestoneId,
         }),

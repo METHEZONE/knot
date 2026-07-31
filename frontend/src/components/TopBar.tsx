@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useAuth } from "@/auth/AuthProvider";
 import { getMyPagePath, headerMenuForAuth } from "@/auth/authState";
 
@@ -16,32 +17,37 @@ export function TopBar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border-subtle bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b-2 border-border-subtle bg-background/85 backdrop-blur">
       <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2">
         <Link href="/" className="flex items-baseline gap-2">
-          <span className="text-lg font-semibold tracking-tight text-foreground">
-            KNOT
-          </span>
-          <span className="hidden text-xs text-muted sm:inline">
-            agentic promotions
-          </span>
+          <span className="display text-2xl text-foreground">knot</span>
+          <span className="hidden text-xs text-muted sm:inline">크리에이터 x 브랜드, 에이전트끼리</span>
         </Link>
 
         <div className="flex flex-wrap items-center gap-3">
-          <nav aria-label="Product navigation" className="flex flex-wrap gap-2 text-sm font-semibold">
+          {context?.account.role ? (
+            <span className="sketch-pill ink hidden border border-border-subtle bg-surface-raised px-3 py-1 font-mono text-[10px] uppercase text-muted sm:inline-flex">
+              {context.account.role}
+            </span>
+          ) : null}
+          <nav aria-label="Product navigation" className="flex flex-wrap items-center gap-2 text-sm">
             {menu.includes("loading") && (
               <span className="inline-block h-4 w-28 animate-pulse rounded-full bg-border-subtle/20" aria-label="인증 상태 확인 중" />
             )}
-            {menu.includes("login") && <Link href="/login" className="hover:text-muted">로그인</Link>}
-            {menu.includes("signup") && <Link href="/signup" className="hover:text-muted">회원가입</Link>}
+            {menu.includes("login") && <NavLink href="/login">로그인</NavLink>}
+            {menu.includes("signup") && <NavLink href="/signup">회원가입</NavLink>}
             {menu.includes("dashboard") && dashboardPath && (
-              <Link href={dashboardPath} className="hover:text-muted">대시보드</Link>
+              <NavLink href={dashboardPath}>대시보드</NavLink>
             )}
             {menu.includes("mypage") && (
-              <Link href={getMyPagePath(context?.account.role)} className="hover:text-muted">마이페이지</Link>
+              <NavLink href={getMyPagePath(context?.account.role)}>마이페이지</NavLink>
             )}
             {menu.includes("logout") && (
-              <button type="button" onClick={handleLogout} className="font-semibold hover:text-muted">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised"
+              >
                 로그아웃
               </button>
             )}
@@ -49,5 +55,13 @@ export function TopBar() {
         </div>
       </div>
     </header>
+  );
+}
+
+function NavLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1.5 hover:bg-surface-raised">
+      {children}
+    </Link>
   );
 }

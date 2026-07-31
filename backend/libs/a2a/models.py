@@ -85,6 +85,7 @@ class A2ASendRequest(A2AModel):
     tenant: str
     message: A2AMessage
     configuration: A2ASendConfiguration = Field(default_factory=A2ASendConfiguration)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class A2ATaskStatus(A2AModel):

@@ -43,11 +43,18 @@ class CreatorA2AClient:
             raise CreatorA2AClientError("Creator A2A AgentCard response is invalid")
         return body
 
-    def send_message(self, tenant: str, message: A2AMessage) -> A2ATask:
+    def send_message(
+        self,
+        tenant: str,
+        message: A2AMessage,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> A2ATask:
         request = A2ASendRequest(
             tenant=tenant,
             message=message,
             configuration=A2ASendConfiguration(acceptedOutputModes=["application/json"]),
+            metadata=metadata or {},
         )
         try:
             with httpx.Client(timeout=self.timeout_seconds) as client:

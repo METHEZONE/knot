@@ -1,10 +1,14 @@
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from apps.api import routes as api_routes
 from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
 from libs.payments.paysh import PayResult
-from libs.repositories.firestore_paths import COLLECTIONS
+from libs.payments.settlement import lock_amount_base_units, milestone_amounts_base_units
+from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
@@ -19,6 +23,13 @@ class FakeHttpResponse:
 
     def json(self) -> dict[str, object]:
         return self._payload
+
+
+class NoCreatorProfileScanStore(InMemoryDocumentStore):
+    def list_documents(self, collection_path: str) -> list[dict[str, object]]:
+        if collection_path == COLLECTIONS.creator_profiles:
+            raise AssertionError("creatorProfiles collection scan is forbidden during discovery")
+        return super().list_documents(collection_path)
 
 
 def client_with_seed(settings: Settings | None = None) -> TestClient:
@@ -44,6 +55,43 @@ def accepted_agreement(client: TestClient) -> dict[str, object]:
     return client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation").json()[
         "data"
     ]["agreement"]
+
+
+def fund_agreement_for_evidence(
+    repository: KnotRepository,
+    agreement: dict[str, object],
+) -> dict[str, object]:
+    terms = AgreementTerms.model_validate(agreement["terms"])
+    locked_amount = lock_amount_base_units(terms)
+    milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+    escrow_id = f"escrow-{agreement['agreementId']}"
+    now = "2026-07-31T00:00:00Z"
+    escrow = {
+        "escrowId": escrow_id,
+        "agreementId": agreement["agreementId"],
+        "promotionId": agreement["promotionId"],
+        "brandAgentId": agreement["brandAgentId"],
+        "creatorAgentId": agreement["creatorAgentId"],
+        "network": "solanaDevnet",
+        "programId": "program-test",
+        "mint": "mint-test",
+        "lockedAmountBaseUnits": str(locked_amount),
+        "releasedAmountBaseUnits": "0",
+        "platformFeeBps": 0,
+        "termsHash": agreement["termsHash"],
+        "milestoneAmounts": {
+            milestone_id: str(amount) for milestone_id, amount in milestone_amounts.items()
+        },
+        "status": "LOCKED",
+        "lockSignature": "evidence-lock-signature",
+        "lockReceiptId": "receipt-evidence-lock",
+        "paymentOperationId": "op-evidence-lock",
+        "idempotencyKey": "evidence-lock",
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    repository.save_raw_document(FirestorePaths.escrow(escrow_id), escrow)
+    return escrow
 
 
 def test_list_and_get_seeded_promotions() -> None:
@@ -97,14 +145,14 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["status"] == "COMPLETED"
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-003"
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
 
     candidates_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/candidates")
     assert candidates_response.status_code == 200
     candidates = candidates_response.json()["data"]["candidates"]
-    assert candidates[0]["creatorAgentId"] == "creator-agent-003"
-    assert candidates[0]["creatorId"] == "creator-003"
-    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-003"
+    assert candidates[0]["creatorAgentId"] == "creator-agent-001"
+    assert candidates[0]["creatorId"] == "creator-001"
+    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-001"
     assert candidates[0]["rank"] == 1
     assert candidates[0]["eligible"] is True
     assert candidates[0]["analysisProvider"] == "deterministic"
@@ -117,8 +165,107 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert "MATCH_RUN_COMPLETED" in event_types
 
 
+def test_run_match_uses_indexed_discovery_without_creator_profile_scan() -> None:
+    store = NoCreatorProfileScanStore()
+    repository = KnotRepository(store)
+    seed_demo_repository(repository)
+    client = TestClient(create_app(repository=repository))
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["discoveryLimit"] == 100
+    assert match_run["discoveryReturnedCount"] == 2
+    assert match_run["detailReadLimit"] == 20
+    assert match_run["detailReadCount"] == 2
+
+
+def test_canonical_match_run_alias_preserves_existing_matching_behavior() -> None:
+    client = client_with_seed()
+
+    run_response = client.post("/api/v1/promotions/promotion-001/match-runs")
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["promotionId"] == "promotion-001"
+    assert match_run["status"] == "COMPLETED"
+
+    timeline_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/timeline")
+    events_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/events")
+    assert timeline_response.status_code == 200
+    assert events_response.status_code == 200
+    assert [event["type"] for event in timeline_response.json()["data"]["events"]] == [
+        event["type"] for event in events_response.json()["data"]["events"]
+    ]
+
+
+def test_match_run_start_is_idempotent_and_records_canonical_events() -> None:
+    client = client_with_seed()
+    headers = {"Idempotency-Key": "match-start-001"}
+
+    first = client.post("/api/v1/promotions/promotion-001/match-runs", headers=headers)
+    second = client.post("/api/v1/promotions/promotion-001/match-runs", headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_run = first.json()["data"]["matchRun"]
+    second_run = second.json()["data"]["matchRun"]
+    assert second_run["matchRunId"] == first_run["matchRunId"]
+    assert first_run["stateHistory"] == [
+        "READY",
+        "DISCOVERING",
+        "RANKING",
+        "SELECTING",
+        "COMPLETED",
+    ]
+
+    events = client.get(f"/api/v1/match-runs/{first_run['matchRunId']}/events").json()[
+        "data"
+    ]["events"]
+    assert [event["type"] for event in events] == [
+        "MATCH_RUN_READY",
+        "MATCH_RUN_DISCOVERING",
+        "MATCH_RUN_RANKING",
+        "MATCH_RUN_SELECTING",
+        "MATCH_RUN_COMPLETED",
+    ]
+    assert [event["sequence"] for event in events] == [1, 2, 3, 4, 5]
+
+
+def test_match_run_cancel_handles_non_terminal_and_terminal_runs() -> None:
+    client, repository = client_and_repository_with_seed()
+    repository.save_raw_document(
+        FirestorePaths.match_run("match-cancelable"),
+        {
+            "matchRunId": "match-cancelable",
+            "promotionId": "promotion-001",
+            "brandAgentId": "brand-agent-001",
+            "status": "QUEUED",
+            "createdAt": "2026-07-31T00:00:00Z",
+        },
+    )
+
+    canceled = client.post("/api/v1/match-runs/match-cancelable:cancel")
+    assert canceled.status_code == 200
+    assert canceled.json()["data"]["matchRun"]["status"] == "CANCELED"
+    cancel_events = client.get("/api/v1/match-runs/match-cancelable/events").json()["data"][
+        "events"
+    ]
+    assert cancel_events[0]["type"] == "MATCH_RUN_CANCELED"
+
+    completed = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+    rejected = client.post(f"/api/v1/match-runs/{completed['matchRunId']}:cancel")
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "INVALID_STATE_TRANSITION"
+
+
 def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -> None:
-    client = client_with_seed(Settings(paysh_mode="sandbox", paysh_resource_id="replace-me"))
+    client, repository = client_and_repository_with_seed(
+        Settings(paysh_mode="sandbox", paysh_resource_id="replace-me")
+    )
 
     run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
     assert run_response.status_code == 201
@@ -131,6 +278,9 @@ def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
     assert api_payment["data"]["status"] == "SKIPPED"
+    operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
+    assert operations[0]["operationType"] == "PAYSH_CANDIDATE_VERIFICATION"
+    assert operations[0]["receiptId"] is None
 
 
 def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
@@ -146,7 +296,7 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
-    client = client_with_seed(
+    client, repository = client_and_repository_with_seed(
         Settings(
             paysh_mode="sandbox",
             paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
@@ -158,12 +308,105 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["paidVerification"]["status"] == "SETTLED"
-    assert match_run["paidVerification"]["receiptId"] == "receipt-pay-001"
+    assert match_run["paidVerification"]["externalReceiptId"] == "receipt-pay-001"
+    assert match_run["paidVerification"]["receiptId"].startswith("receipt-paysh-")
+    assert match_run["paidVerification"]["quote"] == {
+        "amountUsdc": 0.02,
+        "currency": "USDC",
+        "validated": True,
+    }
+    assert match_run["paidVerification"]["scoreImpact"]["selectionChanged"] is False
 
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
-    assert api_payment["data"]["receiptId"] == "receipt-pay-001"
-    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-003"
+    assert api_payment["data"]["externalReceiptId"] == "receipt-pay-001"
+    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-001"
+    operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
+    receipts = repository.list_raw_documents(COLLECTIONS.transaction_receipts)
+    assert len(operations) == 1
+    assert len(receipts) == 1
+    assert operations[0]["paymentType"] == "PAYSH_X402"
+    assert operations[0]["paidVerification"]["resultDigest"].startswith("sha256:")
+    assert receipts[0]["paymentType"] == "PAYSH_X402"
+    assert receipts[0]["network"] == "pay.sh:sandbox"
+    assert receipts[0]["status"] == "CONFIRMED"
+
+
+def test_run_match_blocks_paysh_when_quote_exceeds_cap(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        raise AssertionError("pay.sh must not be called when quote exceeds cap")
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+            paysh_quote_amount_usdc=0.03,
+            paysh_max_call_amount_usdc=0.02,
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    paid = run_response.json()["data"]["matchRun"]["paidVerification"]
+    assert paid["status"] == "SKIPPED"
+    assert paid["detail"] == "pay.sh quote exceeds per-call spend cap."
+    assert paid["continuation"] == "FREE_SIGNALS_ONLY"
+    assert repository.list_raw_documents(COLLECTIONS.transaction_receipts) == []
+
+
+def test_run_match_blocks_paysh_when_resource_is_not_allowlisted(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        raise AssertionError("pay.sh must not be called for non-allowlisted resources")
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client = client_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://not-pay.example/mpp/quote/AAPL",
+            paysh_allowed_resource_prefixes=["https://debugger.pay.sh/mpp/quote/"],
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201
+    paid = run_response.json()["data"]["matchRun"]["paidVerification"]
+    assert paid["status"] == "SKIPPED"
+    assert paid["detail"] == "PAYSH_RESOURCE_ID is not allowlisted."
+
+
+def test_run_match_idempotency_does_not_double_pay(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        calls.append(resource_id)
+        return PayResult(
+            ok=True,
+            returncode=0,
+            body='{"receiptId": "receipt-pay-idempotent"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+        )
+    )
+    headers = {"Idempotency-Key": "frontend-match-paid-once"}
+
+    first = client.post("/api/v1/promotions/promotion-001/matches:run", headers=headers)
+    second = client.post("/api/v1/promotions/promotion-001/matches:run", headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert calls == ["https://debugger.pay.sh/mpp/quote/AAPL"]
+    first_match_run = first.json()["data"]["matchRun"]
+    second_match_run = second.json()["data"]["matchRun"]
+    assert second_match_run["matchRunId"] == first_match_run["matchRunId"]
+    assert len(repository.list_raw_documents(COLLECTIONS.payment_operations)) == 1
+    assert len(repository.list_raw_documents(COLLECTIONS.transaction_receipts)) == 1
 
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
@@ -176,7 +419,7 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
         "targetAudience": ["20s"],
         "budget": {"totalUsdc": 1500, "maxPerCreatorUsdc": 800},
         "deliverables": [{"format": "reel", "count": 1}],
-        "postingWindow": {"start": "2026-08-05", "end": "2026-08-10"},
+        "postingWindow": {"start": "2026-08-10", "end": "2026-08-15"},
         "usageRights": "paidBoost30d",
         "constraints": {"requiredCategories": ["뷰티"], "requiredDisclosures": ["ad"]},
     }
@@ -186,7 +429,7 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
 
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-003"
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
     start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
     assert start_response.status_code == 201
     assert start_response.json()["data"]["negotiation"]["status"] == "AGREED"
@@ -217,7 +460,7 @@ def test_start_negotiation_reports_no_eligible_creator() -> None:
     assert response.json()["detail"]["code"] == "NO_ELIGIBLE_CREATOR"
 
 
-def test_select_candidate_rejects_ineligible_candidate() -> None:
+def test_select_candidate_reports_undiscovered_candidate() -> None:
     client = client_with_seed()
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
@@ -227,12 +470,12 @@ def test_select_candidate_rejects_ineligible_candidate() -> None:
         f"/api/v1/match-runs/{match_run['matchRunId']}/candidates/creator-agent-002:select"
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "RESOURCE_NOT_FOUND"
 
 
 def test_start_negotiation_persists_messages_events_and_agreement() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
     ]
@@ -245,18 +488,31 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement = body["agreement"]
     assert negotiation["status"] == "AGREED"
     assert negotiation["matchRunId"] == match_run["matchRunId"]
-    assert negotiation["matchCandidateId"] == "creator-003"
-    assert negotiation["creatorAgentId"] == "creator-agent-003"
+    assert negotiation["matchCandidateId"] == "creator-001"
+    assert negotiation["creatorAgentId"] == "creator-agent-001"
     assert agreement["status"] == "AGREED"
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
     assert agreement["canonicalTermsJson"].startswith("{")
+    assert agreement["hashAlgorithm"] == "sha256"
+    assert agreement["hashVersion"] == "knot.agreement-terms.v1"
+    assert agreement["terms"]["milestones"] == [
+        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+    ]
 
     negotiation_id = negotiation["negotiationId"]
     messages_response = client.get(f"/api/v1/negotiations/{negotiation_id}/messages")
     assert messages_response.status_code == 200
     messages = messages_response.json()["data"]["messages"]
     assert [message["role"] for message in messages] == ["ROLE_USER", "ROLE_AGENT"]
+    task_events = repository.list_raw_documents(
+        f"{COLLECTIONS.a2a_tasks}/{negotiation['taskId']}/{COLLECTIONS.a2a_events}"
+    )
+    assert [event["type"] for event in task_events] == [
+        "A2A_USER_MESSAGE",
+        "A2A_AGENT_MESSAGE",
+        "A2A_TASK_STATE",
+    ]
 
     events_response = client.get(f"/api/v1/negotiations/{negotiation_id}/events")
     assert events_response.status_code == 200
@@ -265,6 +521,11 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}")
     assert agreement_response.status_code == 200
     assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]
+    milestones = repository.list_raw_documents(
+        f"{COLLECTIONS.agreements}/{agreement['agreementId']}/{COLLECTIONS.milestones}"
+    )
+    assert [milestone["milestoneId"] for milestone in milestones] == ["content"]
+    assert milestones[0]["releasePct"] == 100
 
     negotiation_agreement_response = client.get(
         f"/api/v1/negotiations/{negotiation_id}/agreement"
@@ -274,6 +535,79 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
         negotiation_agreement_response.json()["data"]["agreement"]["agreementId"]
         == agreement["agreementId"]
     )
+
+
+def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
+    client, repository = client_and_repository_with_seed()
+    promotion_path = FirestorePaths.promotion("promotion-001")
+    promotion = repository.get_raw_document(promotion_path)
+    assert promotion is not None
+    repository.save_raw_document(promotion_path, {**promotion, "initialOffer": 300})
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
+
+    assert start_response.status_code == 201, start_response.text
+    body = start_response.json()["data"]
+    assert body["negotiation"]["status"] == "AGREED"
+    assert body["negotiation"]["currentRound"] == 2
+    assert body["agreement"]["terms"]["compensation"]["baseAmountUsdc"] == 650
+    messages = client.get(
+        f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
+    ).json()["data"]["messages"]
+    assert [message["payload"]["type"] for message in messages] == [
+        "OFFER",
+        "COUNTER",
+        "ACCEPT",
+        "ACCEPT",
+    ]
+    assert [
+        message["payload"]["terms"]["compensation"]["baseAmountUsdc"]
+        for message in messages
+    ] == [300, 650, 650, 650]
+
+
+def test_agreement_document_rejects_artifact_terms_hash_mismatch() -> None:
+    terms = {
+        "compensation": {"structure": "flat", "baseAmountUsdc": 500, "performancePct": 0},
+        "deliverables": [
+            {
+                "format": "reel",
+                "count": 1,
+                "postWindow": {"start": "2026-08-01", "end": "2026-08-10"},
+                "revisionRounds": 1,
+            }
+        ],
+        "usageRights": "organicOnly",
+        "milestones": [
+            {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+        ],
+        "constraints": {"requiredDisclosures": ["ad"], "prohibitedClaims": []},
+    }
+
+    with pytest.raises(HTTPException) as raised:
+        api_routes._agreement_document(
+            negotiation={
+                "negotiationId": "negotiation-hash",
+                "promotionId": "promotion-hash",
+                "brandAgentId": "brand-agent-hash",
+                "creatorAgentId": "creator-agent-hash",
+            },
+            decision={
+                "type": "ACCEPT",
+                "agreementId": "agreement-hash",
+                "terms": terms,
+                "termsHash": "sha256:not-the-canonical-hash",
+            },
+            artifact_id="artifact-hash",
+            task_id="task-hash",
+            created_at="2026-07-31T00:00:00Z",
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail["code"] == "TERMS_HASH_MISMATCH"
 
 
 def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) -> None:
@@ -307,7 +641,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
                             "url": "http://creator-agent.test/a2a/v1",
                             "protocolBinding": "HTTP+JSON",
                             "protocolVersion": "1.0",
-                            "tenant": "creator-agent-003",
+                                "tenant": "creator-agent-001",
                         }
                     ],
                 }
@@ -406,7 +740,9 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         "Content-Type": "application/a2a+json",
     }
     assert captured["timeout"] == 60
-    assert captured["request"]["tenant"] == "creator-agent-003"  # type: ignore[index]
+    assert captured["request"]["tenant"] == "creator-agent-001"  # type: ignore[index]
+    metadata = captured["request"]["metadata"]  # type: ignore[index]
+    assert metadata["creatorNegotiationContext"]["creatorAgentId"] == "creator-agent-001"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
     assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"
@@ -477,7 +813,15 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
                 {
                     "name": "KNOT Creator Negotiation Agent",
                     "version": "1.0.0",
-                    "supportedInterfaces": [],
+                    "supportedInterfaces": [
+                        {
+                            "url": "http://creator-agent.test/a2a/v1",
+                            "protocolBinding": "HTTP+JSON",
+                            "protocolVersion": "1.0",
+                            "tenant": "creator-agent-001",
+                        }
+                    ],
+                    "skills": [{"id": "promotion-negotiation"}],
                 }
             )
 
@@ -626,8 +970,9 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
 
 
 def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
+    escrow = fund_agreement_for_evidence(repository, agreement)
 
     submit_response = client.post(
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
@@ -641,7 +986,10 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     evidence = submit_response.json()["data"]["evidence"]
     assert evidence["status"] == "SUBMITTED"
     assert evidence["milestoneId"] == "content"
-    assert evidence["milestoneSnapshot"]["releasePct"] == 70
+    assert evidence["milestoneSnapshot"]["releasePct"] == 100
+    assert evidence["escrowId"] == escrow["escrowId"]
+    assert evidence["url"] == "https://social.example/post/with-brand-and-ad"
+    assert str(evidence["sourceDigest"]).startswith("sha256:")
 
     verify_response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
     assert verify_response.status_code == 200
@@ -654,6 +1002,12 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     assert get_response.status_code == 200
     assert get_response.json()["data"]["evidence"]["status"] == "PASSED"
 
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert len(verification_results) == 1
+    assert verification_results[0]["status"] == "VERIFIED"
+    assert verification_results[0]["sourceDigest"] == evidence["sourceDigest"]
+    assert verification_results[0]["provider"] == "deterministic-url-policy"
+
     timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
     assert "EVIDENCE_SUBMITTED" in event_types
@@ -661,8 +1015,9 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
 
 
 def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
     evidence = client.post(
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
         json={
@@ -684,9 +1039,28 @@ def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
 
     get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
     assert get_response.json()["data"]["evidence"]["status"] == "FAILED"
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert verification_results[0]["status"] == "REJECTED"
 
 
 def test_submit_evidence_rejects_wrong_creator_agent() -> None:
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/with-brand-and-ad",
+            "submittedByAgentId": "creator-agent-003",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+
+
+def test_submit_evidence_requires_funded_escrow() -> None:
     client = client_with_seed()
     agreement = accepted_agreement(client)
 
@@ -694,9 +1068,42 @@ def test_submit_evidence_rejects_wrong_creator_agent() -> None:
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
         json={
             "url": "https://social.example/post/with-brand-and-ad",
-            "submittedByAgentId": "creator-agent-001",
+            "submittedByAgentId": agreement["creatorAgentId"],
         },
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+    assert response.json()["detail"]["code"] == "ESCROW_REQUIRED"
+
+
+def test_submit_evidence_rejects_unsafe_source_url() -> None:
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "http://localhost/post/with-brand-and-ad",
+            "submittedByAgentId": agreement["creatorAgentId"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "UNSAFE_SOURCE_URL"
+
+
+def test_submit_evidence_rejects_duplicate_milestone_submission() -> None:
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+    payload = {
+        "url": "https://social.example/post/with-brand-and-ad",
+        "submittedByAgentId": agreement["creatorAgentId"],
+    }
+    first = client.post(f"/api/v1/agreements/{agreement['agreementId']}/evidence", json=payload)
+    second = client.post(f"/api/v1/agreements/{agreement['agreementId']}/evidence", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "EVIDENCE_ALREADY_SUBMITTED"

@@ -56,6 +56,7 @@ def create_app(
         _validate_a2a_headers(a2a_version=a2a_version, content_type=content_type)
         _validate_service_auth(settings=settings, authorization=authorization)
         send_request = A2ASendRequest.model_validate(payload)
+        _register_embedded_context(request, send_request)
         try:
             task = request.app.state.task_store.send_message(
                 send_request.tenant, send_request.message
@@ -118,6 +119,19 @@ def create_app(
         return {"task": task.model_dump(by_alias=True, mode="json")}
 
     return app
+
+
+def _register_embedded_context(request: Request, send_request: A2ASendRequest) -> None:
+    embedded_context = send_request.metadata.get("creatorNegotiationContext")
+    if embedded_context is None:
+        return
+    if not isinstance(embedded_context, dict):
+        raise HTTPException(status_code=400, detail="creatorNegotiationContext must be an object")
+    try:
+        context = CreatorNegotiationContext.model_validate(embedded_context)
+        request.app.state.task_store.register_context(send_request.tenant, context)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _validate_a2a_headers(a2a_version: str | None, content_type: str | None) -> None:

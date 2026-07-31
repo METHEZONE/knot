@@ -122,6 +122,26 @@ def test_creator_agent_resolves_dynamic_tenant_context() -> None:
     assert task["status"]["message"]["parts"][0]["data"]["type"] == "ACCEPT"
 
 
+def test_creator_agent_accepts_embedded_dynamic_context_metadata() -> None:
+    context = demo_creator_contexts()["creator-agent-001"].model_copy(
+        update={"creator_agent_id": "creator-agent-dynamic"}
+    )
+    client = TestClient(create_app(task_store=InMemoryA2ATaskStore({})))
+    payload = a2a_request(tenant="creator-agent-dynamic", base_amount_usdc=300)
+    payload["metadata"] = {
+        "creatorNegotiationContext": context.model_dump(by_alias=True, mode="json")
+    }
+
+    response = client.post("/a2a/v1/message:send", json=payload, headers=headers())
+
+    assert response.status_code == 200
+    task = response.json()["task"]
+    assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
+    data = task["status"]["message"]["parts"][0]["data"]
+    assert data["type"] == "COUNTER"
+    assert data["terms"]["compensation"]["baseAmountUsdc"] == 650
+
+
 def test_creator_agent_can_use_non_authoritative_rationale_provider() -> None:
     class GeneratedRationale:
         text = "정책 검사를 통과한 조건이라 Creator Agent가 수락했습니다."

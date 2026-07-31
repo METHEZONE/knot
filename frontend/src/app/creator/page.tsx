@@ -1,12 +1,12 @@
 "use client";
 
 import { AuthGate } from "@/auth/AuthGate";
-import { CreatorDashboardScreen } from "@/product/ProductScreens";
+import { AgentDashboard } from "@/features/dashboard/AgentDashboard";
 
 export default function Page() {
   return (
     <AuthGate expectedRole="CREATOR" requireCompleted>
-      {(context) => <CreatorDashboardScreen context={context} />}
+      {(context) => <AgentDashboard role="creator" context={context} />}
     </AuthGate>
   );
 }

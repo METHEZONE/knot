@@ -7,7 +7,6 @@ def build_creator_agent_card(base_url: str) -> dict[str, object]:
                 "url": base_url,
                 "protocolBinding": "HTTP+JSON",
                 "protocolVersion": "1.0",
-                "tenant": "creator-agent-001",
             }
         ],
         "provider": {"organization": "KNOT", "url": "https://knot.example"},

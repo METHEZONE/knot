@@ -39,7 +39,7 @@ export function AuthGate({
       return;
     }
     if (requireCompleted && account.onboardingStatus !== "COMPLETED") {
-      router.replace(account.role === "BRAND" ? "/brand/onboarding" : "/creator/onboarding");
+      router.replace(account.role === "BRAND" ? "/brand/product" : "/creator/connect");
       return;
     }
     if (expectedRole && account.role !== expectedRole) {

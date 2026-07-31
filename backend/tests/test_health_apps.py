@@ -17,3 +17,4 @@ def test_creator_agent_card() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["supportedInterfaces"][0]["protocolVersion"] == "1.0"
+    assert "tenant" not in body["supportedInterfaces"][0]
