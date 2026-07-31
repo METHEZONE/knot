@@ -4,6 +4,20 @@
       "collectionGroup": "creatorDiscoveryProfiles",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "categoryKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "acceptingOffers", "order": "ASCENDING" },
+        { "fieldPath": "agentStatus", "order": "ASCENDING" },
+        { "fieldPath": "availability", "order": "ASCENDING" },
+        { "fieldPath": "capacityAvailable", "order": "ASCENDING" },
+        { "fieldPath": "countryCode", "order": "ASCENDING" },
+        { "fieldPath": "primaryFormatKey", "order": "ASCENDING" },
+        { "fieldPath": "nextAvailableAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "creatorDiscoveryProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "agentStatus", "order": "ASCENDING" },
         { "fieldPath": "acceptingOffers", "order": "ASCENDING" },
         { "fieldPath": "availability", "order": "ASCENDING" },
