@@ -2,14 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
 import {
   type ApiAgreement,
-  type ApiCandidate,
-  type ApiNegotiation,
-  type ApiNegotiationMessage,
   type ApiPromotion,
   type BrandDashboard,
   type CreatorAgentControl,
@@ -22,14 +18,6 @@ import { useBoard } from "@/product/dealBoard";
 import type { BrandSetup } from "@/product/setupStore";
 
 type Role = "brand" | "creator";
-
-type BrandRun = {
-  promotion: ApiPromotion;
-  candidates: ApiCandidate[];
-  negotiation: ApiNegotiation;
-  agreement: ApiAgreement | null;
-  messages: ApiNegotiationMessage[];
-};
 
 type LoadState<T> = {
   data: T | null;
@@ -58,22 +46,22 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
   const client = useMemo(() => new ProductApiClient(), []);
   const [dashboard, setDashboard] = useState<LoadState<BrandDashboard>>(emptyLoad);
   const [agreements, setAgreements] = useState<Array<ApiAgreement & Record<string, unknown>>>([]);
-  const [run, setRun] = useState<BrandRun | null>(null);
-  const [status, setStatus] = useState<"idle" | "creating" | "negotiating">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [promotions, setPromotions] = useState<Array<ApiPromotion & Record<string, unknown>>>([]);
 
   useEffect(() => {
     let active = true;
     async function load() {
       setDashboard(emptyLoad());
       try {
-        const [nextDashboard, nextAgreements] = await Promise.all([
+        const [nextDashboard, nextAgreements, nextPromotions] = await Promise.all([
           client.getBrandDashboard(),
           client.listBrandAgreements(),
+          client.listBrandPromotions(),
         ]);
         if (!active) return;
         setDashboard({ data: nextDashboard, loading: false, error: null });
         setAgreements(nextAgreements);
+        setPromotions(nextPromotions);
       } catch (caught) {
         if (!active) return;
         setDashboard({ data: null, loading: false, error: readableError(caught) });
@@ -85,46 +73,11 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
     };
   }, [client]);
 
-  async function startAgentRun() {
-    if (!board.brand) {
-      setError("먼저 제품 입력을 완료해주세요.");
-      return;
-    }
-    setStatus("creating");
-    setError(null);
-    setRun(null);
-    try {
-      const promotion = await client.createBrandPromotion(
-        promotionInputFromSetup(board.brand),
-        `brand-dashboard-promotion-${Date.now()}`,
-      );
-      setStatus("negotiating");
-      const flow = await client.runAgentForPromotion(promotion.promotionId);
-      const messages = flow.negotiation
-        ? await client.listNegotiationMessages(flow.negotiation.negotiationId)
-        : [];
-      setRun({
-        promotion: flow.promotion,
-        candidates: flow.candidates,
-        negotiation: flow.negotiation,
-        agreement: flow.agreement,
-        messages,
-      });
-      const [nextDashboard, nextAgreements] = await Promise.all([
-        client.getBrandDashboard(),
-        client.listBrandAgreements(),
-      ]);
-      setDashboard({ data: nextDashboard, loading: false, error: null });
-      setAgreements(nextAgreements);
-    } catch (caught) {
-      setError(readableError(caught));
-    } finally {
-      setStatus("idle");
-    }
-  }
-
-  const latestAgreement = run?.agreement ?? agreements[0] ?? null;
   const product = board.brand;
+  const totalContracted = agreements.reduce(
+    (sum, agreement) => sum + (agreement.terms?.compensation?.baseAmountUsdc ?? 0),
+    0,
+  );
 
   return (
     <DashboardShell
@@ -135,8 +88,12 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
     >
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="sketch ink border border-border-subtle bg-surface p-5">
-          <SectionHeader eyebrow="정산" title="잠긴 금액과 계약 상태" />
-          <SettlementSummary agreement={latestAgreement} />
+          <SectionHeader eyebrow="정산" title="전체 escrow 요약" />
+          <SettlementOverview
+            lockedBaseUnits={dashboard.data?.summary.lockedEscrowBaseUnits}
+            agreementCount={dashboard.data?.summary.agreements ?? agreements.length}
+            contractedUsdc={totalContracted}
+          />
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <Metric label="진행 중" value={String(dashboard.data?.summary.negotiationsInProgress ?? "-")} />
             <Metric label="계약" value={String(dashboard.data?.summary.agreements ?? agreements.length)} />
@@ -149,54 +106,36 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
         </section>
 
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="에이전트 관리" title="협찬 프로젝트 검토" />
+          <SectionHeader eyebrow="에이전트 관리" title="협찬 제안하기" />
           {product ? (
             <BrandProjectReview product={product} />
           ) : (
-            <EmptyState
-              title="협찬 프로젝트 입력이 필요합니다"
-              body="레퍼런스 온보딩과 같은 제품 링크, 무드, 예산 단계로 프로젝트를 만듭니다."
-              actionHref="/brand/product"
-              actionLabel="프로젝트 입력"
-            />
+            <p className="text-sm text-muted">
+              새 프로모션은 제품 URL을 읽고 무드를 추출한 뒤, 검토 화면에서 협상을 시작합니다.
+            </p>
           )}
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={startAgentRun}
-              disabled={!product || status !== "idle"}
-              className="sketch-pill bg-accent px-5 py-3 text-background disabled:opacity-50"
-            >
-              {status === "creating"
-                ? "프로모션 생성 중…"
-                : status === "negotiating"
-                  ? "협상 중…"
-                  : "검토 끝, 협상 시작"}
-            </button>
+            <Link href="/brand/promotions/new" className="sketch-pill bg-accent px-5 py-3 text-background">
+              프로모션 만들기
+            </Link>
             <Link
               href="/brand/product"
               className="sketch-pill ink border border-border-subtle bg-surface px-5 py-3 text-sm"
             >
-              다시 입력
+              온보딩 다시 보기
             </Link>
           </div>
-          {error ? <p className="mt-3 text-sm text-negative">{error}</p> : null}
         </section>
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="에이전트 협상 기록" title="실제 A2A 메시지" />
-        {status === "negotiating" ? (
-          <div className="flex items-center gap-3 py-8 text-muted">
-            <TypingDots />
-            Brand Agent가 Creator Agent에게 제안하고 있습니다.
-          </div>
-        ) : run ? (
-          <NegotiationLog role="brand" run={run} />
+        <SectionHeader eyebrow="Agent 기록" title="만든 프로모션과 협상 결과" />
+        {promotions.length ? (
+          <BrandRecordList promotions={promotions} agreements={agreements} />
         ) : (
           <EmptyState
-            title="아직 실행한 협상이 없습니다"
-            body="에이전트 관리에서 프로젝트를 검토한 뒤 협상을 시작하면 전체 메시지가 이곳에 남습니다."
+            title="아직 만든 프로모션이 없습니다"
+            body="프로모션 만들기를 완료하면 이곳에서 기록을 모아보고, 협상 상세로 들어갈 수 있습니다."
           />
         )}
       </section>
@@ -330,7 +269,7 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="에이전트 협상 기록" title="받은 제안과 결과" />
+        <SectionHeader eyebrow="Agent 기록" title="받은 제안과 결과" />
         <div className="grid gap-3">
           {(dashboard.data?.offers ?? []).slice(0, 5).map((offer, index) => (
             <OfferRow key={String(offer.negotiationId ?? offer.offerId ?? index)} offer={offer} />
@@ -418,125 +357,72 @@ function BrandProjectReview({ product }: { product: BrandSetup }) {
   );
 }
 
-function SettlementSummary({ agreement }: { agreement: ApiAgreement | null }) {
-  if (!agreement) {
-    return (
-      <div className="sketch-alt ink border border-border-subtle bg-background p-4">
-        <p className="text-sm text-muted">계약이 생성되면 에스크로 잠금과 정산 상태가 여기로 이어집니다.</p>
-      </div>
-    );
-  }
+function SettlementOverview({
+  lockedBaseUnits,
+  agreementCount,
+  contractedUsdc,
+}: {
+  lockedBaseUnits: string | undefined;
+  agreementCount: number;
+  contractedUsdc: number;
+}) {
   return (
     <div className="sketch-alt ink border border-border-subtle bg-background p-4">
-      <p className="text-sm text-muted">최근 계약</p>
+      <p className="text-sm text-muted">전체 계약 금액</p>
       <div className="mt-1 flex flex-wrap items-baseline gap-3">
-        <Money usdc={agreement.terms.compensation.baseAmountUsdc} size="lg" />
+        <Money usdc={contractedUsdc} size="lg" />
         <span className="sketch-pill ink border border-border-subtle px-3 py-1 font-mono text-xs">
-          {agreement.status}
+          {agreementCount} agreements
         </span>
       </div>
-      <p className="mt-2 break-all font-mono text-xs text-muted">termsHash {agreement.termsHash}</p>
+      <p className="mt-2 text-sm text-muted">
+        실제 잠긴 escrow: <span className="font-mono text-foreground">{baseUnitsToUsdcLabel(lockedBaseUnits)}</span>
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        escrow가 아직 잠기지 않은 계약 금액은 계약 금액으로만 표시하고, 잠긴 금액으로 합산하지 않습니다.
+      </p>
     </div>
   );
 }
 
-function NegotiationLog({ role, run }: { role: Role; run: BrandRun }) {
-  return (
-    <div className="grid gap-5 lg:grid-cols-[0.7fr_1.3fr]">
-      <div className="sketch-alt ink border border-border-subtle bg-surface-raised p-4">
-        <p className="text-2xl">{run.negotiation.status}</p>
-        <p className="mt-2 text-sm text-muted">{run.promotion.title}</p>
-        <div className="mt-4 grid gap-2">
-          {run.candidates.slice(0, 3).map((candidate) => (
-            <CandidateLine key={candidate.creatorAgentId} candidate={candidate} />
-          ))}
-        </div>
-      </div>
-          <LiveMessageList
-            key={run.negotiation.negotiationId}
-            role={role}
-            messages={run.messages}
-            negotiation={run.negotiation}
-          />
-    </div>
-  );
-}
-
-function LiveMessageList({
-  role,
-  messages,
-  negotiation,
+function BrandRecordList({
+  promotions,
+  agreements,
 }: {
-  role: Role;
-  messages: ApiNegotiationMessage[];
-  negotiation: ApiNegotiation;
+  promotions: Array<ApiPromotion & Record<string, unknown>>;
+  agreements: Array<ApiAgreement & Record<string, unknown>>;
 }) {
-  const [visibleCount, setVisibleCount] = useState(0);
-
-  useEffect(() => {
-    if (visibleCount >= messages.length) return;
-    const id = window.setTimeout(() => setVisibleCount((count) => count + 1), visibleCount === 0 ? 250 : 900);
-    return () => window.clearTimeout(id);
-  }, [messages.length, visibleCount]);
-
-  const visible = messages.slice(0, visibleCount);
-
-  if (!messages.length) {
-    return (
-      <div className="sketch-alt ink border border-border-subtle bg-background p-5 text-sm text-muted">
-        협상은 생성됐지만 메시지 목록을 아직 받지 못했습니다. negotiationId:{" "}
-        <span className="font-mono">{negotiation.negotiationId}</span>
-      </div>
-    );
-  }
-
+  const agreementByPromotion = new Map(agreements.map((agreement) => [agreement.promotionId, agreement]));
   return (
-    <div className="flex max-h-[620px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
-      {visible.map((message, index) => {
-        const side = messageSide(message, index);
-        const mine = side === role;
+    <div className="grid gap-3">
+      {promotions.map((promotion) => {
+        const agreement = agreementByPromotion.get(promotion.promotionId);
+        const negotiationId = agreement?.negotiationId;
+        const href =
+          typeof negotiationId === "string" && negotiationId
+            ? `/brand/negotiations/${negotiationId}`
+            : `/brand/promotions/${promotion.promotionId}`;
         return (
-          <motion.div
-            key={message.messageId}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`flex ${mine ? "justify-end" : "justify-start"}`}
+          <Link
+            key={promotion.promotionId}
+            href={href}
+            className="sketch-alt ink flex flex-wrap items-center justify-between gap-3 border border-border-subtle bg-surface-raised p-4"
           >
-            <div
-              className={`sketch-alt ink max-w-[86%] border border-border-subtle px-4 py-3 ${
-                mine ? "bg-accent text-background" : "bg-surface"
-              }`}
-            >
-              <p className="font-mono text-[10px] uppercase opacity-70">
-                {side === "brand" ? "Brand Agent" : "Creator Agent"} · #{message.sequence ?? index + 1}
-              </p>
-              <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
-              <p className="mt-2 font-mono text-[10px] opacity-60">{formatTime(message.createdAt)}</p>
-            </div>
-          </motion.div>
+            <span className="min-w-0">
+              <span className="block truncate text-xl">{promotion.title}</span>
+              <span className="font-mono text-xs text-muted">
+                {promotion.status} · {formatTime(String(promotion.updatedAt ?? promotion.createdAt ?? ""))}
+              </span>
+            </span>
+            <span className="flex items-center gap-3">
+              {agreement ? <Money usdc={agreement.terms.compensation.baseAmountUsdc} /> : null}
+              <span className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm">
+                {agreement ? "상세보기" : "프로모션 보기"}
+              </span>
+            </span>
+          </Link>
         );
       })}
-      {visibleCount < messages.length ? (
-        <div className="flex items-center gap-2 text-sm text-muted">
-          <TypingDots /> 다음 A2A 메시지 수신 중
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function CandidateLine({ candidate }: { candidate: ApiCandidate }) {
-  const score = typeof candidate.overallScore === "number" ? Math.round(candidate.overallScore * 100) : null;
-  const selected = Boolean(candidate.negotiationId);
-  return (
-    <div className="border-b border-border-subtle/30 pb-2 last:border-b-0 last:pb-0">
-      <div className="flex items-center justify-between gap-3">
-        <span className="truncate font-mono text-xs">{candidate.creatorAgentId}</span>
-        <span className={selected ? "text-positive" : candidate.eligible ? "text-muted" : "text-negative"}>
-          {selected ? "선택" : candidate.eligible ? "후보" : "차단"}
-        </span>
-      </div>
-      <p className="mt-1 text-xs text-muted">{score === null ? candidate.explanation ?? "-" : `score ${score}`}</p>
     </div>
   );
 }
@@ -551,9 +437,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function AgreementRow({ agreement }: { agreement: ApiAgreement & Record<string, unknown> }) {
+  const negotiationId = typeof agreement.negotiationId === "string" ? agreement.negotiationId : null;
   return (
     <Link
-      href={`/creator/agreements/${agreement.agreementId}`}
+      href={negotiationId ? `/creator/offers/${negotiationId}` : `/creator/agreements/${agreement.agreementId}`}
       className="sketch-alt ink flex flex-wrap items-center justify-between gap-3 border border-border-subtle bg-background p-3"
     >
       <span className="min-w-0 truncate font-mono text-xs">{agreement.agreementId}</span>
@@ -608,86 +495,16 @@ function EmptyState({
   );
 }
 
-function TypingDots() {
-  return (
-    <span className="inline-flex gap-1">
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="inline-block h-1.5 w-1.5 rounded-full bg-muted"
-          animate={{ opacity: [0.25, 1, 0.25] }}
-          transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
-        />
-      ))}
-    </span>
-  );
-}
-
-function promotionInputFromSetup(setup: BrandSetup) {
-  const initialOffer = Math.max(50, Math.round((setup.maxPerDealUsdc * 0.75) / 50) * 50);
-  return {
-    productName: setup.productName,
-    title: `${setup.productName} 협찬 프로젝트`,
-    objective: setup.summary || "제품 인지도와 실제 사용 콘텐츠 확보",
-    categories: [setup.category || "beauty"],
-    targetAudience: setup.moodTags.length ? setup.moodTags.join(", ") : "제품과 어울리는 크리에이터",
-    totalBudget: setup.totalUsdc,
-    initialOffer,
-    maximumPerCreator: setup.maxPerDealUsdc,
-    autoAcceptCeiling: setup.maxPerDealUsdc,
-    maximumRounds: 3,
-    deliverables: [{ format: "reel", count: 1 }],
-    usageRights: "organicOnly",
-    deadline: deadlineAfterDays(14),
-    prohibitedClaims: ["의료 효능 과장", "무검수 게시"],
-  };
-}
-
-function messageSide(message: ApiNegotiationMessage, index: number): Role {
-  if (String(message.role ?? "") === "ROLE_AGENT") return "creator";
-  if (String(message.role ?? "") === "ROLE_USER") return "brand";
-  const type = String(message.payload?.type ?? "").toUpperCase();
-  if (type === "ACCEPT" || type === "REJECT") return "creator";
-  return index % 2 === 0 ? "brand" : "creator";
-}
-
-function messageLine(message: ApiNegotiationMessage, index: number) {
-  const payload = message.payload ?? {};
-  const type = String(payload.type ?? (index === 0 ? "OFFER" : "COUNTER")).toUpperCase();
-  const terms = isRecord(payload.terms) ? payload.terms : null;
-  const compensation = terms && isRecord(terms.compensation) ? terms.compensation : null;
-  const amount = numberFromUnknown(compensation?.baseAmountUsdc);
-  const rationale = typeof payload.rationale === "string" ? payload.rationale : null;
-  const amountText = amount === null ? "" : ` ${amount.toLocaleString()} USDC`;
-
-  if (type === "OFFER") return `제안${amountText}을 보냈습니다.${rationale ? ` ${rationale}` : ""}`;
-  if (type === "COUNTER") return `조건을 조정해 역제안${amountText}을 보냈습니다.${rationale ? ` ${rationale}` : ""}`;
-  if (type === "ACCEPT") return `조건을 수락했습니다.${amountText ? ` 최종 금액은${amountText}입니다.` : ""}`;
-  if (type === "REJECT") return `조건을 거절했습니다.${rationale ? ` ${rationale}` : ""}`;
-  if (type === "ESCALATE") return `사람 검토가 필요한 조건입니다.${rationale ? ` ${rationale}` : ""}`;
-  return rationale ?? type;
-}
-
 function readableError(caught: unknown) {
   if (caught instanceof ProductApiError) return caught.message;
   if (caught instanceof Error) return caught.message;
   return String(caught);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function numberFromUnknown(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
   return null;
-}
-
-function deadlineAfterDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function formatTime(value: string) {

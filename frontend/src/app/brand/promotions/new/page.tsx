@@ -1,12 +1,12 @@
 "use client";
 
 import { AuthGate } from "@/auth/AuthGate";
-import { BrandPromotionCreateScreen } from "@/product/ProductScreens";
+import { BrandPromotionWizard } from "@/features/dashboard/BrandPromotionWizard";
 
 export default function Page() {
   return (
     <AuthGate expectedRole="BRAND" requireCompleted>
-      {() => <BrandPromotionCreateScreen />}
+      {() => <BrandPromotionWizard />}
     </AuthGate>
   );
 }

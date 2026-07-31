@@ -45,7 +45,7 @@
 | Devnet escrow | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Evidence verification | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Settlement release | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
-| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | `/brand` and `/creator` replaced with dashboard sections: 정산, 에이전트 관리, 에이전트 협상 기록 |
+| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | Dashboard now shows aggregate summaries and record lists; actual A2A messages moved to negotiation detail pages |
 | Technical Proof | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | |
 

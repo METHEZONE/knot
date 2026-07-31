@@ -182,8 +182,8 @@ export function LoginScreen() {
         </p>
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
-        <RoleJumpCard role="brand" title="Brand workspace" href="/brand/onboarding" />
-        <RoleJumpCard role="creator" title="Creator workspace" href="/creator/onboarding" />
+        <RoleJumpCard role="brand" title="Brand workspace" href="/brand/product" />
+        <RoleJumpCard role="creator" title="Creator workspace" href="/creator/connect" />
       </div>
     </AuthFrame>
   );
@@ -1490,7 +1490,7 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
 export function RoleSignupScreen({ role, session }: { role: Role; session?: RoleSession }) {
   const roleSession = session ?? fallbackRoleSession(role);
   const router = useRouter();
-  const nextHref = role === "brand" ? "/brand/onboarding" : "/creator/onboarding";
+  const nextHref = role === "brand" ? "/brand/product" : "/creator/connect";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();

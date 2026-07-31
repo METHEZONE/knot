@@ -2,13 +2,13 @@
 
 import { use } from "react";
 import { AuthGate } from "@/auth/AuthGate";
-import { CreatorOfferDetailScreen } from "@/product/ProductScreens";
+import { NegotiationDetail } from "@/features/dashboard/NegotiationDetail";
 
 export default function Page({ params }: { params: Promise<{ negotiationId: string }> }) {
   const { negotiationId } = use(params);
   return (
     <AuthGate expectedRole="CREATOR" requireCompleted>
-      {() => <CreatorOfferDetailScreen negotiationId={negotiationId} />}
+      {() => <NegotiationDetail role="creator" negotiationId={negotiationId} />}
     </AuthGate>
   );
 }
