@@ -2591,22 +2591,7 @@ def build_api_router(
         escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
         if escrow is None:
             raise _not_found("escrow", escrow_id)
-        if escrow.get("status") != "LOCKED":
-            raise _problem(
-                status.HTTP_409_CONFLICT,
-                "INVALID_STATE_TRANSITION",
-                "Escrow is not in a releasable state.",
-            )
         agreement_id = _require_document_str(escrow, "agreementId")
-        promotion = _get_promotion(repository, _require_document_str(escrow, "promotionId"))
-        if not promotion.autonomy.auto_release:
-            raise _problem(
-                status.HTTP_409_CONFLICT,
-                "POLICY_VIOLATION",
-                "Auto-release is disabled for this Promotion; human approval is required.",
-            )
-        milestone = _get_milestone_document(repository, agreement_id, milestone_id)
-
         existing_settlement = _find_settlement(repository, escrow_id, milestone_id)
         if existing_settlement is not None:
             if existing_settlement.get("idempotencyKey") == key:
@@ -2622,6 +2607,20 @@ def build_api_router(
                 "MILESTONE_ALREADY_RELEASED",
                 f"Milestone {milestone_id} was already released.",
             )
+        if escrow.get("status") != "LOCKED":
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "INVALID_STATE_TRANSITION",
+                "Escrow is not in a releasable state.",
+            )
+        promotion = _get_promotion(repository, _require_document_str(escrow, "promotionId"))
+        if not promotion.autonomy.auto_release:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "POLICY_VIOLATION",
+                "Auto-release is disabled for this Promotion; human approval is required.",
+            )
+        milestone = _get_milestone_document(repository, agreement_id, milestone_id)
 
         if not _milestone_evidence_passed(repository, agreement_id, milestone_id):
             raise _problem(
@@ -4210,18 +4209,25 @@ def _agreement_document(
         return None
     agreement_id = decision.get("agreementId")
     terms = decision.get("terms")
-    terms_hash = decision.get("termsHash")
+    artifact_terms_hash = decision.get("termsHash")
     if (
         not isinstance(agreement_id, str)
         or not isinstance(terms, dict)
-        or not isinstance(terms_hash, str)
+        or not isinstance(artifact_terms_hash, str)
     ):
         raise _problem(
             status.HTTP_409_CONFLICT,
             "INVALID_STATE_TRANSITION",
             "Accepted negotiation is missing agreement terms.",
-        )
+    )
     agreement_terms = AgreementTerms.model_validate(terms)
+    computed_terms_hash = terms_hash(agreement_terms)
+    if artifact_terms_hash != computed_terms_hash:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "TERMS_HASH_MISMATCH",
+            "Accepted Agreement Artifact termsHash does not match canonical terms.",
+        )
     return {
         "agreementId": agreement_id,
         "negotiationId": negotiation["negotiationId"],
@@ -4232,7 +4238,9 @@ def _agreement_document(
         "creatorAgentId": negotiation["creatorAgentId"],
         "terms": terms,
         "canonicalTermsJson": canonical_terms_json(agreement_terms),
-        "termsHash": terms_hash,
+        "termsHash": computed_terms_hash,
+        "hashAlgorithm": "sha256",
+        "hashVersion": "knot.agreement-terms.v1",
         "status": "AGREED",
         "createdAt": created_at,
     }

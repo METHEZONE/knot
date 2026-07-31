@@ -1,5 +1,8 @@
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from apps.api import routes as api_routes
 from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
@@ -453,6 +456,11 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
     assert agreement["canonicalTermsJson"].startswith("{")
+    assert agreement["hashAlgorithm"] == "sha256"
+    assert agreement["hashVersion"] == "knot.agreement-terms.v1"
+    assert agreement["terms"]["milestones"] == [
+        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+    ]
 
     negotiation_id = negotiation["negotiationId"]
     messages_response = client.get(f"/api/v1/negotiations/{negotiation_id}/messages")
@@ -475,6 +483,11 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement_response = client.get(f"/api/v1/agreements/{agreement['agreementId']}")
     assert agreement_response.status_code == 200
     assert agreement_response.json()["data"]["agreement"]["agreementId"] == agreement["agreementId"]
+    milestones = repository.list_raw_documents(
+        f"{COLLECTIONS.agreements}/{agreement['agreementId']}/{COLLECTIONS.milestones}"
+    )
+    assert [milestone["milestoneId"] for milestone in milestones] == ["content"]
+    assert milestones[0]["releasePct"] == 100
 
     negotiation_agreement_response = client.get(
         f"/api/v1/negotiations/{negotiation_id}/agreement"
@@ -484,6 +497,47 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
         negotiation_agreement_response.json()["data"]["agreement"]["agreementId"]
         == agreement["agreementId"]
     )
+
+
+def test_agreement_document_rejects_artifact_terms_hash_mismatch() -> None:
+    terms = {
+        "compensation": {"structure": "flat", "baseAmountUsdc": 500, "performancePct": 0},
+        "deliverables": [
+            {
+                "format": "reel",
+                "count": 1,
+                "postWindow": {"start": "2026-08-01", "end": "2026-08-10"},
+                "revisionRounds": 1,
+            }
+        ],
+        "usageRights": "organicOnly",
+        "milestones": [
+            {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+        ],
+        "constraints": {"requiredDisclosures": ["ad"], "prohibitedClaims": []},
+    }
+
+    with pytest.raises(HTTPException) as raised:
+        api_routes._agreement_document(
+            negotiation={
+                "negotiationId": "negotiation-hash",
+                "promotionId": "promotion-hash",
+                "brandAgentId": "brand-agent-hash",
+                "creatorAgentId": "creator-agent-hash",
+            },
+            decision={
+                "type": "ACCEPT",
+                "agreementId": "agreement-hash",
+                "terms": terms,
+                "termsHash": "sha256:not-the-canonical-hash",
+            },
+            artifact_id="artifact-hash",
+            task_id="task-hash",
+            created_at="2026-07-31T00:00:00Z",
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail["code"] == "TERMS_HASH_MISMATCH"
 
 
 def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) -> None:
@@ -859,7 +913,7 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     evidence = submit_response.json()["data"]["evidence"]
     assert evidence["status"] == "SUBMITTED"
     assert evidence["milestoneId"] == "content"
-    assert evidence["milestoneSnapshot"]["releasePct"] == 70
+    assert evidence["milestoneSnapshot"]["releasePct"] == 100
 
     verify_response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
     assert verify_response.status_code == 200

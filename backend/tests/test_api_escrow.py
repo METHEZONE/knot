@@ -225,7 +225,7 @@ def test_lock_requires_web3_gateway_for_success() -> None:
     assert lock_operations[0]["status"] == "FAILED"
 
 
-def test_release_after_evidence_pass_settles_and_keeps_escrow_locked(monkeypatch) -> None:
+def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
     pass_evidence(client, agreement, "content")
@@ -239,8 +239,9 @@ def test_release_after_evidence_pass_settles_and_keeps_escrow_locked(monkeypatch
     data = response.json()["data"]
     assert data["settlement"]["milestoneId"] == "content"
     assert data["settlement"]["status"] == "CONFIRMED"
-    assert data["escrow"]["status"] == "LOCKED"  # only 70% released, 30% remains
+    assert data["escrow"]["status"] == "COMPLETED"
     assert data["escrow"]["releasedAmountBaseUnits"] == escrow["milestoneAmounts"]["content"]
+    assert data["escrow"]["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]
     assert data["receipt"]["signature"] == "release-signature-confirmed"
 
     receipt_id = data["receipt"]["receiptId"]
@@ -253,8 +254,8 @@ def test_release_blocked_without_passing_evidence(monkeypatch) -> None:
     agreement = accepted_agreement(client)
     escrow = lock(client, agreement, "lk")["escrow"]
     response = client.post(
-        f"/api/v1/escrows/{escrow['escrowId']}/milestones/contract:release",
-        headers={"Idempotency-Key": "rel-contract"},
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={"Idempotency-Key": "rel-content"},
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
@@ -280,20 +281,15 @@ def test_release_blocked_when_auto_release_disabled(monkeypatch) -> None:
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
 
 
-def test_releasing_all_milestones_completes_escrow(monkeypatch) -> None:
+def test_releasing_one_hundred_percent_milestone_completes_escrow(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
     pass_evidence(client, agreement, "content")
-    pass_evidence(client, agreement, "contract")
     escrow = lock(client, agreement, "lk")["escrow"]
 
-    client.post(
+    final = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
         headers={"Idempotency-Key": "rel-content"},
-    )
-    final = client.post(
-        f"/api/v1/escrows/{escrow['escrowId']}/milestones/contract:release",
-        headers={"Idempotency-Key": "rel-contract"},
     ).json()["data"]
     assert final["escrow"]["status"] == "COMPLETED"
     assert final["escrow"]["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]

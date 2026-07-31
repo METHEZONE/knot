@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 8 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 9 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -67,10 +67,10 @@
 | `GET /api/v1/negotiations/{negotiation_id}` | Raw negotiation | Negotiation detail | Preserve | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/messages` | Persisted messages | Negotiation messages | Preserve | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/events` | Decision events consumed by live/replay proof ViewModels | Negotiation timeline/events | Consumed by Phase 7 frontend | Low |
-| `GET /api/v1/negotiations/{negotiation_id}/agreement` | Agreement by negotiation | same | Preserve | Low |
+| `GET /api/v1/negotiations/{negotiation_id}/agreement` | Agreement by negotiation with canonical hash metadata and one 100% milestone | same | Updated in Phase 9 | Low |
 | `POST /api/v1/negotiations/{negotiation_id}:cancel` | Cancel non-terminal negotiation | same | Preserve | Low |
-| `GET /api/v1/agreements/{agreement_id}` | Agreement read | same | Preserve | Low |
-| `GET /api/v1/agreements/{agreement_id}/escrow` | Escrow + settlements | same | Preserve | Low |
+| `GET /api/v1/agreements/{agreement_id}` | Agreement read with canonical hash metadata and one 100% milestone | same | Updated in Phase 9 | Low |
+| `GET /api/v1/agreements/{agreement_id}/escrow` | Escrow + settlements bound to Agreement termsHash and one 100% milestone amount | same | Updated in Phase 9 | Low |
 | `POST /api/v1/agreements/{agreement_id}/evidence` | Evidence submit | same | Preserve | Medium: URL security hardening pending |
 | `GET /api/v1/evidence/{evidence_id}` | Evidence read | same | Preserve | Low |
 | `POST /api/v1/evidence/{evidence_id}:verify` | Evidence verification | Evidence verification | Preserve | Medium: final Gemini observation/gate pending |
@@ -116,7 +116,7 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 | Exact Creator minimum/blocked policy | Public discovery projection | Phase 3 projection exposes only `publicRateBand` and public filters |
 | Match Run `COMPLETED` after ranking | `QUEUED` through durable state machine | Preserve until Phase 5 |
 | Candidate `overallScore`/`componentScores` | final score components | Preserve; ranking refactor later |
-| Agreement milestones 30/70 in tests/legacy | one 100% `POST_VERIFIED` milestone | Migrate in Agreement/settlement phase |
+| Agreement milestones 30/70 in tests/legacy | one 100% `POST_VERIFIED` milestone | Phase 9 updates new negotiation terms, Agreement milestone docs, and frontend fixtures |
 | pay.sh receipt fields | `paymentOperations` + `transactionReceipts` with `paymentType: PAYSH_X402` | Phase 8 records settled/failed attempts without fake blockchain signatures |
 
 ## Contract Tests Added in Phase 1
@@ -159,3 +159,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - pay.sh verification records skipped, settled, failed, and cap/allowlist-blocked outcomes explicitly.
 - Settled pay.sh calls persist `paymentOperations` and `transactionReceipts` with `paymentType: PAYSH_X402`.
 - Duplicate Match Run start with the same idempotency key does not invoke pay.sh twice.
+
+## Contract Tests Added in Phase 9
+
+- Agreement creation rejects Artifact terms hash mismatch.
+- Accepted negotiations store one `content` milestone with 100% release.
+- Escrow lock/release keeps amount and terms hash bound to the Agreement and replays duplicate release idempotency keys.

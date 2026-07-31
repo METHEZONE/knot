@@ -62,36 +62,20 @@ const terms = [
 
 const milestones: Milestone[] = [
   {
-    id: "m1",
-    title: "Agreement signed",
-    amountUsdc: 285,
-    status: "released",
-    progressPercent: 100,
-    creatorAction: "완료된 계약 조건을 확인합니다.",
-  },
-  {
-    id: "m2",
-    title: "Content submitted",
-    amountUsdc: 475,
+    id: "content",
+    title: "Content verified",
+    amountUsdc: 950,
     status: "inProgress",
     progressPercent: 45,
     creatorAction: "Reel 초안을 제작하고 게시 URL을 제출합니다.",
-  },
-  {
-    id: "m3",
-    title: "Evidence verified",
-    amountUsdc: 190,
-    status: "notStarted",
-    progressPercent: 0,
-    creatorAction: "광고 표기와 브랜드 멘션이 포함된 evidence를 제출합니다.",
   },
 ];
 
 const settlement: Settlement = {
   escrowAmountUsdc: 950,
-  releasedUsdc: 285,
-  pendingUsdc: 665,
-  escrowStatus: "PARTIALLY_RELEASED",
+  releasedUsdc: 0,
+  pendingUsdc: 950,
+  escrowStatus: "LOCKED",
   lockTx: null,
   releaseTx: null,
 };

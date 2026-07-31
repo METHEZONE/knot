@@ -226,7 +226,7 @@ test("mock data source exposes DB-ready creator deal and criteria collections", 
 
   assert.ok(criteria.blockedDomains.includes("담배"));
   assert.ok(deals.some((deal) => deal.status === "AGREED"));
-  assert.equal(agreedDeal?.settlement.escrowStatus, "PARTIALLY_RELEASED");
+  assert.equal(agreedDeal?.settlement.escrowStatus, "LOCKED");
 });
 
 test("API data source reads a pending negotiation without creating agent resources", async () => {

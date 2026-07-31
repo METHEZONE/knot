@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 8 mapping. No live migration or backfill was executed.
+> Phase 9 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -77,7 +77,7 @@ Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explic
 | `negotiations` | `negotiations` | Preserve | Add policy snapshot refs and final status fields later |
 | `a2aTasks` with in-memory Creator default | `a2aTasks` durable storage | Implement persistent Creator task store later | Existing Product API projection remains readable |
 | `agreements` | `agreements` | Preserve | Add final one-milestone hash schema later |
-| `agreements/{id}/milestones` 30/70 legacy | one `POST_VERIFIED` 100% milestone | Migrate only in Agreement phase | Preserve old milestones for existing records |
+| `agreements/{id}/milestones` 30/70 legacy | one `POST_VERIFIED` 100% milestone | Phase 9 writes one new `content` milestone at 100% for new Agreements | Preserve old milestones for existing records |
 | `evidence` | `evidence` + `verificationResults` | Add verification result collection later | Existing evidence status remains readable |
 | `escrows`, `settlements`, `transactionReceipts` | same plus operation subrecords where needed | Preserve | Do not alter confirmed receipts; pay.sh receipts are labeled `paymentType: PAYSH_X402` and do not contain fabricated signatures |
 
@@ -120,6 +120,15 @@ Phase 8 adds no schema migration and executes no backfill. New writes are additi
 - `transactionReceipts/{receiptId}` only for settled or failed pay.sh attempts, labeled with `paymentType: PAYSH_X402` and `network: pay.sh:{mode}`.
 
 Existing Web3 receipt consumers must check `paymentType` or `operationType` before treating a receipt as an escrow transaction.
+
+Phase 9 adds no schema migration and executes no backfill. New Agreement writes are additive:
+
+- `agreements/{agreementId}.hashAlgorithm`
+- `agreements/{agreementId}.hashVersion`
+- `agreements/{agreementId}.terms.milestones = [{ id: "content", releasePct: 100 }]`
+- `agreements/{agreementId}/milestones/content`
+
+Existing Agreements with legacy 30/70 milestones remain readable and must not be destructively rewritten without an explicit migration approval.
 
 ## Index Requirements
 

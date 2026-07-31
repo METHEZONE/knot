@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 8 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 9 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -40,9 +40,9 @@
 | Match Run orchestration | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 5 idempotency, cancel, state history, and canonical events added; worker pending |
 | Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
 | A2A counteroffer | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 6 registry-validated HTTP A2A counter/accept path tested |
-| Agreement Artifact/hash | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Agreement/hash code audited |
+| Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
 | pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
-| Devnet escrow | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Gateway/devnet config audited; no tx run |
+| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 9 fake-gateway/local tests verify amount/hash/receipt binding; real devnet lock not executed because on-chain action requires approval |
 | Evidence verification | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing evidence route/policy audited |
 | Settlement release | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing release route audited |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
@@ -164,7 +164,20 @@
 - `API_PAYMENT` timeline data now carries quote, spend cap, result digest, score impact metadata, receipt ID, external receipt ID, and continuation policy.
 - No real pay.sh call was executed in this environment; `tests/test_paysh_sandbox.py` skipped because the configured sandbox prerequisites were unavailable.
 
-## 11. Query-Bound Proof
+## 11. Phase 9 Changes
+
+- `build_initial_terms` now creates the MVP settlement schedule:
+  - one `content` milestone;
+  - `trigger: contentLiveVerified`;
+  - `releasePct: 100`.
+- Agreement creation recomputes canonical `termsHash` and rejects A2A Artifact hash mismatch with `TERMS_HASH_MISMATCH`.
+- Agreement documents now store `hashAlgorithm: sha256` and `hashVersion: knot.agreement-terms.v1`.
+- Agreement milestone subdocuments are written from the canonical one-milestone terms.
+- Escrow release idempotency now checks an existing settlement before rejecting a completed aggregate, so duplicate release requests with the same key return the original receipt.
+- Frontend fixture milestone UI was updated away from legacy 30/70 examples.
+- Web3 Gateway build/unit/lint passed. No live devnet transaction was submitted in this phase.
+
+## 12. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -176,7 +189,7 @@ Maximum paid tool calls: one selected creator path in the current synchronous MV
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 12. Test Evidence
+## 13. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -248,8 +261,19 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 8 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
 | Phase 8 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
 | Phase 8 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 9 backend focused tests | VERIFIED: 52 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py tests/test_a2a_negotiation.py tests/test_domain_models.py` from `backend` |
+| Phase 9 backend full pytest | VERIFIED: 112 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 9 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 9 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 9 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 9 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 9 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 9 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 9 Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
+| Phase 9 Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
+| Phase 9 Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
 
-## 13. Latest Verified E2E
+## 14. Latest Verified E2E
 
 ```text
 Commit:
@@ -270,9 +294,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E, live pay.sh purchase, or live transaction was executed through Phase 8.
+No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 9.
 
-## 14. Known Blockers
+## 15. Known Blockers
 
 ```text
 BLOCKER: External Match Run worker dispatch is not implemented.
@@ -301,7 +325,7 @@ NEXT ACTION: Add rules and managed vector index verification in an infra phase.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 13. Update Rule
+## 16. Update Rule
 
 For each phase:
 

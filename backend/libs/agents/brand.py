@@ -57,8 +57,7 @@ def build_initial_terms(
         ],
         usageRights=promotion.usage_rights,
         milestones=[
-            Milestone(id="contract", trigger="contractSigned", releasePct=30),
-            Milestone(id="content", trigger="contentLiveVerified", releasePct=70),
+            Milestone(id="content", trigger="contentLiveVerified", releasePct=100),
         ],
         constraints=TermConstraints(
             requiredDisclosures=promotion.constraints.required_disclosures,
