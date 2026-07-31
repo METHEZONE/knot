@@ -285,6 +285,62 @@ class EvidenceVerificationRequest(DomainModel):
     observations: EvidenceObservations | None = None
 
 
+class ProductAnalysisRequest(DomainModel):
+    source_url: str = Field(alias="sourceUrl")
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("sourceUrl must use https")
+        return value
+
+
+class CreatorProfileAnalysisRequest(DomainModel):
+    source_url: str = Field(alias="sourceUrl")
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, value: str) -> str:
+        if not value.startswith("https://"):
+            raise ValueError("sourceUrl must use https")
+        return value
+
+
+class BrandSourceAnalysisRequest(DomainModel):
+    website_url: str | None = Field(default=None, alias="websiteUrl")
+    product_url: str | None = Field(default=None, alias="productUrl")
+    pdf_file_ref: str | None = Field(default=None, alias="pdfFileRef")
+
+    def source_url(self) -> str:
+        value = self.product_url or self.website_url
+        if not value:
+            raise ValueError("productUrl or websiteUrl is required")
+        return value
+
+
+class AnalysisConfirmRequest(DomainModel):
+    confirmed_fields: list[str] = Field(default_factory=list, alias="confirmedFields")
+    edits: dict[str, object] = Field(default_factory=dict)
+
+
+class OnboardingPatchRequest(DomainModel):
+    role: str
+    status: str = "IN_PROGRESS"
+    current_card: str = Field(default="SOURCE", alias="currentCard")
+    completed_cards: list[str] = Field(default_factory=list, alias="completedCards")
+    analysis_job_id: str | None = Field(default=None, alias="analysisJobId")
+    draft: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"BRAND", "CREATOR"}:
+            raise ValueError("role must be BRAND or CREATOR")
+        return normalized
+
+
 def default_promotion_request() -> PromotionCreateRequest:
     return PromotionCreateRequest(
         title="Summer skincare launch",

@@ -192,6 +192,32 @@ export type BrandSourceAnalysisDraft = {
   };
 };
 
+export type AnalysisJob = {
+  analysisId: string;
+  ownerUid: string;
+  role: "BRAND" | "CREATOR";
+  analysisType: "PRODUCT" | "CREATOR_PROFILE";
+  status: "READY_FOR_CONFIRMATION" | "CONFIRMED" | string;
+  sourceUrl: string;
+  sourceDigest: string;
+  provider: string;
+  model: string | null;
+  fallbackReason: string | null;
+  draft: Record<string, unknown>;
+  confirmedFields: string[];
+};
+
+export type OnboardingSession = {
+  ownerUid: string;
+  role: "BRAND" | "CREATOR" | null;
+  status: "IN_PROGRESS" | "COMPLETED" | string;
+  currentCard: string;
+  completedCards: string[];
+  analysisJobId: string | null;
+  draft: Record<string, unknown>;
+  draftVersion: number;
+};
+
 export type ApiMatchRun = {
   matchRunId: string;
   promotionId: string;
@@ -509,6 +535,63 @@ export class ProductApiClient {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  async getOnboarding() {
+    const response = await this.request<{ onboarding: OnboardingSession }>("/api/v1/onboarding");
+    return response.onboarding;
+  }
+
+  async patchOnboarding(input: Partial<OnboardingSession> & { role: "BRAND" | "CREATOR" }) {
+    const response = await this.request<{ onboarding: OnboardingSession }>("/api/v1/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    return response.onboarding;
+  }
+
+  async analyzeProduct(sourceUrl: string, idempotencyKey: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>("/api/v1/analyses/product", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ sourceUrl }),
+    });
+    return response.analysis;
+  }
+
+  async analyzeCreatorProfile(sourceUrl: string, idempotencyKey: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      "/api/v1/analyses/creator-profile",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ sourceUrl }),
+      },
+    );
+    return response.analysis;
+  }
+
+  async getAnalysis(analysisId: string) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      `/api/v1/analyses/${analysisId}`,
+    );
+    return response.analysis;
+  }
+
+  async confirmAnalysis(
+    analysisId: string,
+    input: { confirmedFields: string[]; edits?: Record<string, unknown> },
+    idempotencyKey: string,
+  ) {
+    const response = await this.request<{ analysis: AnalysisJob }>(
+      `/api/v1/analyses/${analysisId}:confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ ...input, edits: input.edits ?? {} }),
+      },
+    );
+    return response.analysis;
   }
 
   async getBrandPromotionDetail(promotionId: string) {

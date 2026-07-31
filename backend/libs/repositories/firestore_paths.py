@@ -30,6 +30,8 @@ class FirestoreCollection:
     brands: str = "brands"
     creator_profiles: str = "creatorProfiles"
     product_profiles: str = "productProfiles"
+    social_snapshots: str = "socialSnapshots"
+    analysis_jobs: str = "analysisJobs"
     agents: str = "agents"
     agent_policies: str = "agentPolicies"
     agent_authorities: str = "agentAuthorities"
@@ -52,6 +54,7 @@ class FirestoreCollection:
     escrows: str = "escrows"
     settlements: str = "settlements"
     agent_activities: str = "agentActivities"
+    onboarding_sessions: str = "onboardingSessions"
     payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
@@ -79,6 +82,14 @@ class FirestorePaths:
     @staticmethod
     def product_profile(product_profile_id: str) -> str:
         return document_path(COLLECTIONS.product_profiles, product_profile_id)
+
+    @staticmethod
+    def social_snapshot(snapshot_id: str) -> str:
+        return document_path(COLLECTIONS.social_snapshots, snapshot_id)
+
+    @staticmethod
+    def analysis_job(analysis_id: str) -> str:
+        return document_path(COLLECTIONS.analysis_jobs, analysis_id)
 
     @staticmethod
     def agent(agent_id: str) -> str:
@@ -202,6 +213,10 @@ class FirestorePaths:
     @staticmethod
     def agent_activity(activity_id: str) -> str:
         return document_path(COLLECTIONS.agent_activities, activity_id)
+
+    @staticmethod
+    def onboarding_session(owner_id: str) -> str:
+        return document_path(COLLECTIONS.onboarding_sessions, owner_id)
 
     @staticmethod
     def payment_operation(operation_id: str) -> str:

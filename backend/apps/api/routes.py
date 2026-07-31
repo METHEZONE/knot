@@ -1,23 +1,30 @@
+import ipaddress
 import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from subprocess import TimeoutExpired
 from typing import cast
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Header, HTTPException, status
 
 from apps.api.schemas import (
+    AnalysisConfirmRequest,
     BrandOnboardingRequest,
     BrandPromotionCreateRequest,
+    BrandSourceAnalysisRequest,
     CreatorCriteriaRequest,
     CreatorOnboardingRequest,
+    CreatorProfileAnalysisRequest,
     CurrentUserBrandProfileRequest,
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
+    OnboardingPatchRequest,
+    ProductAnalysisRequest,
     PromotionCreateRequest,
     UserBootstrapRequest,
 )
@@ -79,6 +86,164 @@ def build_api_router(
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _bootstrap_authenticated_user(repository, auth_user)
         return _ok(_current_user_payload(repository, user))
+
+    @router.get("/onboarding")
+    def get_onboarding(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        session = _onboarding_session(repository, auth_user.uid, user)
+        return _ok({"onboarding": session})
+
+    @router.patch("/onboarding")
+    def patch_onboarding(
+        payload: OnboardingPatchRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        if user.get("role") not in {None, payload.role}:
+            raise _problem(
+                status.HTTP_403_FORBIDDEN,
+                "FORBIDDEN",
+                "Onboarding role does not match the authenticated account.",
+            )
+        now = _now()
+        existing = _onboarding_session(repository, auth_user.uid, user)
+        session = {
+            **existing,
+            **payload.model_dump(by_alias=True, mode="json"),
+            "ownerUid": auth_user.uid,
+            "draftVersion": _next_draft_version(existing),
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.onboarding_session(auth_user.uid), session)
+        return _ok({"onboarding": session})
+
+    @router.post("/analyses/product", status_code=status.HTTP_202_ACCEPTED)
+    def analyze_product(
+        payload: ProductAnalysisRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_role(repository, auth_user, "BRAND")
+        return _ok(
+            {
+                "analysis": _create_analysis_job(
+                    repository=repository,
+                    settings=settings,
+                    owner_uid=auth_user.uid,
+                    role="BRAND",
+                    analysis_type="PRODUCT",
+                    source_url=payload.source_url,
+                    idempotency_key=idempotency_key,
+                    user=user,
+                )
+            }
+        )
+
+    @router.post("/onboarding/brand/analyze-source", status_code=status.HTTP_202_ACCEPTED)
+    def analyze_brand_source(
+        payload: BrandSourceAnalysisRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        try:
+            source_url = payload.source_url()
+        except ValueError as exc:
+            raise _problem(status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR", str(exc)) from exc
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_role(repository, auth_user, "BRAND")
+        analysis = _create_analysis_job(
+            repository=repository,
+            settings=settings,
+            owner_uid=auth_user.uid,
+            role="BRAND",
+            analysis_type="PRODUCT",
+            source_url=source_url,
+            idempotency_key=idempotency_key,
+            user=user,
+        )
+        draft = analysis.get("draft")
+        return _ok(cast(dict[str, object], draft if isinstance(draft, dict) else analysis))
+
+    @router.post("/analyses/creator-profile", status_code=status.HTTP_202_ACCEPTED)
+    def analyze_creator_profile(
+        payload: CreatorProfileAnalysisRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_role(repository, auth_user, "CREATOR")
+        return _ok(
+            {
+                "analysis": _create_analysis_job(
+                    repository=repository,
+                    settings=settings,
+                    owner_uid=auth_user.uid,
+                    role="CREATOR",
+                    analysis_type="CREATOR_PROFILE",
+                    source_url=payload.source_url,
+                    idempotency_key=idempotency_key,
+                    user=user,
+                )
+            }
+        )
+
+    @router.get("/analyses/{analysis_id}")
+    def get_analysis(
+        analysis_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        analysis = _require_owned_analysis(repository, auth_user.uid, analysis_id)
+        return _ok({"analysis": analysis})
+
+    @router.post("/analyses/{analysis_id}:confirm")
+    def confirm_analysis(
+        analysis_id: str,
+        payload: AnalysisConfirmRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        analysis = _require_owned_analysis(repository, auth_user.uid, analysis_id)
+        key = _require_idempotency_key(idempotency_key)
+        _claim_idempotency(
+            repository,
+            key,
+            payload={
+                "uid": auth_user.uid,
+                "analysisId": analysis_id,
+                **payload.model_dump(by_alias=True, mode="json"),
+            },
+            owner_path=FirestorePaths.analysis_job(analysis_id),
+        )
+        now = _now()
+        confirmed = {
+            **analysis,
+            "status": "CONFIRMED",
+            "confirmedFields": payload.confirmed_fields,
+            "edits": payload.edits,
+            "confirmedAt": now,
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.analysis_job(analysis_id), confirmed)
+        session = _onboarding_session(repository, auth_user.uid, {"role": analysis.get("role")})
+        completed_cards = _append_unique_str(session.get("completedCards"), "ANALYSIS")
+        repository.save_raw_document(
+            FirestorePaths.onboarding_session(auth_user.uid),
+            {
+                **session,
+                "analysisJobId": analysis_id,
+                "completedCards": completed_cards,
+                "draftVersion": _next_draft_version(session),
+                "updatedAt": now,
+            },
+        )
+        return _ok({"analysis": confirmed})
 
     @router.post("/me/role")
     def select_current_user_role(
@@ -3104,6 +3269,227 @@ def _derive_onboarding_status(user: dict[str, object]) -> str:
     if role == "CREATOR":
         return "COMPLETED" if user.get("creatorId") else "PROFILE_REQUIRED"
     return "ROLE_REQUIRED"
+
+
+def _onboarding_session(
+    repository: KnotRepository,
+    owner_uid: str,
+    user: dict[str, object],
+) -> dict[str, object]:
+    existing = repository.get_raw_document(FirestorePaths.onboarding_session(owner_uid))
+    if existing is not None:
+        return existing
+    role = user.get("role")
+    now = _now()
+    return {
+        "ownerUid": owner_uid,
+        "role": role if isinstance(role, str) else None,
+        "status": "IN_PROGRESS",
+        "currentCard": "SOURCE",
+        "completedCards": [],
+        "analysisJobId": None,
+        "draft": {},
+        "draftVersion": 0,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+
+def _next_draft_version(session: dict[str, object]) -> int:
+    value = session.get("draftVersion")
+    return (value if isinstance(value, int) else 0) + 1
+
+
+def _create_analysis_job(
+    *,
+    repository: KnotRepository,
+    settings: Settings,
+    owner_uid: str,
+    role: str,
+    analysis_type: str,
+    source_url: str,
+    idempotency_key: str | None,
+    user: dict[str, object],
+) -> dict[str, object]:
+    normalized_url = _validate_external_https_url(source_url)
+    source_digest = sha256_prefixed(normalized_url)
+    key = idempotency_key or f"analysis:{owner_uid}:{analysis_type}:{source_digest}"
+    analysis_id = f"analysis-{uuid5(NAMESPACE_URL, key)}"
+    existing = repository.get_raw_document(FirestorePaths.analysis_job(analysis_id))
+    if existing is not None:
+        if existing.get("ownerUid") != owner_uid:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "IDEMPOTENCY_CONFLICT",
+                "Analysis idempotency key is already bound to another owner.",
+            )
+        return existing
+
+    draft = (
+        _product_analysis_draft(normalized_url, settings)
+        if analysis_type == "PRODUCT"
+        else _creator_profile_analysis_draft(normalized_url, settings)
+    )
+    now = _now()
+    analysis: dict[str, object] = {
+        "analysisId": analysis_id,
+        "ownerUid": owner_uid,
+        "role": role,
+        "analysisType": analysis_type,
+        "status": "READY_FOR_CONFIRMATION",
+        "sourceUrl": normalized_url,
+        "sourceDigest": source_digest,
+        "provider": "deterministic",
+        "model": None,
+        "fallbackReason": "secure_fetch_and_gemini_not_configured"
+        if settings.gemini_mode == "off"
+        else "secure_fetch_not_implemented",
+        "schemaVersion": "knot.analysis-job.v1",
+        "draft": draft,
+        "confirmedFields": [],
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    repository.save_raw_document(FirestorePaths.analysis_job(analysis_id), analysis)
+    session = _onboarding_session(repository, owner_uid, user)
+    repository.save_raw_document(
+        FirestorePaths.onboarding_session(owner_uid),
+        {
+            **session,
+            "role": role,
+            "status": "IN_PROGRESS",
+            "currentCard": "ANALYSIS",
+            "completedCards": _append_unique_str(session.get("completedCards"), "SOURCE"),
+            "analysisJobId": analysis_id,
+            "draft": draft,
+            "draftVersion": _next_draft_version(session),
+            "updatedAt": now,
+        },
+    )
+    return analysis
+
+
+def _require_owned_analysis(
+    repository: KnotRepository,
+    owner_uid: str,
+    analysis_id: str,
+) -> dict[str, object]:
+    analysis = repository.get_raw_document(FirestorePaths.analysis_job(analysis_id))
+    if analysis is None:
+        raise _not_found("analysis", analysis_id)
+    if analysis.get("ownerUid") != owner_uid:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Analysis does not belong to the authenticated account.",
+        )
+    return analysis
+
+
+def _validate_external_https_url(value: str) -> str:
+    parsed = urlparse(value.strip())
+    if parsed.scheme != "https":
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "UNSAFE_SOURCE_URL",
+            "Source URL must use https.",
+        )
+    hostname = parsed.hostname
+    if hostname is None:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "UNSAFE_SOURCE_URL",
+            "Source URL must include a host.",
+        )
+    host = hostname.lower().rstrip(".")
+    if host in {"localhost", "metadata.google.internal"} or host.endswith(".local"):
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "UNSAFE_SOURCE_URL",
+            "Source URL host is not allowed.",
+        )
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None and (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+        or address.is_unspecified
+    ):
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "UNSAFE_SOURCE_URL",
+            "Source URL IP range is not allowed.",
+        )
+    return parsed.geturl()
+
+
+def _field(value: object, *, source: str, confidence: float) -> dict[str, object]:
+    return {"value": value, "source": source, "confidence": confidence}
+
+
+def _product_analysis_draft(source_url: str, settings: Settings) -> dict[str, object]:
+    parsed = urlparse(source_url)
+    host_label = (parsed.hostname or "product").split(".")[0].replace("-", " ").title()
+    return {
+        "analysisId": None,
+        "mode": "api",
+        "provider": "deterministic",
+        "model": None if settings.gemini_mode == "off" else settings.gemini_model,
+        "fallbackReason": "secure_fetch_and_gemini_not_configured"
+        if settings.gemini_mode == "off"
+        else "secure_fetch_not_implemented",
+        "unknownFields": ["price", "reviews", "sales", "audienceMetrics"],
+        "brand": {"name": _field(host_label, source="URL_HOST", confidence=0.45)},
+        "product": {
+            "name": _field(host_label, source="URL_HOST", confidence=0.35),
+            "category": _field("beauty", source="USER_CONFIRMATION_REQUIRED", confidence=0.2),
+            "summary": _field(
+                "공개 페이지를 아직 가져오지 않아 URL 기반 제한 분석만 준비됐습니다.",
+                source="LIMITED_ANALYSIS",
+                confidence=0.2,
+            ),
+            "price": _field(None, source="UNKNOWN", confidence=0.0),
+            "features": [],
+            "targetAudience": [],
+            "keywords": [],
+        },
+        "recommendations": {
+            "objectives": ["awareness"],
+            "channels": ["instagram"],
+            "deliverables": ["reel"],
+        },
+    }
+
+
+def _creator_profile_analysis_draft(source_url: str, settings: Settings) -> dict[str, object]:
+    parsed = urlparse(source_url)
+    handle = (parsed.path.strip("/").split("/") or ["creator"])[0] or "creator"
+    if not handle.startswith("@"):
+        handle = f"@{handle}"
+    return {
+        "schemaVersion": "knot.creator-profile.v1",
+        "sourceUrl": source_url,
+        "provider": "deterministic",
+        "model": None if settings.gemini_mode == "off" else settings.gemini_model,
+        "fallbackReason": "secure_fetch_and_gemini_not_configured"
+        if settings.gemini_mode == "off"
+        else "secure_fetch_not_implemented",
+        "displayName": _field(handle.removeprefix("@"), source="URL_PATH", confidence=0.45),
+        "handle": _field(handle, source="URL_PATH", confidence=0.75),
+        "categoryKeys": [],
+        "formatKeys": [],
+        "audienceTags": [],
+        "proposedMoodIds": [],
+        "summary": "공개 콘텐츠를 아직 가져오지 않아 사용자 확인이 필요합니다.",
+        "representativeUrls": [],
+        "unknownFields": ["averageViews", "followerCount", "recentPosts"],
+        "safetyFlags": [],
+    }
 
 
 def _dashboard_target(account: dict[str, object]) -> str:

@@ -32,8 +32,8 @@
 
 | Capability | UI | API | Firestore | External/A2A/On-chain | E2E | Evidence |
 |---|---|---|---|---|---|---|
-| Brand card onboarding | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | NOT_STARTED | Existing profile endpoints; final card persistence pending |
-| Creator card onboarding | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | NOT_STARTED | Existing profile/policy endpoints; final publish flow pending |
+| Brand card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs added; visual card flow still pending |
+| Creator card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs added; publish flow pending |
 | Creator Agent publish/pause | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
 | Discovery projection/index | N/A | NOT_STARTED | IN_PROGRESS | NOT_STARTED | NOT_STARTED | Constants/path helpers added; no projection writes |
 | Deterministic ranking | N/A | IN_PROGRESS | IN_PROGRESS | N/A | NOT_STARTED | Existing in-memory ranker |
@@ -64,7 +64,22 @@
   - `docs/FIRESTORE_MIGRATION_PLAN.md`
   - `.agent/execplans/01-final-compatibility-domain.md`
 
-## 4. Query-Bound Proof
+## 4. Phase 2 Changes
+
+- Added authenticated onboarding state APIs:
+  - `GET /api/v1/onboarding`
+  - `PATCH /api/v1/onboarding`
+- Added authenticated analysis APIs:
+  - `POST /api/v1/analyses/product`
+  - `POST /api/v1/analyses/creator-profile`
+  - `GET /api/v1/analyses/{analysisId}`
+  - `POST /api/v1/analyses/{analysisId}:confirm`
+  - `POST /api/v1/onboarding/brand/analyze-source`
+- Added `analysisJobs` and `onboardingSessions` path helpers.
+- Added typed frontend API client methods.
+- Added tests for owner scoping, idempotent analysis, confirmation, and unsafe URL rejection.
+
+## 5. Query-Bound Proof
 
 ```text
 Discovery implementation: current in-memory rank_creators over list_creator_profiles()
@@ -76,7 +91,7 @@ Maximum paid tool calls: current pay.sh operation is one selected creator path, 
 Test proving no unbounded scan: not implemented yet
 ```
 
-## 5. Test Evidence
+## 6. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -91,8 +106,16 @@ Test proving no unbounded scan: not implemented yet
 | Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
 | Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
 | Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 2 onboarding API focused tests | VERIFIED: 5 passed, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_onboarding.py` from `backend` |
+| Phase 2 backend full pytest | VERIFIED: 100 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 2 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 2 backend mypy | VERIFIED: no issues in 47 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 2 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 2 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 2 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 2 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 
-## 6. Latest Verified E2E
+## 7. Latest Verified E2E
 
 ```text
 Commit:
@@ -113,9 +136,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E or live transaction was executed in Phase 1.
+No E2E or live transaction was executed through Phase 2.
 
-## 7. Known Blockers
+## 8. Known Blockers
 
 ```text
 BLOCKER: Final durable Match Run is not implemented.
@@ -135,7 +158,7 @@ NEXT ACTION: Add indexes/rules or document managed configuration in Phase 3/4.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 8. Update Rule
+## 9. Update Rule
 
 For each phase:
 

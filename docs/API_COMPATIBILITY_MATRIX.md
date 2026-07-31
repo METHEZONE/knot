@@ -21,6 +21,13 @@
 | `POST /api/v1/me/role` | Select one role, idempotent | same | Preserve | Low |
 | `POST /api/v1/me/brand-profile` | Authenticated Brand profile onboarding | Final Brand onboarding completion adapter | Preserve | Medium: not card-deck stateful yet |
 | `POST /api/v1/me/creator-profile` | Authenticated Creator profile/policy onboarding | Final Creator onboarding completion adapter | Preserve | Medium: publication dimensions missing |
+| `GET /api/v1/onboarding` | Authenticated onboarding resume state | Final onboarding resume | Added in Phase 2 | Low |
+| `PATCH /api/v1/onboarding` | Save authenticated onboarding card state | Final card state persistence | Added in Phase 2 | Low |
+| `POST /api/v1/analyses/product` | Authenticated product URL analysis job | Product analysis job start | Added in Phase 2 | Medium: deterministic limited analysis until secure fetch/Gemini extraction |
+| `POST /api/v1/analyses/creator-profile` | Authenticated creator profile URL analysis job | Creator analysis job start | Added in Phase 2 | Medium: deterministic limited analysis until secure fetch/Gemini extraction |
+| `GET /api/v1/analyses/{analysis_id}` | Owner-scoped analysis read | Analysis job read | Added in Phase 2 | Low |
+| `POST /api/v1/analyses/{analysis_id}:confirm` | Owner-scoped analysis confirmation | Analysis confirmation | Added in Phase 2 | Low |
+| `POST /api/v1/onboarding/brand/analyze-source` | Brand source analysis compatibility shape | Existing frontend `analyzeBrandSource` adapter | Added in Phase 2 | Medium |
 | `POST /api/v1/logout/revoke` | Revoke Firebase refresh tokens | same | Preserve | Low |
 | `GET /api/v1/brand/dashboard` | Brand dashboard projection | Final BrandDashboardView | Preserve | Medium: not full Agent Control Room yet |
 | `GET /api/v1/creator/dashboard` | Creator dashboard projection | Final CreatorDashboardView | Preserve | Medium: accepting-offers state incomplete |

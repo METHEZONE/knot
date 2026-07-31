@@ -11,6 +11,7 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `users` | Authenticated and legacy users |
 | `brands` | Brand profiles |
 | `creatorProfiles` | Creator profiles |
+| `analysisJobs` | Product/Creator URL analysis job records added in Phase 2 |
 | `agents` | Brand/Creator agent identity |
 | `agentPolicies` | Creator policy, some Brand/Creator policy-shaped data |
 | `promotions` | Promotion source documents |
@@ -32,6 +33,7 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `transactionReceipts` | Web3 transaction receipts |
 | `auditEvents` | Audit events |
 | `idempotencyRecords` | Idempotency claims |
+| `onboardingSessions` | Authenticated card onboarding resume/draft state added in Phase 2 |
 | `adminJobs` | Dev/admin jobs |
 | `deletionJobs` | Dev/admin deletion jobs |
 
@@ -45,6 +47,8 @@ Phase 1 adds constants/path helpers only for:
 - `creatorDiscoveryProfiles`
 - `verificationResults`
 - `agentActivities`
+- `analysisJobs`
+- `onboardingSessions`
 
 No documents are written to these collections in Phase 1.
 
@@ -57,6 +61,8 @@ No documents are written to these collections in Phase 1.
 | `promotions.productName` and URL/profile draft fields | `productProfiles` + `promotions.productProfileId` | Add in onboarding phase | Keep existing promotion fields until all routes use profile ref |
 | `agents.active` | `agents.status`, `publicationStatus`, `acceptingOffers`, `availability` | Add missing fields in publication phase | Derive final projection from legacy `active` when fields missing |
 | `agentPolicies.creator.minBaseUsdc` | `agentPolicies.minimumBaseUsdc` or versioned private policy | Add adapter | Never expose to Brand DTOs |
+| Missing card resume state | `onboardingSessions/{uid}` | Added in Phase 2 for new analysis flow | Existing direct profile endpoints still complete onboarding |
+| Missing analysis job state | `analysisJobs/{analysisId}` | Added in Phase 2 | Stores digest and structured draft, not raw fetched content |
 | Missing Brand authority data | `agentAuthorities/{brandAgentId}` | Add in onboarding/escrow phase | Existing wallet fields remain readable |
 | Missing Creator authority data | `agentAuthorities/{creatorAgentId}` | Add in onboarding/settlement phase | Existing `walletAddress` remains readable |
 | Missing AgentCard registry projection | `agentRegistry/{agentId}` | Add in publication/A2A phase | Existing `agents.a2aEndpoint` remains readable |
