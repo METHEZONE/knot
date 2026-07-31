@@ -1,0 +1,44 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "creatorDiscoveryProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "agentStatus", "order": "ASCENDING" },
+        { "fieldPath": "acceptingOffers", "order": "ASCENDING" },
+        { "fieldPath": "availability", "order": "ASCENDING" },
+        { "fieldPath": "capacityAvailable", "order": "ASCENDING" },
+        { "fieldPath": "countryCode", "order": "ASCENDING" },
+        { "fieldPath": "primaryFormatKey", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "creatorDiscoveryProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "agentStatus", "order": "ASCENDING" },
+        { "fieldPath": "acceptingOffers", "order": "ASCENDING" },
+        { "fieldPath": "availability", "order": "ASCENDING" },
+        { "fieldPath": "capacityAvailable", "order": "ASCENDING" },
+        { "fieldPath": "countryCode", "order": "ASCENDING" },
+        { "fieldPath": "formatKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "creatorDiscoveryProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "agentStatus", "order": "ASCENDING" },
+        { "fieldPath": "acceptingOffers", "order": "ASCENDING" },
+        { "fieldPath": "availability", "order": "ASCENDING" },
+        { "fieldPath": "capacityAvailable", "order": "ASCENDING" },
+        { "fieldPath": "primaryCategoryKey", "order": "ASCENDING" },
+        { "fieldPath": "primaryFormatKey", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

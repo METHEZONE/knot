@@ -218,6 +218,20 @@ export type OnboardingSession = {
   draftVersion: number;
 };
 
+export type CreatorAgentControl = {
+  agentId: string;
+  creatorId: string;
+  publicationStatus: "DRAFT" | "PUBLISHED" | "PAUSED" | "SUSPENDED" | string;
+  acceptingOffers: boolean;
+  availability: "AVAILABLE" | "RESERVED" | "NEGOTIATING" | "AT_CAPACITY" | "UNAVAILABLE" | string;
+  activeNegotiations: number;
+  maxConcurrentNegotiations: number;
+  activeCollaborations: number;
+  maxActiveCollaborations: number;
+  capacityAvailable: boolean;
+  updatedAt?: string;
+};
+
 export type ApiMatchRun = {
   matchRunId: string;
   promotionId: string;
@@ -646,6 +660,34 @@ export class ProductApiClient {
       "/api/v1/creator/dashboard",
     );
     return response.dashboard;
+  }
+
+  async getCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown> | null;
+    }>("/api/v1/creator/agent");
+  }
+
+  async publishCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:publish", { method: "POST" });
+  }
+
+  async pauseCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:pause", { method: "POST" });
+  }
+
+  async resumeCreatorAgent() {
+    return this.request<{
+      agent: CreatorAgentControl;
+      discoveryProfile: Record<string, unknown>;
+    }>("/api/v1/creator/agent:resume", { method: "POST" });
   }
 
   async bootstrapUser(input: BootstrapUserInput) {

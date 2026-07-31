@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 1 mapping only. No migration or backfill was executed.
+> Phase 3 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -11,6 +11,7 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `users` | Authenticated and legacy users |
 | `brands` | Brand profiles |
 | `creatorProfiles` | Creator profiles |
+| `creatorDiscoveryProfiles` | Public Creator discovery projections written on Agent publish/pause/resume in Phase 3 |
 | `analysisJobs` | Product/Creator URL analysis job records added in Phase 2 |
 | `agents` | Brand/Creator agent identity |
 | `agentPolicies` | Creator policy, some Brand/Creator policy-shaped data |
@@ -50,7 +51,7 @@ Phase 1 adds constants/path helpers only for:
 - `analysisJobs`
 - `onboardingSessions`
 
-No documents are written to these collections in Phase 1.
+Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explicitly publishes, pauses, or resumes their Agent through the authenticated Product API. No batch backfill was executed.
 
 ## Mapping Table
 
@@ -59,14 +60,14 @@ No documents are written to these collections in Phase 1.
 | `brands` | `brands` | Preserve | Same collection |
 | `creatorProfiles` | `creatorProfiles` | Preserve and add final fields later | Dual-read old `categories`, `supportedDeliverableFormats`, `rateCard` |
 | `promotions.productName` and URL/profile draft fields | `productProfiles` + `promotions.productProfileId` | Add in onboarding phase | Keep existing promotion fields until all routes use profile ref |
-| `agents.active` | `agents.status`, `publicationStatus`, `acceptingOffers`, `availability` | Add missing fields in publication phase | Derive final projection from legacy `active` when fields missing |
+| `agents.active` | `agents.status`, `publicationStatus`, `acceptingOffers`, `availability` | Phase 3 adds fields on new Creator Agent writes | Existing `active` remains readable; missing publication fields default to `DRAFT` and not accepting offers |
 | `agentPolicies.creator.minBaseUsdc` | `agentPolicies.minimumBaseUsdc` or versioned private policy | Add adapter | Never expose to Brand DTOs |
 | Missing card resume state | `onboardingSessions/{uid}` | Added in Phase 2 for new analysis flow | Existing direct profile endpoints still complete onboarding |
 | Missing analysis job state | `analysisJobs/{analysisId}` | Added in Phase 2 | Stores digest and structured draft, not raw fetched content |
 | Missing Brand authority data | `agentAuthorities/{brandAgentId}` | Add in onboarding/escrow phase | Existing wallet fields remain readable |
 | Missing Creator authority data | `agentAuthorities/{creatorAgentId}` | Add in onboarding/settlement phase | Existing `walletAddress` remains readable |
 | Missing AgentCard registry projection | `agentRegistry/{agentId}` | Add in publication/A2A phase | Existing `agents.a2aEndpoint` remains readable |
-| `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Add projection + backfill | Matching service dual-reads until index verified |
+| `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Phase 3 adds projection writes and dry-run backfill script | Matching service dual-reads until index verified in Phase 4 |
 | `matchRuns` flat run state | `matchRuns` final state machine fields | Add fields; do not rewrite old runs | Legacy completed runs remain readable |
 | `matchRuns/{id}/candidates` | same | Add final score component fields/version snapshots | Existing fields remain readable |
 | `promotions/{id}/events` | `matchRuns/{id}/events` and/or canonical event projection | Add run event collection later | Phase 1 run timeline aliases project existing promotion events |
@@ -79,20 +80,34 @@ No documents are written to these collections in Phase 1.
 
 ## Backfill Strategy
 
-Future backfill scripts must be idempotent and dry-run by default.
+Backfill scripts must be idempotent and dry-run by default.
 
-1. Read existing `creatorProfiles`, `agents`, and `agentPolicies`.
-2. Validate owner, publication, capacity, and public profile fields.
-3. Write `creatorDiscoveryProfiles/{creatorId}` without exact minimum, blocked categories, private notes, raw Gemini output, or wallet secrets.
+Phase 3 adds `scripts/backfill_creator_discovery_profiles.py`.
+
+1. Read existing `creatorProfiles` and `agents`.
+2. Validate publication, accepting-offers, capacity, and public profile fields.
+3. Write `creatorDiscoveryProfiles/{creatorId}` without exact minimum, blocked categories, private notes, raw Gemini output, prompts, credentials, or wallet secrets.
 4. Write `agentRegistry/{agentId}` from existing `agents` AgentCard fields.
 5. Write `agentAuthorities/{agentId}` only from verified wallet/authority setup.
 6. Record counts and skipped reason codes, not private values.
 
+Usage:
+
+```bash
+python scripts/backfill_creator_discovery_profiles.py
+python scripts/backfill_creator_discovery_profiles.py --write
+```
+
+No `--write` run was executed in Phase 3.
+
 ## Index Requirements
 
-No Firestore index file was found in Phase 1. Future phases must add configuration for:
+Phase 3 adds `firestore.indexes.json` composite index source configuration for:
 
 - Published/accepting creator discovery by format, country/language, availability, capacity.
+
+Future phases must still add or verify:
+
 - Active Match Run by Promotion and non-terminal status.
 - Negotiations by Brand/Creator owner and updated time.
 - Agreements by owner/status.

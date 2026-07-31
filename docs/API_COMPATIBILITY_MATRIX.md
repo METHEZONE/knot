@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 1 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 3 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -31,6 +31,10 @@
 | `POST /api/v1/logout/revoke` | Revoke Firebase refresh tokens | same | Preserve | Low |
 | `GET /api/v1/brand/dashboard` | Brand dashboard projection | Final BrandDashboardView | Preserve | Medium: not full Agent Control Room yet |
 | `GET /api/v1/creator/dashboard` | Creator dashboard projection | Final CreatorDashboardView | Preserve | Medium: accepting-offers state incomplete |
+| `GET /api/v1/creator/agent` | Authenticated Creator Agent control state and discovery projection | Creator Agent control view | Added in Phase 3 | Low |
+| `POST /api/v1/creator/agent:publish` | Owner-scoped publish and discovery projection write | Creator publishes Agent for matching | Added in Phase 3 | Medium: matching does not consume projection until Phase 4 |
+| `POST /api/v1/creator/agent:pause` | Owner-scoped pause and discovery projection write | Creator pauses Agent matching | Added in Phase 3 | Low |
+| `POST /api/v1/creator/agent:resume` | Owner-scoped resume via publish behavior | Creator resumes Agent matching | Added in Phase 3 | Low |
 | `GET /api/v1/brand/promotions` | Owner-scoped Brand promotions | Final promotions list | Preserve | Low |
 | `POST /api/v1/brand/promotions` | Owner-scoped promotion creation | Final Promotion create | Preserve | Medium: final product profile fields pending |
 | `GET /api/v1/brand/promotions/{promotion_id}` | Owner-scoped detail/activity | Final Promotion detail | Preserve | Low |
@@ -106,8 +110,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 | Existing field/value | Final target | Phase 1 action |
 |---|---|---|
 | `UsageRights` values `organicOnly`, `paidBoost30d`, `fullLicense90d` | `ORGANIC_ONLY`, `PAID_BOOST_30D`, `FULL_LICENSE_90D` | Added conversion helpers; no data rewrite |
-| Creator `active` | `publicationStatus`, `acceptingOffers`, `availability`, capacity fields | Preserve; add final dimensions later |
-| Agent `status`/`active` | `status`, `publicationStatus`, `acceptingOffers`, `availability` | Preserve; add missing fields later |
+| Creator `active` | `publicationStatus`, `acceptingOffers`, `availability`, capacity fields | New Creator Agent writes include final dimensions; legacy reads preserved |
+| Agent `status`/`active` | `status`, `publicationStatus`, `acceptingOffers`, `availability` | New Creator Agent writes include final publication dimensions; legacy fields preserved |
+| Exact Creator minimum/blocked policy | Public discovery projection | Phase 3 projection exposes only `publicRateBand` and public filters |
 | Match Run `COMPLETED` after ranking | `QUEUED` through durable state machine | Preserve until Phase 5 |
 | Candidate `overallScore`/`componentScores` | final score components | Preserve; ranking refactor later |
 | Agreement milestones 30/70 in tests/legacy | one 100% `POST_VERIFIED` milestone | Migrate in Agreement/settlement phase |
@@ -117,3 +122,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - Canonical status enum availability and usage-right legacy/canonical conversion.
 - `POST /api/v1/promotions/{promotion_id}/match-runs` alias preserves existing matching behavior.
 - `GET /api/v1/match-runs/{match_run_id}/timeline` and `/events` return equivalent projections.
+
+## Contract Tests Added in Phase 3
+
+- Creator Agent publish/pause/resume maintains owner-scoped control state.
+- `creatorDiscoveryProfiles` projection excludes private minimum and blocked-policy fields.
+- Mismatched authenticated Creator/Agent ownership returns `403`.

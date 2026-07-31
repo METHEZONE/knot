@@ -44,6 +44,11 @@ from libs.agents.matching import MATCHING_WEIGHTS_VERSION, rank_creators
 from libs.agents.negotiation import CreatorNegotiationContext
 from libs.ai.gemini import AnalysisText, candidate_explanation, creator_rationale
 from libs.auth.firebase import AuthenticatedUser, AuthError, FirebaseTokenVerifier
+from libs.domain.discovery import (
+    build_creator_discovery_projection,
+    non_negative_int,
+    positive_int,
+)
 from libs.domain.hashing import (
     canonical_json,
     canonical_terms_json,
@@ -478,6 +483,13 @@ def build_api_router(
             "service": "knot-creator-agent",
             "a2aEndpoint": "/a2a/v1",
             "status": "ACTIVE",
+            "publicationStatus": "DRAFT",
+            "acceptingOffers": False,
+            "availability": "UNAVAILABLE",
+            "activeNegotiations": 0,
+            "maxConcurrentNegotiations": 1,
+            "activeCollaborations": 0,
+            "maxActiveCollaborations": 1,
             "active": True,
             "createdAt": now,
             "updatedAt": now,
@@ -827,6 +839,113 @@ def build_api_router(
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _require_completed_role(repository, auth_user, "CREATOR")
         return _ok({"dashboard": _creator_dashboard(repository, user)})
+
+    @router.get("/creator/agent")
+    def get_creator_agent(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        agent, creator = _require_creator_agent_context(repository, user)
+        discovery = repository.get_raw_document(
+            FirestorePaths.creator_discovery_profile(creator.creator_id)
+        )
+        return _ok(
+            {
+                "agent": _creator_agent_view(agent, creator),
+                "discoveryProfile": discovery,
+            }
+        )
+
+    @router.post("/creator/agent:publish")
+    def publish_creator_agent(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        agent, creator = _require_creator_agent_context(repository, user)
+        now = _now()
+        updated_agent = {
+            **agent,
+            "status": "ACTIVE",
+            "publicationStatus": "PUBLISHED",
+            "acceptingOffers": True,
+            "availability": "AVAILABLE"
+            if creator.remaining_capacity > 0
+            else "AT_CAPACITY",
+            "active": True,
+            "updatedAt": now,
+        }
+        discovery = build_creator_discovery_projection(
+            creator,
+            updated_agent,
+            updated_at=now,
+        )
+        repository.save_raw_document(
+            FirestorePaths.agent(_require_document_str(updated_agent, "agentId")),
+            updated_agent,
+        )
+        repository.save_raw_document(
+            FirestorePaths.creator_discovery_profile(creator.creator_id),
+            discovery,
+        )
+        _append_audit(
+            repository,
+            action="CREATOR_AGENT_PUBLISHED",
+            data={"uid": auth_user.uid, "creatorId": creator.creator_id},
+        )
+        return _ok(
+            {
+                "agent": _creator_agent_view(updated_agent, creator),
+                "discoveryProfile": discovery,
+            }
+        )
+
+    @router.post("/creator/agent:pause")
+    def pause_creator_agent(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        agent, creator = _require_creator_agent_context(repository, user)
+        now = _now()
+        updated_agent = {
+            **agent,
+            "publicationStatus": "PAUSED",
+            "acceptingOffers": False,
+            "availability": "UNAVAILABLE",
+            "updatedAt": now,
+        }
+        discovery = build_creator_discovery_projection(
+            creator,
+            updated_agent,
+            updated_at=now,
+        )
+        repository.save_raw_document(
+            FirestorePaths.agent(_require_document_str(updated_agent, "agentId")),
+            updated_agent,
+        )
+        repository.save_raw_document(
+            FirestorePaths.creator_discovery_profile(creator.creator_id),
+            discovery,
+        )
+        _append_audit(
+            repository,
+            action="CREATOR_AGENT_PAUSED",
+            data={"uid": auth_user.uid, "creatorId": creator.creator_id},
+        )
+        return _ok(
+            {
+                "agent": _creator_agent_view(updated_agent, creator),
+                "discoveryProfile": discovery,
+            }
+        )
+
+    @router.post("/creator/agent:resume")
+    def resume_creator_agent(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        return publish_creator_agent(authorization)
 
     @router.get("/brand/promotions")
     def list_brand_promotions(
@@ -1218,6 +1337,14 @@ def build_api_router(
             "displayName": f"{payload.creator_name} Agent",
             "service": "knot-creator-agent",
             "a2aEndpoint": "/a2a/v1",
+            "status": "ACTIVE",
+            "publicationStatus": "DRAFT",
+            "acceptingOffers": False,
+            "availability": "UNAVAILABLE",
+            "activeNegotiations": 0,
+            "maxConcurrentNegotiations": 1,
+            "activeCollaborations": 0,
+            "maxActiveCollaborations": 1,
             "active": True,
             "createdAt": now,
             "updatedAt": now,
@@ -2977,6 +3104,60 @@ def _creator_dashboard(repository: KnotRepository, user: dict[str, object]) -> d
         "offers": offers,
         "activeSponsorships": active_sponsorships,
         "recentAgentActivity": recent_activity,
+    }
+
+
+def _require_creator_agent_context(
+    repository: KnotRepository,
+    user: dict[str, object],
+) -> tuple[dict[str, object], CreatorProfile]:
+    creator_id = _require_document_str(user, "creatorId")
+    creator = repository.get_creator_profile(creator_id)
+    if creator is None:
+        raise _not_found("creatorProfile", creator_id)
+    agent_id = _require_document_str(user, "agentId")
+    agent = repository.get_raw_document(FirestorePaths.agent(agent_id))
+    if agent is None:
+        raise _not_found("agent", agent_id)
+    if agent.get("ownerUid") not in {None, user.get("uid"), user.get("userId")}:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Creator Agent does not belong to the authenticated Creator.",
+        )
+    if agent.get("ownerId") not in {None, creator_id}:
+        raise _problem(
+            status.HTTP_403_FORBIDDEN,
+            "FORBIDDEN",
+            "Creator Agent owner does not match the authenticated Creator profile.",
+        )
+    return agent, creator
+
+
+def _creator_agent_view(
+    agent: dict[str, object],
+    creator: CreatorProfile,
+) -> dict[str, object]:
+    publication_status = str(agent.get("publicationStatus") or "DRAFT")
+    accepting_offers = bool(agent.get("acceptingOffers"))
+    default_availability = (
+        "AVAILABLE"
+        if publication_status == "PUBLISHED" and accepting_offers
+        else "UNAVAILABLE"
+    )
+    availability = str(agent.get("availability") or default_availability)
+    return {
+        "agentId": agent.get("agentId"),
+        "creatorId": creator.creator_id,
+        "publicationStatus": publication_status,
+        "acceptingOffers": accepting_offers,
+        "availability": availability,
+        "activeNegotiations": non_negative_int(agent.get("activeNegotiations")),
+        "maxConcurrentNegotiations": positive_int(agent.get("maxConcurrentNegotiations"), 1),
+        "activeCollaborations": non_negative_int(agent.get("activeCollaborations")),
+        "maxActiveCollaborations": positive_int(agent.get("maxActiveCollaborations"), 1),
+        "capacityAvailable": creator.remaining_capacity > 0,
+        "updatedAt": agent.get("updatedAt"),
     }
 
 

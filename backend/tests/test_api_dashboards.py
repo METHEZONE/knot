@@ -149,6 +149,62 @@ def test_creator_dashboard_filters_by_authenticated_creator_agent() -> None:
     assert [offer["negotiationId"] for offer in offers] == ["negotiation-owned"]
 
 
+def test_creator_agent_publish_pause_resume_maintains_discovery_projection_privacy() -> None:
+    client, repository = client_and_repository()
+    creator = complete_creator(client, "creator-publish")
+    headers = {"Authorization": creator["Authorization"]}
+
+    initial = client.get("/api/v1/creator/agent", headers=headers)
+    published = client.post("/api/v1/creator/agent:publish", headers=headers)
+    paused = client.post("/api/v1/creator/agent:pause", headers=headers)
+    resumed = client.post("/api/v1/creator/agent:resume", headers=headers)
+
+    assert initial.status_code == 200
+    assert initial.json()["data"]["agent"]["publicationStatus"] == "DRAFT"
+    assert published.status_code == 200
+    published_data = published.json()["data"]
+    assert published_data["agent"]["publicationStatus"] == "PUBLISHED"
+    assert published_data["agent"]["acceptingOffers"] is True
+    assert published_data["discoveryProfile"]["agentStatus"] == "PUBLISHED"
+    assert published_data["discoveryProfile"]["capacityAvailable"] is True
+    assert "minimumUsdc" not in published_data["discoveryProfile"]
+    assert "minBaseUsdc" not in published_data["discoveryProfile"]
+    assert "blockedDomains" not in published_data["discoveryProfile"]
+    assert "blockedIndustries" not in published_data["discoveryProfile"]
+    assert published_data["discoveryProfile"]["publicRateBand"] == "400_700"
+
+    stored_projection = repository.get_raw_document(
+        FirestorePaths.creator_discovery_profile(creator["creatorId"])
+    )
+    assert stored_projection is not None
+    assert stored_projection["creatorAgentId"] == creator["agentId"]
+
+    assert paused.json()["data"]["agent"]["publicationStatus"] == "PAUSED"
+    assert paused.json()["data"]["agent"]["acceptingOffers"] is False
+    assert paused.json()["data"]["discoveryProfile"]["acceptingOffers"] is False
+    assert resumed.json()["data"]["agent"]["publicationStatus"] == "PUBLISHED"
+
+
+def test_creator_agent_endpoints_reject_mismatched_agent_owner() -> None:
+    client, repository = client_and_repository()
+    creator = complete_creator(client, "creator-agent-owner")
+    other = complete_creator(client, "creator-agent-other")
+    user = repository.get_raw_document(FirestorePaths.user("creator-agent-owner"))
+    assert user is not None
+    repository.save_raw_document(
+        FirestorePaths.user("creator-agent-owner"),
+        {**user, "agentId": other["agentId"]},
+    )
+
+    response = client.get(
+        "/api/v1/creator/agent",
+        headers={"Authorization": creator["Authorization"]},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "FORBIDDEN"
+
+
 def test_seeded_demo_dashboards_show_expected_agreements_and_payouts() -> None:
     repository = KnotRepository(InMemoryDocumentStore())
     seed_demo_repository(repository, include_business_flow=True)

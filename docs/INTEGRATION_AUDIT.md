@@ -100,7 +100,7 @@ Current repository abstraction:
 
 Current Firestore adapter uses `collection(...).stream()` for list operations. This is acceptable for small seeded tests but conflicts with final bounded discovery requirements if reused for matching at scale.
 
-No `firestore.indexes.json` or `firestore.rules` file was found in the audited source tree outside dependency folders.
+Phase 3 adds `firestore.indexes.json` for Creator discovery composite query families. No `firestore.rules` file or deployed vector index configuration has been verified in source.
 
 ## Mock, Fixture, and Live Modes
 
