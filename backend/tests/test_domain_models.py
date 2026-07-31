@@ -3,7 +3,21 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from libs.domain.models import AgreementTerms, PostingWindow, Promotion
+from libs.domain.models import (
+    AgentAvailability,
+    AgentPublicationStatus,
+    AgreementTerms,
+    EscrowSettlementStatus,
+    EvidenceStatus,
+    MatchCandidateStatus,
+    MatchRunStatus,
+    NegotiationStatus,
+    PostingWindow,
+    Promotion,
+    UsageRights,
+    canonical_usage_rights_code,
+    usage_rights_from_canonical,
+)
 
 
 def promotion_payload() -> dict[str, object]:
@@ -74,3 +88,16 @@ def test_agreement_milestones_must_sum_to_100() -> None:
     payload["milestones"] = [{"id": "content", "trigger": "contentLiveVerified", "releasePct": 70}]
     with pytest.raises(ValidationError):
         AgreementTerms.model_validate(payload)
+
+
+def test_final_canonical_status_enums_are_available_without_breaking_legacy_values() -> None:
+    assert AgentPublicationStatus.PUBLISHED == "PUBLISHED"
+    assert AgentAvailability.AT_CAPACITY == "AT_CAPACITY"
+    assert MatchRunStatus.ESCROW_CONFIRMED == "ESCROW_CONFIRMED"
+    assert MatchCandidateStatus.RESERVATION_PENDING == "RESERVATION_PENDING"
+    assert NegotiationStatus.COUNTERED == "COUNTERED"
+    assert EvidenceStatus.MANUAL_REVIEW == "MANUAL_REVIEW"
+    assert EscrowSettlementStatus.RELEASED == "RELEASED"
+    assert canonical_usage_rights_code(UsageRights.ORGANIC_ONLY) == "ORGANIC_ONLY"
+    assert usage_rights_from_canonical("PAID_BOOST_30D") is UsageRights.PAID_BOOST_30D
+    assert usage_rights_from_canonical("organicOnly") is UsageRights.ORGANIC_ONLY

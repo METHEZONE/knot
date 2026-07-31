@@ -1,7 +1,7 @@
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from libs.settings.config import Settings
 
@@ -41,7 +41,7 @@ class FirebaseTokenVerifier:
 
     def _verify_firebase_admin(self, token: str) -> dict[str, Any]:
         try:
-            import firebase_admin
+            import firebase_admin  # type: ignore[import-untyped]
             from firebase_admin import auth, credentials
         except ImportError as exc:
             raise AuthError("firebase-admin is not installed.") from exc
@@ -56,7 +56,7 @@ class FirebaseTokenVerifier:
             else:
                 firebase_admin.initialize_app()
         try:
-            return auth.verify_id_token(token, check_revoked=True)
+            return cast(dict[str, Any], auth.verify_id_token(token, check_revoked=True))
         except Exception as exc:
             raise AuthError("Invalid Firebase ID token.") from exc
 

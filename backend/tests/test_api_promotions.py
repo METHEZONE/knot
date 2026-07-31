@@ -117,6 +117,25 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert "MATCH_RUN_COMPLETED" in event_types
 
 
+def test_canonical_match_run_alias_preserves_existing_matching_behavior() -> None:
+    client = client_with_seed()
+
+    run_response = client.post("/api/v1/promotions/promotion-001/match-runs")
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["promotionId"] == "promotion-001"
+    assert match_run["status"] == "COMPLETED"
+
+    timeline_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/timeline")
+    events_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/events")
+    assert timeline_response.status_code == 200
+    assert events_response.status_code == 200
+    assert [event["type"] for event in timeline_response.json()["data"]["events"]] == [
+        event["type"] for event in events_response.json()["data"]["events"]
+    ]
+
+
 def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -> None:
     client = client_with_seed(Settings(paysh_mode="sandbox", paysh_resource_id="replace-me"))
 
@@ -176,7 +195,7 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
         "targetAudience": ["20s"],
         "budget": {"totalUsdc": 1500, "maxPerCreatorUsdc": 800},
         "deliverables": [{"format": "reel", "count": 1}],
-        "postingWindow": {"start": "2026-08-05", "end": "2026-08-10"},
+        "postingWindow": {"start": "2026-08-10", "end": "2026-08-15"},
         "usageRights": "paidBoost30d",
         "constraints": {"requiredCategories": ["뷰티"], "requiredDisclosures": ["ad"]},
     }

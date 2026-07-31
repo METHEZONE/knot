@@ -226,13 +226,13 @@ def build_api_router(
         user = _require_role(repository, auth_user, "CREATOR")
         existing_creator_id = user.get("creatorId")
         if isinstance(existing_creator_id, str) and existing_creator_id:
-            creator = repository.get_raw_document(
+            existing_creator = repository.get_raw_document(
                 FirestorePaths.creator_profile(existing_creator_id)
             )
             agent = repository.get_raw_document(FirestorePaths.agent(str(user.get("agentId"))))
             return _ok(
                 {
-                    "creator": creator,
+                    "creator": existing_creator,
                     "agent": agent,
                     **_current_user_payload(repository, user),
                 }
@@ -350,7 +350,7 @@ def build_api_router(
         auth_user = _require_auth_user(token_verifier, authorization)
         if settings.auth_mode.lower() == "firebase":
             try:
-                from firebase_admin import auth
+                from firebase_admin import auth  # type: ignore[import-untyped]
 
                 auth.revoke_refresh_tokens(auth_user.uid)
             except Exception as exc:
@@ -576,7 +576,7 @@ def build_api_router(
         seed_batch_id = str((payload or {}).get("seedBatchId") or f"seed-{uuid4()}")
         now = _now()
         uid = f"demo-user-{seed_batch_id}"
-        user = {
+        user: dict[str, object] = {
             "uid": uid,
             "userId": uid,
             "email": f"{uid}@example.test",
@@ -1264,12 +1264,28 @@ def build_api_router(
         )
         return _ok({"matchRun": match_run})
 
+    @router.post("/promotions/{promotion_id}/match-runs", status_code=status.HTTP_201_CREATED)
+    def create_match_run(promotion_id: str) -> dict[str, object]:
+        return run_matches(promotion_id)
+
     @router.get("/match-runs/{match_run_id}")
     def get_match_run(match_run_id: str) -> dict[str, object]:
         match_run = repository.get_raw_document(FirestorePaths.match_run(match_run_id))
         if match_run is None:
             raise _not_found("matchRun", match_run_id)
         return _ok({"matchRun": match_run})
+
+    @router.get("/match-runs/{match_run_id}/timeline")
+    def get_match_run_timeline(match_run_id: str) -> dict[str, object]:
+        match_run = repository.get_raw_document(FirestorePaths.match_run(match_run_id))
+        if match_run is None:
+            raise _not_found("matchRun", match_run_id)
+        promotion_id = _require_document_str(match_run, "promotionId")
+        return _ok({"events": _promotion_events(repository, {promotion_id}, limit=50)})
+
+    @router.get("/match-runs/{match_run_id}/events")
+    def get_match_run_events(match_run_id: str) -> dict[str, object]:
+        return get_match_run_timeline(match_run_id)
 
     @router.get("/match-runs/{match_run_id}/candidates")
     def list_match_candidates(match_run_id: str) -> dict[str, object]:
@@ -1470,16 +1486,18 @@ def build_api_router(
                 }
             )
             if final_brand_decision.allowed:
+                changed_fields_value = creator_decision_document.get("changedFields")
+                changed_fields = (
+                    [item for item in changed_fields_value if isinstance(item, str)]
+                    if isinstance(changed_fields_value, list)
+                    else []
+                )
                 accept_payload = NegotiationPayload(
                     type=NegotiationMessageType.ACCEPT,
                     round=2,
                     promotion=promotion,
                     terms=counter_terms,
-                    changedFields=(
-                        creator_decision_document.get("changedFields")
-                        if isinstance(creator_decision_document.get("changedFields"), list)
-                        else []
-                    ),
+                    changedFields=changed_fields,
                     rationale="Brand policy accepted Creator counteroffer.",
                 )
                 accept_message_id = f"message-{uuid4()}"
@@ -1576,7 +1594,7 @@ def build_api_router(
             if artifact is not None
             else creator_decision_document
         )
-        negotiation = {
+        negotiation: dict[str, object] = {
             "negotiationId": negotiation_id,
             "matchRunId": match_run_id,
             "matchCandidateId": match_candidate_id,

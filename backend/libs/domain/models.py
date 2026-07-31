@@ -19,6 +19,109 @@ class CompensationStructure(StrEnum):
     BASE_PLUS_PERFORMANCE = "basePlusPerformance"
 
 
+class AgentPublicationStatus(StrEnum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    PAUSED = "PAUSED"
+    SUSPENDED = "SUSPENDED"
+
+
+class AgentAvailability(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    RESERVED = "RESERVED"
+    NEGOTIATING = "NEGOTIATING"
+    AT_CAPACITY = "AT_CAPACITY"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class MatchRunStatus(StrEnum):
+    READY = "READY"
+    QUEUED = "QUEUED"
+    DISCOVERING = "DISCOVERING"
+    RANKING = "RANKING"
+    VERIFYING = "VERIFYING"
+    SELECTING = "SELECTING"
+    NEGOTIATING = "NEGOTIATING"
+    AGREED = "AGREED"
+    ESCROW_PREPARING = "ESCROW_PREPARING"
+    ESCROW_SUBMITTED = "ESCROW_SUBMITTED"
+    ESCROW_CONFIRMED = "ESCROW_CONFIRMED"
+    COMPLETED = "COMPLETED"
+    EXHAUSTED = "EXHAUSTED"
+    CANCELED = "CANCELED"
+    FAILED = "FAILED"
+
+
+class MatchCandidateStatus(StrEnum):
+    RETRIEVED = "RETRIEVED"
+    ELIGIBLE = "ELIGIBLE"
+    RANKED = "RANKED"
+    VERIFICATION_PENDING = "VERIFICATION_PENDING"
+    VERIFIED = "VERIFIED"
+    RESERVATION_PENDING = "RESERVATION_PENDING"
+    RESERVED = "RESERVED"
+    NEGOTIATING = "NEGOTIATING"
+    AGREED = "AGREED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    SKIPPED = "SKIPPED"
+    FAILED = "FAILED"
+
+
+class NegotiationStatus(StrEnum):
+    CREATED = "CREATED"
+    OFFERED = "OFFERED"
+    COUNTERED = "COUNTERED"
+    AGREED = "AGREED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    CANCELED = "CANCELED"
+    FAILED = "FAILED"
+
+
+class EvidenceStatus(StrEnum):
+    REQUIRED = "REQUIRED"
+    SUBMITTED = "SUBMITTED"
+    VERIFYING = "VERIFYING"
+    VERIFIED = "VERIFIED"
+    REVISION_REQUIRED = "REVISION_REQUIRED"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    REJECTED = "REJECTED"
+
+
+class EscrowSettlementStatus(StrEnum):
+    NOT_STARTED = "NOT_STARTED"
+    PREPARING = "PREPARING"
+    SUBMITTED = "SUBMITTED"
+    CONFIRMED = "CONFIRMED"
+    RELEASE_SUBMITTED = "RELEASE_SUBMITTED"
+    RELEASED = "RELEASED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+CANONICAL_USAGE_RIGHTS_BY_LEGACY: dict[UsageRights, str] = {
+    UsageRights.ORGANIC_ONLY: "ORGANIC_ONLY",
+    UsageRights.PAID_BOOST_30D: "PAID_BOOST_30D",
+    UsageRights.FULL_LICENSE_90D: "FULL_LICENSE_90D",
+}
+LEGACY_USAGE_RIGHTS_BY_CANONICAL: dict[str, UsageRights] = {
+    canonical: legacy for legacy, canonical in CANONICAL_USAGE_RIGHTS_BY_LEGACY.items()
+}
+
+
+def canonical_usage_rights_code(value: UsageRights | str) -> str:
+    usage_rights = value if isinstance(value, UsageRights) else UsageRights(value)
+    return CANONICAL_USAGE_RIGHTS_BY_LEGACY[usage_rights]
+
+
+def usage_rights_from_canonical(value: str) -> UsageRights:
+    normalized = value.strip()
+    if normalized in LEGACY_USAGE_RIGHTS_BY_CANONICAL:
+        return LEGACY_USAGE_RIGHTS_BY_CANONICAL[normalized]
+    return UsageRights(normalized)
+
+
 class MoneyBudget(DomainModel):
     total_usdc: int = Field(alias="totalUsdc", ge=0)
     max_per_creator_usdc: int = Field(alias="maxPerCreatorUsdc", ge=0)

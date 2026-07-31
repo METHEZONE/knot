@@ -29,8 +29,12 @@ class FirestoreCollection:
     users: str = "users"
     brands: str = "brands"
     creator_profiles: str = "creatorProfiles"
+    product_profiles: str = "productProfiles"
     agents: str = "agents"
     agent_policies: str = "agentPolicies"
+    agent_authorities: str = "agentAuthorities"
+    agent_registry: str = "agentRegistry"
+    creator_discovery_profiles: str = "creatorDiscoveryProfiles"
     promotions: str = "promotions"
     promotion_events: str = "events"
     match_runs: str = "matchRuns"
@@ -44,8 +48,10 @@ class FirestoreCollection:
     agreements: str = "agreements"
     milestones: str = "milestones"
     evidence: str = "evidence"
+    verification_results: str = "verificationResults"
     escrows: str = "escrows"
     settlements: str = "settlements"
+    agent_activities: str = "agentActivities"
     payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
     audit_events: str = "auditEvents"
@@ -71,12 +77,28 @@ class FirestorePaths:
         return document_path(COLLECTIONS.creator_profiles, creator_id)
 
     @staticmethod
+    def product_profile(product_profile_id: str) -> str:
+        return document_path(COLLECTIONS.product_profiles, product_profile_id)
+
+    @staticmethod
     def agent(agent_id: str) -> str:
         return document_path(COLLECTIONS.agents, agent_id)
 
     @staticmethod
     def agent_policy(agent_id: str) -> str:
         return document_path(COLLECTIONS.agent_policies, agent_id)
+
+    @staticmethod
+    def agent_authority(agent_id: str) -> str:
+        return document_path(COLLECTIONS.agent_authorities, agent_id)
+
+    @staticmethod
+    def agent_registry_entry(agent_id: str) -> str:
+        return document_path(COLLECTIONS.agent_registry, agent_id)
+
+    @staticmethod
+    def creator_discovery_profile(creator_id: str) -> str:
+        return document_path(COLLECTIONS.creator_discovery_profiles, creator_id)
 
     @staticmethod
     def promotion(promotion_id: str) -> str:
@@ -166,12 +188,20 @@ class FirestorePaths:
         return document_path(COLLECTIONS.evidence, evidence_id)
 
     @staticmethod
+    def verification_result(verification_result_id: str) -> str:
+        return document_path(COLLECTIONS.verification_results, verification_result_id)
+
+    @staticmethod
     def escrow(escrow_id: str) -> str:
         return document_path(COLLECTIONS.escrows, escrow_id)
 
     @staticmethod
     def settlement(settlement_id: str) -> str:
         return document_path(COLLECTIONS.settlements, settlement_id)
+
+    @staticmethod
+    def agent_activity(activity_id: str) -> str:
+        return document_path(COLLECTIONS.agent_activities, activity_id)
 
     @staticmethod
     def payment_operation(operation_id: str) -> str:

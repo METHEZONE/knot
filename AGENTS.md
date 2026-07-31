@@ -18,9 +18,9 @@ Society Map is not part of the MVP.
 
 Read `docs/00_DOCUMENT_INDEX.md` first. Do not use archived documents as requirements. `DESIGN.md` and existing visual assets remain the visual source of truth.
 
-## KNOT v2 Product Source of Truth
+## KNOT Final Product Source of Truth
 
-- Follow `docs/KNOT_PRODUCT_MASTER_SPEC_V2.md`.
+- Follow `docs/KNOT_PRODUCT_MASTER_SPEC_FINAL.md`.
 - Use `docs/00_DOCUMENT_INDEX.md` to select specialized documents.
 - Do not use archived or git-history product documents as active requirements.
 - Frontend UI/UX source of truth is `origin/feat/two-user-session`.
