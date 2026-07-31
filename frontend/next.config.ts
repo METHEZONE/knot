@@ -11,6 +11,19 @@ const basePath = process.env.KNOT_BASE_PATH ?? "";
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
   output: "standalone",
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

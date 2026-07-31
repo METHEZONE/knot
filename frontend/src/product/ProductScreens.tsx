@@ -1510,7 +1510,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
       saveCurrentAccount(account);
       router.push(nextHref);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");
     }
   }
