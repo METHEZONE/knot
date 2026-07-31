@@ -1789,7 +1789,11 @@ def build_api_router(
         registry_entry = _require_creator_agent_registry_entry(repository, creator_agent_id)
         creator_a2a_base_url = _creator_a2a_base_url(settings, registry_entry)
 
-        terms = build_initial_terms(promotion, creator)
+        terms = build_initial_terms(
+            promotion,
+            creator,
+            base_amount_usdc=_promotion_initial_offer_usdc(repository, promotion_id),
+        )
         brand_decision = validate_brand_terms(promotion, creator, terms, current_round=1)
         if not brand_decision.allowed:
             raise _problem(
@@ -2854,6 +2858,17 @@ def _get_promotion(repository: KnotRepository, promotion_id: str) -> Promotion:
     if promotion is None:
         raise _not_found("promotion", promotion_id)
     return promotion
+
+
+def _promotion_initial_offer_usdc(
+    repository: KnotRepository,
+    promotion_id: str,
+) -> int | None:
+    promotion = repository.get_raw_document(FirestorePaths.promotion(promotion_id)) or {}
+    initial_offer = promotion.get("initialOffer")
+    if isinstance(initial_offer, int) and initial_offer > 0:
+        return initial_offer
+    return None
 
 
 def _require_auth_user(
@@ -4082,6 +4097,9 @@ def _require_document_str(document: dict[str, object], field_name: str) -> str:
     return value
 
 
+_LOCAL_CREATOR_A2A_STORES: dict[str, InMemoryA2ATaskStore] = {}
+
+
 def _send_creator_a2a_task(
     *,
     settings: Settings,
@@ -4099,15 +4117,18 @@ def _send_creator_a2a_task(
             tenant=creator_agent_id,
             message=message,
         )
-    store = InMemoryA2ATaskStore(
-        {creator_agent_id: context},
-        rationale_provider=lambda ctx, payload, decision: creator_rationale(
-            settings=settings,
-            context=ctx,
-            payload=payload,
-            decision=decision,
-        ),
-    )
+    store = _LOCAL_CREATOR_A2A_STORES.get(message.context_id)
+    if store is None:
+        store = InMemoryA2ATaskStore(
+            {creator_agent_id: context},
+            rationale_provider=lambda ctx, payload, decision: creator_rationale(
+                settings=settings,
+                context=ctx,
+                payload=payload,
+                decision=decision,
+            ),
+        )
+        _LOCAL_CREATOR_A2A_STORES[message.context_id] = store
     return store.send_message(creator_agent_id, message)
 
 

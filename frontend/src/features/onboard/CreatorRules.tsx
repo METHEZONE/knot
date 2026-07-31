@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/auth/AuthProvider";
 import { readBoard, useBoard, writeBoard } from "@/product/dealBoard";
 import { ProductApiClient } from "@/product/apiClient";
 import {
@@ -46,6 +47,7 @@ function CreatorRulesForm({
   creator: NonNullable<ReturnType<typeof useBoard>["board"]["creator"]>;
   router: ReturnType<typeof useRouter>;
 }) {
+  const { refresh } = useAuth();
   const [min, setMin] = useState(
     creator.minUsdc || suggestedMinUsdc(creator.followers, creator.engagementRate),
   );
@@ -79,7 +81,8 @@ function CreatorRulesForm({
         evidenceUrl: null,
         epoch: readBoard().epoch + 1,
       });
-      router.push("/creator");
+      await refresh();
+      router.replace("/creator");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setSaving(false);

@@ -55,7 +55,7 @@ export function BrandPromotionWizard() {
     setBusy(true);
     setError(null);
     try {
-      const initialOffer = Math.max(50, Math.round((draft.maxPerDealUsdc * 0.75) / 50) * 50);
+      const initialOffer = initialOfferForMax(draft.maxPerDealUsdc);
       const promotion = await client.createBrandPromotion(
         {
           productName: draft.productName,
@@ -197,7 +197,7 @@ export function BrandPromotionWizard() {
                 </label>
                 <div className="mt-4">
                   <p className="text-xs text-muted">협상 시작 금액</p>
-                  <Money usdc={Math.max(50, Math.round((draft.maxPerDealUsdc * 0.75) / 50) * 50)} size="lg" />
+                  <Money usdc={initialOfferForMax(draft.maxPerDealUsdc)} size="lg" />
                 </div>
               </div>
             </div>
@@ -256,6 +256,10 @@ function deadlineAfterDays(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function initialOfferForMax(maxPerDealUsdc: number) {
+  return Math.max(50, Math.round((maxPerDealUsdc * 0.4) / 50) * 50);
 }
 
 function readableError(caught: unknown) {

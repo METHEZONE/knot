@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAuth } from "@/auth/AuthProvider";
 import { readBoard, writeBoard } from "@/product/dealBoard";
 import { ProductApiClient } from "@/product/apiClient";
 import type { BrandSetup } from "@/product/setupStore";
@@ -36,6 +37,7 @@ const REELS: Reel[] = [
 
 export function BrandMood() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<string[]>([]);
   const [total, setTotal] = useState(2000);
@@ -108,7 +110,8 @@ export function BrandMood() {
         stableKey("brand-profile", setup.productUrl, setup.productName),
       );
       writeBoard({ brand: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
-      router.push("/brand");
+      await refresh();
+      router.replace("/brand");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setSaving(false);

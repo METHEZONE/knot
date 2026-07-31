@@ -537,6 +537,38 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     )
 
 
+def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
+    client, repository = client_and_repository_with_seed()
+    promotion_path = FirestorePaths.promotion("promotion-001")
+    promotion = repository.get_raw_document(promotion_path)
+    assert promotion is not None
+    repository.save_raw_document(promotion_path, {**promotion, "initialOffer": 300})
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
+
+    assert start_response.status_code == 201, start_response.text
+    body = start_response.json()["data"]
+    assert body["negotiation"]["status"] == "AGREED"
+    assert body["negotiation"]["currentRound"] == 2
+    assert body["agreement"]["terms"]["compensation"]["baseAmountUsdc"] == 650
+    messages = client.get(
+        f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
+    ).json()["data"]["messages"]
+    assert [message["payload"]["type"] for message in messages] == [
+        "OFFER",
+        "COUNTER",
+        "ACCEPT",
+        "ACCEPT",
+    ]
+    assert [
+        message["payload"]["terms"]["compensation"]["baseAmountUsdc"]
+        for message in messages
+    ] == [300, 650, 650, 650]
+
+
 def test_agreement_document_rejects_artifact_terms_hash_mismatch() -> None:
     terms = {
         "compensation": {"structure": "flat", "baseAmountUsdc": 500, "performancePct": 0},
