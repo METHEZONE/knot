@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 4 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 5 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -55,11 +55,12 @@
 | `GET /api/v1/promotions` | Legacy list all | Promotion list | Preserve | Medium: not owner-scoped |
 | `GET /api/v1/promotions/{promotion_id}` | Legacy get | Promotion get | Preserve | Low |
 | `POST /api/v1/promotions/{promotion_id}:activate` | DRAFT to ACTIVE | Promotion ready/active transition | Preserve | Low |
-| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous bounded discovery/ranking, writes `COMPLETED` | Start Match Run | Updated in Phase 4 | High: final durable semantics pending |
-| `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior | Start Match Run | Added in Phase 1, updated in Phase 4 | High: returns current synchronous result |
+| `POST /api/v1/promotions/{promotion_id}/matches:run` | Synchronous bounded discovery/ranking with idempotency and canonical events | Start Match Run | Updated in Phase 5 | Medium: worker dispatch still pending |
+| `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior with idempotency and canonical events | Start Match Run | Updated in Phase 5 | Medium: returns current synchronous result |
 | `GET /api/v1/match-runs/{match_run_id}` | Get raw Match Run | MatchRun detail | Preserve | Low |
 | `GET /api/v1/match-runs/{match_run_id}/timeline` | Promotion event projection by run | MatchRun timeline | Added in Phase 1 | Medium: event model not final sequence yet |
 | `GET /api/v1/match-runs/{match_run_id}/events` | Alias of timeline | MatchRun events | Added in Phase 1 | Medium |
+| `POST /api/v1/match-runs/{match_run_id}:cancel` | Cancel non-terminal Match Run | Match Run cancel | Added in Phase 5 | Low |
 | `GET /api/v1/match-runs/{match_run_id}/candidates` | Candidate snapshots with public score components and safe facts | Candidate snapshots | Updated in Phase 4 | Medium: durable event sequence pending |
 | `POST /api/v1/match-runs/{match_run_id}/candidates/{creator_agent_id}:select` | Manual candidate selection | Not final user behavior | Preserve only for compatibility/dev | High |
 | `POST /api/v1/match-runs/{match_run_id}:start-negotiation` | Starts A2A negotiation after selected candidate | Durable sequential candidate negotiation | Preserve | High: split from run orchestration |
@@ -134,3 +135,9 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - Product API Match Run uses `creatorDiscoveryProfiles` bounded query and does not scan `creatorProfiles`.
 - Firestore and in-memory stores support filtered limited queries.
 - Candidate snapshots include deterministic public score components and discovery metrics.
+
+## Contract Tests Added in Phase 5
+
+- Duplicate Match Run start with the same `Idempotency-Key` returns the same run.
+- Match Run events are persisted under `matchRuns/{runId}/events` with ordered sequence numbers.
+- Non-terminal Match Runs can be canceled; terminal runs reject cancellation.

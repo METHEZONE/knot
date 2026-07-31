@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 4 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 5 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -20,7 +20,7 @@
 | Auth | IMPLEMENTED | `backend/libs/auth/firebase.py`, `/api/v1/me` | Audit complete | Tests pending in this phase |
 | Product API | IMPLEMENTED | `backend/apps/api/routes.py` | `docs/API_COMPATIBILITY_MATRIX.md` | Canonical Match Run aliases added |
 | Firestore/indexes | IN_PROGRESS | `backend/libs/repositories/firestore_paths.py`, `firestore.indexes.json` | `docs/FIRESTORE_MIGRATION_PLAN.md` | Creator discovery composite index config added; rules/vector verification pending |
-| Async worker | NOT_STARTED | none verified | `docs/INTEGRATION_AUDIT.md` | Current Match Run is synchronous |
+| Async worker | IN_PROGRESS | `backend/apps/api/routes.py` | Phase 5 tests | Canonical durable events/idempotency added; external worker pending |
 | Gemini analysis | IN_PROGRESS | `backend/libs/ai/gemini.py` | Audit complete | Final URL analysis flow pending |
 | Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
 | A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a` | Audit complete | HTTP boundary exists; durable Creator task store pending |
@@ -37,7 +37,7 @@
 | Creator Agent publish/pause | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | N/A | NOT_STARTED | Phase 3 owner-scoped APIs added; visual dashboard controls pending |
 | Discovery projection/index | N/A | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 4 Product API matching consumes discovery projections with bounded query |
 | Deterministic ranking | N/A | IMPLEMENTED | IN_PROGRESS | N/A | NOT_STARTED | Phase 4 public score components and deterministic tie-breakers added |
-| Match Run orchestration | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | NOT_STARTED | Existing synchronous run; canonical aliases added |
+| Match Run orchestration | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 5 idempotency, cancel, state history, and canonical events added; worker pending |
 | Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
 | A2A counteroffer | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing tests/routes audited |
 | Agreement Artifact/hash | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Agreement/hash code audited |
@@ -109,7 +109,21 @@
 - Demo seed explicitly writes public discovery projections for active seeded Creators.
 - Added no-scan and bounded query tests.
 
-## 7. Query-Bound Proof
+## 7. Phase 5 Changes
+
+- Added `matchRuns/{runId}/events/{eventId}` path helper and canonical run events.
+- Match Run starts now write ordered state events:
+  - `MATCH_RUN_READY`
+  - `MATCH_RUN_DISCOVERING`
+  - `MATCH_RUN_RANKING`
+  - `MATCH_RUN_SELECTING`
+  - `MATCH_RUN_COMPLETED`
+- Match Run starts accept optional `Idempotency-Key` and replay the same run for duplicate starts.
+- Added active non-terminal run guard for a Promotion.
+- Added `POST /api/v1/match-runs/{match_run_id}:cancel` with terminal-state guard.
+- Added `matchRuns` active lookup index source configuration.
+
+## 8. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -121,7 +135,7 @@ Maximum paid tool calls: current pay.sh operation is one selected creator path, 
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 8. Test Evidence
+## 9. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -163,8 +177,17 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 4 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
 | Phase 4 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 | Phase 4 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
+| Phase 5 backend focused tests | VERIFIED: 27 passed, 1 warning | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_firestore_repositories.py` from `backend` |
+| Phase 5 backend full pytest | VERIFIED: 108 passed, 5 skipped, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 5 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 5 backend mypy | VERIFIED: no issues in 49 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 5 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 5 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 5 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 5 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 5 index config validation | VERIFIED | working tree | 2026-07-31 | `.venv/bin/python -m json.tool firestore.indexes.json` |
 
-## 9. Latest Verified E2E
+## 10. Latest Verified E2E
 
 ```text
 Commit:
@@ -185,16 +208,16 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E or live transaction was executed through Phase 4.
+No E2E or live transaction was executed through Phase 5.
 
-## 10. Known Blockers
+## 11. Known Blockers
 
 ```text
-BLOCKER: Final durable Match Run is not implemented.
-IMPACT: Current run completes synchronously and cannot prove browser-closure-safe orchestration.
-EVIDENCE: Product API uses bounded discovery in Phase 4 but still creates a completed run synchronously in the request.
+BLOCKER: External Match Run worker dispatch is not implemented.
+IMPACT: Current run has durable records/events but still completes synchronously in the request.
+EVIDENCE: Phase 5 adds canonical events/idempotency/cancel, but no queue or worker claim process is present.
 OWNER: Backend/Agent phase.
-NEXT ACTION: Phase 5 durable orchestration.
+NEXT ACTION: Add worker dispatch/claim/retry or document synchronous MVP limit before final E2E.
 WORKAROUND FOR DEMO (truthfully labeled): Existing synchronous path can be used only as legacy behavior, not final proof.
 ```
 
@@ -207,7 +230,7 @@ NEXT ACTION: Add rules and managed vector index verification in an infra phase.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 11. Update Rule
+## 12. Update Rule
 
 For each phase:
 

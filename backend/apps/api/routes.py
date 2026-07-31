@@ -76,7 +76,7 @@ from libs.policies.brand import validate_brand_terms
 from libs.policies.evidence import validate_evidence_observations
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
-from libs.repositories.store import IdempotencyConflictError, KnotRepository
+from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictError, KnotRepository
 from libs.settings.config import Settings, get_settings
 from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
 
@@ -1497,8 +1497,29 @@ def build_api_router(
         return _ok({"promotion": model_to_document(activated)})
 
     @router.post("/promotions/{promotion_id}/matches:run", status_code=status.HTTP_201_CREATED)
-    def run_matches(promotion_id: str) -> dict[str, object]:
+    def run_matches(
+        promotion_id: str,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
         promotion = _get_promotion(repository, promotion_id)
+        if idempotency_key:
+            payload_hash = sha256_prefixed(canonical_json({"promotionId": promotion_id}))
+            created = repository.claim_idempotency_record(
+                f"match-run:{promotion_id}:{idempotency_key}",
+                payload_hash=payload_hash,
+                owner_path=FirestorePaths.promotion(promotion_id),
+            )
+            if not created:
+                existing = _match_run_by_idempotency_key(
+                    repository,
+                    promotion_id=promotion_id,
+                    idempotency_key=idempotency_key,
+                )
+                if existing is not None:
+                    return _ok({"matchRun": existing})
+        active_run = _active_match_run_for_promotion(repository, promotion_id)
+        if active_run is not None:
+            return _ok({"matchRun": active_run})
         discovery_repository = FirestoreCreatorDiscoveryRepository(repository)
         search_result = discovery_repository.search(promotion, limit=DISCOVERY_LIMIT)
         public_ranked = rank_discovery_candidates(promotion, search_result.projections)
@@ -1525,6 +1546,7 @@ def build_api_router(
             "promotionId": promotion.promotion_id,
             "brandAgentId": promotion.brand_agent_id,
             "status": "COMPLETED",
+            "stateHistory": ["READY", "DISCOVERING", "RANKING", "SELECTING", "COMPLETED"],
             "weightsVersion": MATCHING_WEIGHTS_VERSION,
             "rankingVersion": DISCOVERY_RANKING_VERSION,
             "discoveryLimit": search_result.metrics.query_limit,
@@ -1533,11 +1555,40 @@ def build_api_router(
             "detailReadCount": detail_read_count,
             "selectedCreatorId": selected_creator.creator_id if selected_creator else None,
             "selectedCreatorAgentId": selected.creator_agent_id if selected else None,
+            "idempotencyKey": idempotency_key,
             "createdAt": now,
             "completedAt": now,
         }
         match_run_path = FirestorePaths.match_run(match_run_id)
         repository.save_raw_document(match_run_path, match_run)
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_READY",
+            status_value="READY",
+            data={"promotionId": promotion_id},
+        )
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_DISCOVERING",
+            status_value="DISCOVERING",
+            data={"discoveryLimit": search_result.metrics.query_limit},
+        )
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_RANKING",
+            status_value="RANKING",
+            data={"candidateCount": len(ranked)},
+        )
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_SELECTING",
+            status_value="SELECTING",
+            data={"selectedCreatorAgentId": selected.creator_agent_id if selected else None},
+        )
         for candidate, creator in ranked:
             document = _discovery_candidate_document(candidate)
             document["creatorId"] = creator.creator_id
@@ -1569,6 +1620,13 @@ def build_api_router(
         )
         match_run = {**match_run, "paidVerification": paid_verification}
         repository.save_raw_document(match_run_path, match_run)
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_COMPLETED",
+            status_value="COMPLETED",
+            data={"selectedCreatorAgentId": selected.creator_agent_id if selected else None},
+        )
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
@@ -1587,8 +1645,11 @@ def build_api_router(
         return _ok({"matchRun": match_run})
 
     @router.post("/promotions/{promotion_id}/match-runs", status_code=status.HTTP_201_CREATED)
-    def create_match_run(promotion_id: str) -> dict[str, object]:
-        return run_matches(promotion_id)
+    def create_match_run(
+        promotion_id: str,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        return run_matches(promotion_id, idempotency_key)
 
     @router.get("/match-runs/{match_run_id}")
     def get_match_run(match_run_id: str) -> dict[str, object]:
@@ -1602,12 +1663,53 @@ def build_api_router(
         match_run = repository.get_raw_document(FirestorePaths.match_run(match_run_id))
         if match_run is None:
             raise _not_found("matchRun", match_run_id)
+        match_run_events = _match_run_events(repository, match_run_id, limit=50)
+        if match_run_events:
+            return _ok({"events": match_run_events})
         promotion_id = _require_document_str(match_run, "promotionId")
         return _ok({"events": _promotion_events(repository, {promotion_id}, limit=50)})
 
     @router.get("/match-runs/{match_run_id}/events")
     def get_match_run_events(match_run_id: str) -> dict[str, object]:
         return get_match_run_timeline(match_run_id)
+
+    @router.post("/match-runs/{match_run_id}:cancel")
+    def cancel_match_run(match_run_id: str) -> dict[str, object]:
+        match_run_path = FirestorePaths.match_run(match_run_id)
+        match_run = repository.get_raw_document(match_run_path)
+        if match_run is None:
+            raise _not_found("matchRun", match_run_id)
+        if match_run.get("status") in {
+            "AGREED",
+            "ESCROW_PREPARING",
+            "ESCROW_SUBMITTED",
+            "ESCROW_CONFIRMED",
+            "COMPLETED",
+            "EXHAUSTED",
+            "CANCELED",
+            "FAILED",
+        }:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "INVALID_STATE_TRANSITION",
+                "Terminal Match Runs cannot be canceled.",
+            )
+        now = _now()
+        canceled = {
+            **match_run,
+            "status": "CANCELED",
+            "canceledAt": now,
+            "completedAt": now,
+        }
+        repository.save_raw_document(match_run_path, canceled)
+        _append_match_run_event(
+            repository,
+            match_run_id=match_run_id,
+            event_type="MATCH_RUN_CANCELED",
+            status_value="CANCELED",
+            data={},
+        )
+        return _ok({"matchRun": canceled})
 
     @router.get("/match-runs/{match_run_id}/candidates")
     def list_match_candidates(match_run_id: str) -> dict[str, object]:
@@ -4109,6 +4211,89 @@ def _evidence_observations(
         disclosurePresent="missing-disclosure" not in url,
         prohibitedClaimsFound=prohibited_claims_found,
     ).model_dump(by_alias=True, mode="json")
+
+
+def _match_run_events(
+    repository: KnotRepository,
+    match_run_id: str,
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    events = repository.list_raw_documents(
+        f"{COLLECTIONS.match_runs}/{match_run_id}/{COLLECTIONS.match_run_events}"
+    )
+    events.sort(key=_event_sequence)
+    return events[:limit]
+
+
+def _append_match_run_event(
+    repository: KnotRepository,
+    *,
+    match_run_id: str,
+    event_type: str,
+    status_value: str,
+    data: dict[str, object],
+) -> None:
+    sequence = len(_match_run_events(repository, match_run_id, limit=1000)) + 1
+    event_id = f"event-{sequence:04d}-{uuid4()}"
+    event = {
+        "eventId": event_id,
+        "matchRunId": match_run_id,
+        "type": event_type,
+        "status": status_value,
+        "sequence": sequence,
+        "data": data,
+        "createdAt": _now(),
+    }
+    repository.save_raw_document(FirestorePaths.match_run_event(match_run_id, event_id), event)
+
+
+def _event_sequence(event: dict[str, object]) -> int:
+    sequence = event.get("sequence")
+    return sequence if isinstance(sequence, int) else 0
+
+
+def _active_match_run_for_promotion(
+    repository: KnotRepository,
+    promotion_id: str,
+) -> dict[str, object] | None:
+    for document in repository.query_raw_documents(
+        COLLECTIONS.match_runs,
+        [DocumentQueryFilter("promotionId", "==", promotion_id)],
+        limit=25,
+    ):
+        if document.get("status") in {
+            "READY",
+            "QUEUED",
+            "DISCOVERING",
+            "RANKING",
+            "VERIFYING",
+            "SELECTING",
+            "NEGOTIATING",
+            "ESCROW_PREPARING",
+            "ESCROW_SUBMITTED",
+            "ESCROW_CONFIRMED",
+        }:
+            return document
+    return None
+
+
+def _match_run_by_idempotency_key(
+    repository: KnotRepository,
+    *,
+    promotion_id: str,
+    idempotency_key: str,
+) -> dict[str, object] | None:
+    for document in repository.query_raw_documents(
+        COLLECTIONS.match_runs,
+        [
+            DocumentQueryFilter("promotionId", "==", promotion_id),
+            DocumentQueryFilter("idempotencyKey", "==", idempotency_key),
+        ],
+        limit=1,
+    ):
+        return document
+    return None
 
 
 def _append_promotion_event(

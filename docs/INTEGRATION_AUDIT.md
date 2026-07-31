@@ -119,7 +119,7 @@ Important safeguards already present:
 
 Risk:
 
-- Matching currently produces synchronous completed business state; this is not a silent fallback, but it is not the final durable event-driven flow.
+- Phase 5 records canonical Match Run state events and idempotency, but execution still completes synchronously in the request; this is not the final external worker flow.
 
 ## Gemini
 

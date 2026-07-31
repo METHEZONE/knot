@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 4 mapping. No live migration or backfill was executed.
+> Phase 5 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -19,6 +19,7 @@ Current collection constants live in `backend/libs/repositories/firestore_paths.
 | `promotions/{id}/events` | Promotion event timeline |
 | `matchRuns` | Match Run documents |
 | `matchRuns/{id}/candidates` | Candidate snapshots |
+| `matchRuns/{id}/events` | Canonical Match Run state transition events added in Phase 5 |
 | `negotiations` | Product negotiation records |
 | `negotiations/{id}/messages` | A2A message projections |
 | `negotiations/{id}/decisions` | Policy/decision events |
@@ -70,6 +71,7 @@ Phase 3 writes `creatorDiscoveryProfiles/{creatorId}` only when a Creator explic
 | `creatorProfiles` used directly for matching | `creatorDiscoveryProfiles` | Phase 4 Product API matching now queries discovery projections first | Private Creator profile reads are bounded to Top 20 for eligibility/detail |
 | `matchRuns` flat run state | `matchRuns` final state machine fields | Add fields; do not rewrite old runs | Legacy completed runs remain readable |
 | `matchRuns/{id}/candidates` | same | Add final score component fields/version snapshots | Existing fields remain readable |
+| Missing Match Run event stream | `matchRuns/{id}/events` | Phase 5 adds canonical run events | Timeline falls back to Promotion events for legacy runs without run events |
 | `promotions/{id}/events` | `matchRuns/{id}/events` and/or canonical event projection | Add run event collection later | Phase 1 run timeline aliases project existing promotion events |
 | `negotiations` | `negotiations` | Preserve | Add policy snapshot refs and final status fields later |
 | `a2aTasks` with in-memory Creator default | `a2aTasks` durable storage | Implement persistent Creator task store later | Existing Product API projection remains readable |
@@ -106,10 +108,10 @@ Phase 3 adds `firestore.indexes.json` composite index source configuration. Phas
 
 - Published/accepting Creator discovery by country, availability, capacity, category, primary format, and next availability.
 - Published/accepting Creator discovery by format, country/language, availability, capacity.
+- Active Match Run by Promotion/status/created time.
 
 Future phases must still add or verify:
 
-- Active Match Run by Promotion and non-terminal status.
 - Negotiations by Brand/Creator owner and updated time.
 - Agreements by owner/status.
 - Event sequence by aggregate ID.

@@ -41,6 +41,7 @@ class FirestoreCollection:
     promotion_events: str = "events"
     match_runs: str = "matchRuns"
     match_candidates: str = "candidates"
+    match_run_events: str = "events"
     negotiations: str = "negotiations"
     negotiation_messages: str = "messages"
     negotiation_decisions: str = "decisions"
@@ -135,6 +136,15 @@ class FirestorePaths:
             match_run_id,
             COLLECTIONS.match_candidates,
             creator_id,
+        )
+
+    @staticmethod
+    def match_run_event(match_run_id: str, event_id: str) -> str:
+        return subcollection_document_path(
+            COLLECTIONS.match_runs,
+            match_run_id,
+            COLLECTIONS.match_run_events,
+            event_id,
         )
 
     @staticmethod

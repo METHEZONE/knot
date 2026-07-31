@@ -52,6 +52,15 @@
         { "fieldPath": "primaryFormatKey", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "matchRuns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "promotionId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

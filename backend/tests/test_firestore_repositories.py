@@ -27,6 +27,9 @@ def test_firestore_paths_match_documented_collections() -> None:
     assert FirestorePaths.match_candidate("match-001", "creator-001") == (
         "matchRuns/match-001/candidates/creator-001"
     )
+    assert FirestorePaths.match_run_event("match-001", "event-001") == (
+        "matchRuns/match-001/events/event-001"
+    )
     assert FirestorePaths.negotiation_message("negotiation-001", "message-001") == (
         "negotiations/negotiation-001/messages/message-001"
     )

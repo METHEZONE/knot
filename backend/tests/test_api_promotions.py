@@ -4,7 +4,7 @@ from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
 from libs.payments.paysh import PayResult
-from libs.repositories.firestore_paths import COLLECTIONS
+from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
@@ -157,6 +157,68 @@ def test_canonical_match_run_alias_preserves_existing_matching_behavior() -> Non
     assert [event["type"] for event in timeline_response.json()["data"]["events"]] == [
         event["type"] for event in events_response.json()["data"]["events"]
     ]
+
+
+def test_match_run_start_is_idempotent_and_records_canonical_events() -> None:
+    client = client_with_seed()
+    headers = {"Idempotency-Key": "match-start-001"}
+
+    first = client.post("/api/v1/promotions/promotion-001/match-runs", headers=headers)
+    second = client.post("/api/v1/promotions/promotion-001/match-runs", headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_run = first.json()["data"]["matchRun"]
+    second_run = second.json()["data"]["matchRun"]
+    assert second_run["matchRunId"] == first_run["matchRunId"]
+    assert first_run["stateHistory"] == [
+        "READY",
+        "DISCOVERING",
+        "RANKING",
+        "SELECTING",
+        "COMPLETED",
+    ]
+
+    events = client.get(f"/api/v1/match-runs/{first_run['matchRunId']}/events").json()[
+        "data"
+    ]["events"]
+    assert [event["type"] for event in events] == [
+        "MATCH_RUN_READY",
+        "MATCH_RUN_DISCOVERING",
+        "MATCH_RUN_RANKING",
+        "MATCH_RUN_SELECTING",
+        "MATCH_RUN_COMPLETED",
+    ]
+    assert [event["sequence"] for event in events] == [1, 2, 3, 4, 5]
+
+
+def test_match_run_cancel_handles_non_terminal_and_terminal_runs() -> None:
+    client, repository = client_and_repository_with_seed()
+    repository.save_raw_document(
+        FirestorePaths.match_run("match-cancelable"),
+        {
+            "matchRunId": "match-cancelable",
+            "promotionId": "promotion-001",
+            "brandAgentId": "brand-agent-001",
+            "status": "QUEUED",
+            "createdAt": "2026-07-31T00:00:00Z",
+        },
+    )
+
+    canceled = client.post("/api/v1/match-runs/match-cancelable:cancel")
+    assert canceled.status_code == 200
+    assert canceled.json()["data"]["matchRun"]["status"] == "CANCELED"
+    cancel_events = client.get("/api/v1/match-runs/match-cancelable/events").json()["data"][
+        "events"
+    ]
+    assert cancel_events[0]["type"] == "MATCH_RUN_CANCELED"
+
+    completed = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+    rejected = client.post(f"/api/v1/match-runs/{completed['matchRunId']}:cancel")
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "INVALID_STATE_TRANSITION"
 
 
 def test_run_match_records_skipped_paysh_event_when_resource_is_unconfigured() -> None:
