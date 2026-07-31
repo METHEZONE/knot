@@ -741,6 +741,8 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
     }
     assert captured["timeout"] == 60
     assert captured["request"]["tenant"] == "creator-agent-001"  # type: ignore[index]
+    metadata = captured["request"]["metadata"]  # type: ignore[index]
+    assert metadata["creatorNegotiationContext"]["creatorAgentId"] == "creator-agent-001"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
     assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"

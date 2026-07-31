@@ -53,6 +53,13 @@ class InMemoryA2ATaskStore:
     def list_tasks(self) -> list[A2ATask]:
         return list(self._tasks.values())
 
+    def register_context(self, tenant: str, context: CreatorNegotiationContext) -> None:
+        if context.creator_agent_id != tenant:
+            raise A2ATaskError("context tenant mismatch")
+        if tenant in self._context_by_tenant:
+            return
+        self._context_by_tenant[tenant] = context
+
     def get_task(self, task_id: str) -> A2ATask:
         try:
             return self._tasks[task_id]

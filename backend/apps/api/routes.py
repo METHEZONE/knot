@@ -4116,6 +4116,12 @@ def _send_creator_a2a_task(
         ).send_message(
             tenant=creator_agent_id,
             message=message,
+            metadata={
+                "creatorNegotiationContext": context.model_dump(
+                    by_alias=True,
+                    mode="json",
+                )
+            },
         )
     store = _LOCAL_CREATOR_A2A_STORES.get(message.context_id)
     if store is None:
