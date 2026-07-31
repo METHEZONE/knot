@@ -42,10 +42,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  /* two-user-session reference: 손글씨는 같은 pt에서 작게 읽혀 루트에서 보정한다. */
+  font-size: 19px;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-hand), "Apple SD Gothic Neo", system-ui, sans-serif;
+  line-height: 1.6;
 }
 
 /* Headlines and figures are handwritten; data stays in mono so numbers, hashes
@@ -54,18 +60,17 @@ h1,
 h2,
 h3,
 .display {
-  font-family: var(--font-display), var(--font-hand), cursive;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-family: var(--font-hand), "Apple SD Gothic Neo", cursive;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1.25;
 }
 
-/* Squigglevision on headlines only. Body copy, mono figures and scrolling
-   panels are deliberately left still — a jittering USDC amount or a shaking
-   table is the fastest way to make a drawn UI feel broken instead of charming. */
+/* Reference squiggle: 약한 손그림 흔들림만 헤드라인에 적용한다. */
 h1,
 h2,
 .display {
-  filter: url(#knot-squiggle-2);
+  filter: url(#knot-squiggle-1);
 }
 
 /* Paper grain over the whole page. */

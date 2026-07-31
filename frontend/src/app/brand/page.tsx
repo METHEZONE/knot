@@ -1,12 +1,12 @@
 "use client";
 
 import { AuthGate } from "@/auth/AuthGate";
-import { BrandDashboardScreen } from "@/product/ProductScreens";
+import { AgentDashboard } from "@/features/dashboard/AgentDashboard";
 
 export default function Page() {
   return (
     <AuthGate expectedRole="BRAND" requireCompleted>
-      {(context) => <BrandDashboardScreen context={context} />}
+      {(context) => <AgentDashboard role="brand" context={context} />}
     </AuthGate>
   );
 }

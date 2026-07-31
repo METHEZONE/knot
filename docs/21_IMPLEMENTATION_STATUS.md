@@ -32,20 +32,20 @@
 
 | Capability | UI | API | Firestore | External/A2A/On-chain | E2E | Evidence |
 |---|---|---|---|---|---|---|
-| Brand card onboarding | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
-| Creator card onboarding | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
-| Creator Agent publish/pause | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
+| Brand card onboarding | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | N/A | IN_PROGRESS | two-user-session UI ported; completion calls authenticated Product API profile create |
+| Creator card onboarding | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | N/A | IN_PROGRESS | two-user-session UI ported; completion calls authenticated Product API profile create |
+| Creator Agent publish/pause | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | N/A | IN_PROGRESS | `/creator` dashboard uses owner-scoped publish/pause/resume API |
 | Discovery projection/index | N/A | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Deterministic ranking | N/A | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Match Run orchestration | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Candidate reservation | N/A | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | |
-| A2A counteroffer | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
+| A2A counteroffer | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | Brand dashboard run entry calls Product API promotion creation and `runAgentForPromotion`; persisted messages rendered |
 | Agreement Artifact/hash | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | pay.sh verification | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Devnet escrow | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Evidence verification | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Settlement release | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
-| Dashboard live/replay | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
+| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | `/brand` and `/creator` replaced with dashboard sections: 정산, 에이전트 관리, 에이전트 협상 기록 |
 | Technical Proof | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | |
 
@@ -101,10 +101,10 @@ WORKAROUND FOR DEMO (truthfully labeled):
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
-| Frontend typecheck | | | | |
-| Frontend lint | | | | |
-| Frontend unit | | | | |
-| Frontend build | | | | |
+| Frontend typecheck | Passed | working tree | 2026-07-31 | `cd frontend && npm run typecheck` |
+| Frontend lint | Passed | working tree | 2026-07-31 | `cd frontend && npm run lint` |
+| Frontend unit | Passed | working tree | 2026-07-31 | `cd frontend && npm test` (19 passed) |
+| Frontend build | Passed | working tree | 2026-07-31 | `cd frontend && npm run build` |
 | Backend lint/type | | | | |
 | Backend pytest | | | | |
 | Firestore integration | | | | |

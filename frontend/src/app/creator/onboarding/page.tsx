@@ -1,12 +1,5 @@
-"use client";
-
-import { AuthGate } from "@/auth/AuthGate";
-import { CreatorOnboardingScreen } from "@/product/ProductScreens";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <AuthGate expectedRole="CREATOR" completedRedirect="/creator">
-      {() => <CreatorOnboardingScreen />}
-    </AuthGate>
-  );
+  redirect("/creator/connect");
 }
