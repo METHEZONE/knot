@@ -64,22 +64,22 @@ Test proving no unbounded scan:
 ## 4. Latest verified E2E
 
 ```text
-Commit:
-Frontend revision:
-Product API revision:
-A2A revision:
+Commit: e123d02
+Frontend revision: e123d02
+Product API revision: e123d02
+A2A revision: e123d02
 Web3 revision:
-Live URL:
-Verified at:
-Verifier:
-Brand test account:
-Creator test account:
-Match Run ID:
-Negotiation ID:
-A2A Task ID:
-Agreement ID:
-Escrow lock signature:
-Settlement release signature:
+Live URL: local only, http://localhost:3000
+Verified at: 2026-07-31
+Verifier: Codex local smoke
+Brand test account: brand@knot.test
+Creator test account: creator@knot.test
+Match Run ID: match-4b0531f9-7168-463c-a2ab-e9ca609c6e40
+Negotiation ID: negotiation-6264a765-6426-477a-839a-4f8388438f56
+A2A Task ID: task-64f1e1f0-f955-45fd-8b7e-642fd8c5d80c
+Agreement ID: agreement-77630e6b-3f19-4373-b140-c10e9fef472b
+Escrow lock signature: not executed; requires explicit on-chain approval and configured signer/funding
+Settlement release signature: not executed; requires explicit on-chain approval and configured signer/funding
 ```
 
 Never put passwords, tokens, private keys or seed phrases here.
@@ -115,7 +115,7 @@ WORKAROUND FOR DEMO (truthfully labeled):
 | Reservation race | | | | |
 | Web3 local validator | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_LOCALNET=1` |
 | Devnet smoke | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_DEVNET=1`; no on-chain tx executed |
-| Two-window E2E | | | | |
+| Two-window E2E | Passed | e123d02 | 2026-07-31 | Local smoke used `brand@knot.test` and `creator@knot.test`; negotiation `negotiation-6264a765-6426-477a-839a-4f8388438f56` has A2A messages OFFER -> COUNTER -> ACCEPT -> ACCEPT with amounts 300 -> 650 -> 650 -> 650 |
 | Live URL smoke | | | | |
 | Secret scan | | | | |
 
