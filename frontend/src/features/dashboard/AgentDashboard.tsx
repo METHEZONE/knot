@@ -408,12 +408,16 @@ function BrandRecordList({
             href={href}
             className="sketch-alt ink flex flex-wrap items-center justify-between gap-3 border border-border-subtle bg-surface-raised p-4"
           >
-            <span className="min-w-0">
-              <span className="block truncate text-xl">{promotion.title}</span>
-              <span className="font-mono text-xs text-muted">
-                {promotion.status} · {formatTime(String(promotion.updatedAt ?? promotion.createdAt ?? ""))}
+              <span className="min-w-0">
+                <span className="block truncate text-xl">{promotion.title}</span>
+                <span className="font-mono text-xs text-muted">
+                  {promotion.status} · {formatTime(String(promotion.updatedAt ?? promotion.createdAt ?? ""))}
+                </span>
+                <span className="mt-1 block text-sm text-muted">
+                  {agreement?.creatorDisplayName ? `${agreement.creatorDisplayName} · ` : ""}
+                  {deliverableSummary(agreement?.terms.deliverables ?? promotion.deliverables)}
+                </span>
               </span>
-            </span>
             <span className="flex items-center gap-3">
               {agreement ? <Money usdc={agreement.terms.compensation.baseAmountUsdc} /> : null}
               <span className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm">
@@ -448,6 +452,7 @@ function AgreementRow({ agreement }: { agreement: ApiAgreement & Record<string, 
         <Money usdc={agreement.terms.compensation.baseAmountUsdc} />
         <span className="text-sm text-muted">{agreement.status}</span>
       </span>
+      <span className="w-full text-sm text-muted">{deliverableSummary(agreement.terms.deliverables)}</span>
     </Link>
   );
 }
@@ -457,6 +462,7 @@ function OfferRow({ offer }: { offer: Record<string, unknown> }) {
   const status = String(offer.status ?? offer.negotiationStatus ?? "OFFER");
   const label = String(offer.productTitle ?? offer.title ?? offer.promotionTitle ?? "협찬 제안");
   const amount = numberFromUnknown(offer.amountUsdc ?? offer.currentAmountUsdc ?? offer.baseAmountUsdc);
+  const work = typeof offer.deliverableSummary === "string" ? offer.deliverableSummary : null;
   return (
     <Link
       href={negotiationId ? `/creator/offers/${negotiationId}` : "/creator"}
@@ -465,6 +471,7 @@ function OfferRow({ offer }: { offer: Record<string, unknown> }) {
       <span>
         <span className="block text-xl">{label}</span>
         <span className="font-mono text-xs text-muted">{status}</span>
+        {work ? <span className="mt-1 block text-sm text-muted">{work}</span> : null}
       </span>
       {amount === null ? <span className="text-sm text-muted">금액 확인 중</span> : <Money usdc={amount} />}
     </Link>
@@ -521,4 +528,22 @@ function baseUnitsToUsdcLabel(value: string | undefined) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return value;
   return `${(raw / 1_000_000).toLocaleString()} USDC`;
+}
+
+function deliverableSummary(deliverables: Array<{ format: string; count: number }> | undefined) {
+  if (!deliverables?.length) return "작업 조건 미정";
+  return deliverables
+    .filter((deliverable) => deliverable.count > 0)
+    .map((deliverable) => `${formatDeliverable(deliverable.format)} ${deliverable.count}개`)
+    .join(", ");
+}
+
+function formatDeliverable(format: string) {
+  const labels: Record<string, string> = {
+    reel: "릴스",
+    short: "숏츠",
+    post: "게시글",
+    story: "스토리",
+  };
+  return labels[format] ?? format;
 }

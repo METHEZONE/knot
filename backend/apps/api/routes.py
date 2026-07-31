@@ -1601,6 +1601,9 @@ def build_api_router(
         for candidate, creator in ranked:
             document = _discovery_candidate_document(candidate)
             document["creatorId"] = creator.creator_id
+            document["creatorDisplayName"] = creator.display_name
+            document["categories"] = creator.categories
+            document["supportedDeliverableFormats"] = creator.supported_deliverable_formats
             document["creatorProfilePath"] = FirestorePaths.creator_profile(creator.creator_id)
             document["profileVersion"] = candidate.projection.get("profileVersion")
             document["taxonomyVersion"] = candidate.projection.get("taxonomyVersion")
@@ -1776,6 +1779,10 @@ def build_api_router(
                 "deliverable, usage rights, budget, or schedule and run matching again.",
             )
         promotion = _get_promotion(repository, promotion_id)
+        promotion_document = (
+            repository.get_raw_document(FirestorePaths.promotion(promotion_id))
+            or model_to_document(promotion)
+        )
         creator = repository.get_creator_profile_by_agent_id(creator_agent_id)
         if creator is None:
             raise _not_found("creatorAgent", creator_agent_id)
@@ -1792,7 +1799,7 @@ def build_api_router(
         terms = build_initial_terms(
             promotion,
             creator,
-            base_amount_usdc=_promotion_initial_offer_usdc(repository, promotion_id),
+            base_amount_usdc=_promotion_initial_offer_usdc(promotion_document),
         )
         brand_decision = validate_brand_terms(promotion, creator, terms, current_round=1)
         if not brand_decision.allowed:
@@ -2043,14 +2050,23 @@ def build_api_router(
             "matchCandidateId": match_candidate_id,
             "matchCandidatePath": candidate_path,
             "promotionId": promotion.promotion_id,
+            "promotionTitle": promotion.title,
+            "productName": promotion_document.get("productName") or promotion.title,
+            "brandId": promotion.brand_id,
             "brandAgentId": promotion.brand_agent_id,
+            "creatorId": creator.creator_id,
             "creatorAgentId": creator_agent_id,
+            "creatorDisplayName": creator.display_name,
             "contextId": context_id,
             "taskId": task_id,
             "status": negotiation_status,
             "currentRound": 2 if len(persisted_messages) >= 3 else 1,
             "maxRounds": promotion.autonomy.max_negotiation_rounds,
             "currentTerms": current_terms,
+            "initialAmountUsdc": terms.compensation.base_amount_usdc,
+            "currentAmountUsdc": _terms_base_amount_usdc(current_terms),
+            "workItems": _terms_work_items(current_terms),
+            "deliverableSummary": _terms_deliverable_summary(current_terms),
             "brandPolicySnapshot": {
                 "ruleVersion": final_brand_decision.rule_version,
                 "decision": final_brand_decision.model_dump(by_alias=True, mode="json"),
@@ -2112,6 +2128,8 @@ def build_api_router(
             artifact_id=artifact_id,
             task_id=task_id,
             created_at=now,
+            promotion=promotion_document,
+            creator=creator,
         )
         if artifact is not None:
             repository.save_raw_document(
@@ -2860,15 +2878,61 @@ def _get_promotion(repository: KnotRepository, promotion_id: str) -> Promotion:
     return promotion
 
 
-def _promotion_initial_offer_usdc(
-    repository: KnotRepository,
-    promotion_id: str,
-) -> int | None:
-    promotion = repository.get_raw_document(FirestorePaths.promotion(promotion_id)) or {}
+def _promotion_initial_offer_usdc(promotion: dict[str, object]) -> int | None:
     initial_offer = promotion.get("initialOffer")
     if isinstance(initial_offer, int) and initial_offer > 0:
         return initial_offer
     return None
+
+
+def _terms_base_amount_usdc(terms: dict[str, object]) -> int | None:
+    compensation = terms.get("compensation")
+    if not isinstance(compensation, dict):
+        return None
+    amount = compensation.get("baseAmountUsdc")
+    if isinstance(amount, int):
+        return amount
+    if isinstance(amount, str) and amount.isdigit():
+        return int(amount)
+    return None
+
+
+def _terms_work_items(terms: dict[str, object]) -> list[dict[str, object]]:
+    deliverables = terms.get("deliverables")
+    if not isinstance(deliverables, list):
+        return []
+    items: list[dict[str, object]] = []
+    for deliverable in deliverables:
+        if not isinstance(deliverable, dict):
+            continue
+        count = deliverable.get("count")
+        if not isinstance(count, int) or count <= 0:
+            continue
+        items.append(
+            {
+                "format": deliverable.get("format"),
+                "count": count,
+                "postWindow": deliverable.get("postWindow"),
+                "revisionRounds": deliverable.get("revisionRounds"),
+            }
+        )
+    return items
+
+
+def _terms_deliverable_summary(terms: dict[str, object]) -> str:
+    labels = {
+        "reel": "릴스",
+        "short": "숏츠",
+        "post": "게시글",
+        "story": "스토리",
+    }
+    parts: list[str] = []
+    for item in _terms_work_items(terms):
+        format_value = str(item.get("format") or "content")
+        count = item.get("count")
+        label = labels.get(format_value, format_value)
+        parts.append(f"{label} {count}개")
+    return ", ".join(parts) if parts else "작업 조건 미정"
 
 
 def _require_auth_user(
@@ -3110,7 +3174,7 @@ def _brand_dashboard(repository: KnotRepository, user: dict[str, object]) -> dic
         raise _not_found("brandProfile", brand_id)
 
     promotions = [
-        model_to_document(promotion)
+        _promotion_document_with_raw(repository, promotion)
         for promotion in repository.list_promotions()
         if promotion.brand_id == brand_id
         and not _promotion_is_deleted(repository, promotion.promotion_id)
@@ -3585,11 +3649,17 @@ def _offer_projection(
         "negotiationId": negotiation.get("negotiationId"),
         "promotionId": negotiation.get("promotionId"),
         "brandAgentId": negotiation.get("brandAgentId"),
+        "creatorAgentId": negotiation.get("creatorAgentId"),
+        "creatorDisplayName": negotiation.get("creatorDisplayName"),
+        "productName": negotiation.get("productName"),
         "title": promotion.get("title") if promotion else "Promotion",
         "status": negotiation.get("status"),
         "currentRound": negotiation.get("currentRound"),
         "initialAmountUsdc": negotiation.get("initialAmountUsdc"),
         "currentAmountUsdc": negotiation.get("currentAmountUsdc"),
+        "deliverableSummary": negotiation.get("deliverableSummary"),
+        "workItems": negotiation.get("workItems"),
+        "currentTerms": negotiation.get("currentTerms"),
         "updatedAt": negotiation.get("updatedAt") or negotiation.get("createdAt"),
     }
 
@@ -3609,6 +3679,8 @@ def _agreement_projection(
         "title": promotion.get("title") if promotion else "Agreement",
         "status": agreement.get("status"),
         "terms": agreement.get("terms"),
+        "workItems": agreement.get("workItems"),
+        "deliverableSummary": agreement.get("deliverableSummary"),
         "milestones": agreement.get("milestones", []),
         "escrow": escrow,
         "brandSnapshot": agreement.get("brandSnapshot"),
@@ -4050,8 +4122,10 @@ def _preferred_formats(preferred_content: list[str]) -> list[str]:
         formats.append("reel")
     if "story" in lowered or "스토리" in lowered:
         formats.append("story")
-    if "ugc" in lowered:
+    if "short" in lowered or "shorts" in lowered or "숏츠" in lowered or "ugc" in lowered:
         formats.append("short")
+    if "post" in lowered or "feed" in lowered or "게시글" in lowered or "피드" in lowered:
+        formats.append("post")
     return formats or ["reel", "story"]
 
 
@@ -4274,6 +4348,8 @@ def _agreement_document(
     artifact_id: str,
     task_id: str,
     created_at: str,
+    promotion: dict[str, object] | None = None,
+    creator: CreatorProfile | None = None,
 ) -> dict[str, object] | None:
     if decision.get("type") != NegotiationMessageType.ACCEPT.value:
         return None
@@ -4304,15 +4380,49 @@ def _agreement_document(
         "taskId": task_id,
         "artifactId": artifact_id,
         "promotionId": negotiation["promotionId"],
+        "promotionTitle": negotiation.get("promotionTitle"),
+        "productName": negotiation.get("productName"),
+        "brandId": negotiation.get("brandId"),
         "brandAgentId": negotiation["brandAgentId"],
+        "creatorId": negotiation.get("creatorId"),
         "creatorAgentId": negotiation["creatorAgentId"],
+        "creatorDisplayName": negotiation.get("creatorDisplayName"),
         "terms": terms,
+        "workItems": _terms_work_items(terms),
+        "deliverableSummary": _terms_deliverable_summary(terms),
+        "currentAmountUsdc": _terms_base_amount_usdc(terms),
+        "promotionSnapshot": _public_promotion_snapshot(promotion),
+        "creatorSnapshot": _public_creator_snapshot(creator),
         "canonicalTermsJson": canonical_terms_json(agreement_terms),
         "termsHash": computed_terms_hash,
         "hashAlgorithm": "sha256",
         "hashVersion": "knot.agreement-terms.v1",
         "status": "AGREED",
         "createdAt": created_at,
+    }
+
+
+def _public_promotion_snapshot(promotion: dict[str, object] | None) -> dict[str, object] | None:
+    if promotion is None:
+        return None
+    return {
+        "promotionId": promotion.get("promotionId"),
+        "title": promotion.get("title"),
+        "productName": promotion.get("productName") or promotion.get("title"),
+        "category": promotion.get("category"),
+        "objective": promotion.get("objective"),
+    }
+
+
+def _public_creator_snapshot(creator: CreatorProfile | None) -> dict[str, object] | None:
+    if creator is None:
+        return None
+    return {
+        "creatorId": creator.creator_id,
+        "creatorAgentId": creator.creator_agent_id,
+        "displayName": creator.display_name,
+        "categories": creator.categories,
+        "completedDealCount": creator.completed_deal_count,
     }
 
 

@@ -40,6 +40,9 @@ export type ApiPromotion = {
     autoRelease?: boolean;
   };
   status: string;
+  productName?: string;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
 };
 
 export type ApiUser = {
@@ -286,8 +289,13 @@ export type ApiNegotiation = {
   matchRunId: string;
   matchCandidateId: string;
   promotionId: string;
+  promotionTitle?: string;
+  productName?: string;
+  brandId?: string;
   brandAgentId: string;
+  creatorId?: string;
   creatorAgentId: string;
+  creatorDisplayName?: string;
   contextId: string;
   taskId: string;
   status:
@@ -302,6 +310,10 @@ export type ApiNegotiation = {
   currentRound: number;
   maxRounds: number;
   currentTerms: ApiAgreementTerms;
+  initialAmountUsdc?: number;
+  currentAmountUsdc?: number;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
 };
 
 export type ApiAgreement = {
@@ -310,9 +322,18 @@ export type ApiAgreement = {
   taskId: string;
   artifactId: string;
   promotionId: string;
+  promotionTitle?: string;
+  productName?: string;
+  brandId?: string;
   brandAgentId: string;
+  creatorId?: string;
   creatorAgentId: string;
+  creatorDisplayName?: string;
   terms: ApiAgreementTerms;
+  deliverableSummary?: string;
+  workItems?: Array<Record<string, unknown>>;
+  promotionSnapshot?: Record<string, unknown> | null;
+  creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
   termsHash: string;
   status: "AGREED" | "REJECTED";

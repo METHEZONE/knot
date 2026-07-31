@@ -224,8 +224,8 @@ class BrandPromotionCreateRequest(DomainModel):
             ),
             autonomy=PromotionAutonomy(
                 maxNegotiationRounds=self.maximum_rounds,
-                autoEscrow=False,
-                autoRelease=False,
+                autoEscrow=True,
+                autoRelease=True,
             ),
             status="DRAFT",
             createdAt=now,

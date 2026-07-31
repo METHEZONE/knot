@@ -52,8 +52,8 @@ export interface AgentTraits {
 export const INK = "#1c1c1a";
 
 /**
- * Category → palette/accessory. Extend this table rather than hashing new
- * categories, so a beauty agent always reads as a beauty agent.
+ * Category → accessory. Colour is side-owned in the MVP: Brand Agents are
+ * green and Creator Agents are pink on every screen.
  */
 const CATEGORY_TRAITS: Record<string, { hue: number; accessory: Accessory }> = {
   beauty: { hue: 330, accessory: "sparkle" },
@@ -107,8 +107,7 @@ export function agentTraits(
   const seed = hash(agentId);
   const mapped = category ? CATEGORY_TRAITS[category.toLowerCase()] : undefined;
 
-  // Uncategorised agents still get a stable hue, just not a meaningful one.
-  const hue = mapped ? mapped.hue : seed % 360;
+  const hue = side === "brand" ? 145 : 330;
   const accessory = mapped ? mapped.accessory : "antenna";
 
   return {

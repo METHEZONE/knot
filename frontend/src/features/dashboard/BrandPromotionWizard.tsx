@@ -19,9 +19,22 @@ type MoodDraft = {
   moodTags: string[];
   totalUsdc: number;
   maxPerDealUsdc: number;
+  workBrief: string;
+  deliverables: DeliverableCounts;
+};
+
+type DeliverableCounts = {
+  reel: number;
+  short: number;
+  post: number;
 };
 
 const RECOMMENDED_MOODS = ["설명형", "루틴", "클로즈업", "정보", "신뢰", "솔직함"];
+const DELIVERABLE_CONTROLS: Array<{ key: keyof DeliverableCounts; label: string }> = [
+  { key: "reel", label: "릴스" },
+  { key: "short", label: "숏츠" },
+  { key: "post", label: "게시글" },
+];
 
 export function BrandPromotionWizard() {
   const router = useRouter();
@@ -43,6 +56,8 @@ export function BrandPromotionWizard() {
         moodTags: product.category === "wellness" ? ["집중", "루틴", "설명형"] : ["설명형", "루틴", "클로즈업"],
         totalUsdc: 2000,
         maxPerDealUsdc: 800,
+        workBrief: "제품을 직접 사용한 후기 중심의 콘텐츠 제작",
+        deliverables: { reel: 1, short: 0, post: 0 },
       });
       setStep("review");
       setBusy(false);
@@ -60,7 +75,7 @@ export function BrandPromotionWizard() {
         {
           productName: draft.productName,
           title: `${draft.productName} 협찬 프로젝트`,
-          objective: draft.summary || "제품 인지도와 실제 사용 콘텐츠 확보",
+          objective: `${draft.workBrief.trim()} · ${draft.summary || "제품 인지도와 실제 사용 콘텐츠 확보"}`,
           categories: [draft.category || "beauty"],
           targetAudience: draft.moodTags.join(", "),
           totalBudget: draft.totalUsdc,
@@ -68,7 +83,7 @@ export function BrandPromotionWizard() {
           maximumPerCreator: draft.maxPerDealUsdc,
           autoAcceptCeiling: draft.maxPerDealUsdc,
           maximumRounds: 3,
-          deliverables: [{ format: "reel", count: 1 }],
+          deliverables: deliverablesFromDraft(draft.deliverables),
           usageRights: "organicOnly",
           deadline: deadlineAfterDays(14),
           prohibitedClaims: ["의료 효능 과장", "무검수 게시"],
@@ -140,6 +155,14 @@ export function BrandPromotionWizard() {
                   />
                 </label>
                 <p className="mt-3 text-sm text-muted">{draft.summary}</p>
+                <label className="mt-4 block text-sm text-muted">
+                  해야 하는 작업
+                  <textarea
+                    value={draft.workBrief}
+                    onChange={(event) => setDraft({ ...draft, workBrief: event.target.value })}
+                    className="sketch-alt ink mt-2 min-h-20 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
+                  />
+                </label>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {RECOMMENDED_MOODS.map((mood) => {
                     const active = draft.moodTags.includes(mood);
@@ -167,6 +190,34 @@ export function BrandPromotionWizard() {
               </div>
 
               <div className="sketch ink border border-border-subtle bg-background p-4">
+                <div>
+                  <p className="text-sm text-muted">작업 수량</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {DELIVERABLE_CONTROLS.map((control) => (
+                      <label key={control.key} className="sketch-alt ink border border-border-subtle bg-surface-raised p-3 text-sm text-muted">
+                        {control.label}
+                        <input
+                          type="number"
+                          min={0}
+                          max={9}
+                          step={1}
+                          value={draft.deliverables[control.key]}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              deliverables: {
+                                ...draft.deliverables,
+                                [control.key]: Math.max(0, Number(event.target.value)),
+                              },
+                            })
+                          }
+                          className="mt-2 w-full bg-transparent font-mono text-2xl text-foreground outline-none"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-muted">{deliverableSummary(draft.deliverables)}</p>
+                </div>
                 <label className="block text-sm text-muted">
                   총 예산
                   <span className="mt-2 flex items-baseline gap-2">
@@ -206,7 +257,13 @@ export function BrandPromotionWizard() {
               <button
                 type="button"
                 onClick={startNegotiation}
-                disabled={busy || !draft.productName.trim() || draft.moodTags.length === 0}
+                disabled={
+                  busy ||
+                  !draft.productName.trim() ||
+                  !draft.workBrief.trim() ||
+                  draft.moodTags.length === 0 ||
+                  deliverablesFromDraft(draft.deliverables).length === 0
+                }
                 className="sketch-pill bg-accent px-6 py-3 text-background disabled:opacity-50"
               >
                 협상 시작
@@ -260,6 +317,21 @@ function deadlineAfterDays(days: number) {
 
 function initialOfferForMax(maxPerDealUsdc: number) {
   return Math.max(50, Math.round((maxPerDealUsdc * 0.4) / 50) * 50);
+}
+
+function deliverablesFromDraft(deliverables: DeliverableCounts) {
+  return DELIVERABLE_CONTROLS.flatMap((control) => {
+    const count = Math.floor(deliverables[control.key]);
+    return count > 0 ? [{ format: control.key, count }] : [];
+  });
+}
+
+function deliverableSummary(deliverables: DeliverableCounts) {
+  const parts = DELIVERABLE_CONTROLS.flatMap((control) => {
+    const count = Math.floor(deliverables[control.key]);
+    return count > 0 ? [`${control.label} ${count}개`] : [];
+  });
+  return parts.length ? parts.join(", ") : "최소 1개 작업을 입력하세요.";
 }
 
 function readableError(caught: unknown) {

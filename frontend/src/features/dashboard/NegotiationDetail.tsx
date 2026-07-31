@@ -8,6 +8,7 @@ import { Money } from "@/features/chat/Money";
 import {
   type ApiAgreement,
   type ApiAgreementEscrowBundle,
+  type ApiAgreementTerms,
   type ApiEvidence,
   type ApiNegotiation,
   type ApiNegotiationMessage,
@@ -133,15 +134,7 @@ export function NegotiationDetail({
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
-        <section className="sketch ink border border-border-subtle bg-surface p-5">
-          <SectionHeader eyebrow="협상 정보" title={negotiation.status} />
-          <div className="grid gap-3">
-            <Metric label="Round" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
-            <Metric label="A2A Task" value={negotiation.taskId} />
-            <Metric label="최종/현재 금액" value={`${negotiation.currentTerms.compensation.baseAmountUsdc} USDC`} />
-            <Metric label="Creator Agent" value={negotiation.creatorAgentId} />
-          </div>
-        </section>
+        <WorkSummaryPanel role={role} negotiation={negotiation} agreement={agreement} />
 
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
           <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
@@ -176,6 +169,37 @@ export function NegotiationDetail({
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
       </section>
     </div>
+  );
+}
+
+function WorkSummaryPanel({
+  role,
+  negotiation,
+  agreement,
+}: {
+  role: Role;
+  negotiation: ApiNegotiation;
+  agreement: ApiAgreement | null;
+}) {
+  const terms = agreement?.terms ?? negotiation.currentTerms;
+  const amount = agreement?.terms.compensation.baseAmountUsdc ?? negotiation.currentTerms.compensation.baseAmountUsdc;
+  const creatorName = agreement?.creatorDisplayName ?? negotiation.creatorDisplayName ?? negotiation.creatorAgentId;
+  const productName = agreement?.productName ?? negotiation.productName ?? negotiation.promotionTitle ?? "프로모션";
+  return (
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <SectionHeader eyebrow="Agent 결과" title={negotiation.status} />
+      <div className="grid gap-3">
+        <Metric label="연동된 크리에이터" value={creatorName} />
+        <Metric label="제품/프로모션" value={productName} />
+        <Metric label="합의 금액" value={`${amount.toLocaleString()} USDC`} />
+        <Metric label="A2A Round" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
+      </div>
+      <div className="mt-4">
+        <p className="text-xs text-muted">{role === "creator" ? "내가 해야 받을 작업" : "합의된 작업"}</p>
+        <WorkItemList terms={terms} compact={false} />
+      </div>
+      <p className="mt-4 break-all font-mono text-xs text-muted">A2A Task {negotiation.taskId}</p>
+    </section>
   );
 }
 
@@ -272,6 +296,25 @@ function EscrowPanel({
   );
 }
 
+function WorkItemList({ terms, compact }: { terms: ApiAgreementTerms; compact: boolean }) {
+  if (!terms.deliverables.length) {
+    return <p className="mt-2 text-sm text-muted">아직 합의된 작업이 없습니다.</p>;
+  }
+  return (
+    <div className={`mt-2 grid gap-2 ${compact ? "" : "sm:grid-cols-2"}`}>
+      {terms.deliverables.map((deliverable, index) => (
+        <div key={`${deliverable.format}-${index}`} className="sketch-alt ink border border-border-subtle bg-background p-3">
+          <p className="text-lg">{formatDeliverable(deliverable.format)} {deliverable.count}개</p>
+          <p className="mt-1 font-mono text-xs text-muted">
+            {deliverable.postWindow.start} - {deliverable.postWindow.end}
+          </p>
+          <p className="mt-1 text-xs text-muted">수정 {deliverable.revisionRounds ?? 1}회까지</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MilestonePanel({
   role,
   agreement,
@@ -302,8 +345,13 @@ function MilestonePanel({
               <Money usdc={amount} />
             </div>
             <p className="mt-3 text-sm text-muted">
-              {released ? "정산 완료" : escrow ? "증빙 제출 후 Agent 검토가 필요합니다." : "에스크로가 잠긴 뒤 증빙을 제출할 수 있습니다."}
+              {released
+                ? "정산 완료"
+                : escrow
+                  ? `에스크로 잔금 수령 조건: ${deliverableRequirement(agreement.terms)} 완료 URL 제출 후 Agent 검토 통과`
+                  : `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`}
             </p>
+            <WorkItemList terms={agreement.terms} compact />
             {role === "creator" && escrow && !released ? (
               <EvidenceForm
                 agreement={agreement}
@@ -452,6 +500,21 @@ function numberFromUnknown(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
   return null;
+}
+
+function formatDeliverable(format: string) {
+  const labels: Record<string, string> = {
+    reel: "릴스",
+    short: "숏츠",
+    post: "게시글",
+    story: "스토리",
+  };
+  return labels[format] ?? format;
+}
+
+function deliverableRequirement(terms: ApiAgreementTerms) {
+  const parts = terms.deliverables.map((deliverable) => `${formatDeliverable(deliverable.format)} ${deliverable.count}개`);
+  return parts.length ? parts.join(", ") : "합의 작업";
 }
 
 function formatTime(value: string) {

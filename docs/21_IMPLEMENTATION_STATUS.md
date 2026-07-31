@@ -45,7 +45,7 @@
 | Devnet escrow | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Evidence verification | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Settlement release | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
-| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | Dashboard now shows aggregate summaries and record lists; actual A2A messages moved to negotiation detail pages |
+| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | IMPLEMENTED | IN_PROGRESS | Dashboard now shows aggregate summaries and record lists; actual A2A messages moved to negotiation detail pages; records include connected Creator and agreed work summary |
 | Technical Proof | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | |
 | Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | |
 
@@ -64,9 +64,9 @@ Test proving no unbounded scan:
 ## 4. Latest verified E2E
 
 ```text
-Commit: e123d02
-Frontend revision: e123d02
-Product API revision: e123d02
+Commit: working tree
+Frontend revision: working tree
+Product API revision: working tree
 A2A revision: e123d02
 Web3 revision:
 Live URL: local only, http://localhost:3000
@@ -74,10 +74,13 @@ Verified at: 2026-07-31
 Verifier: Codex local smoke
 Brand test account: brand@knot.test
 Creator test account: creator@knot.test
-Match Run ID: match-4b0531f9-7168-463c-a2ab-e9ca609c6e40
-Negotiation ID: negotiation-6264a765-6426-477a-839a-4f8388438f56
-A2A Task ID: task-64f1e1f0-f955-45fd-8b7e-642fd8c5d80c
-Agreement ID: agreement-77630e6b-3f19-4373-b140-c10e9fef472b
+Brand ID: brand-e2502cdf-dccf-417e-bf66-7d4590bb87df
+Creator ID: creator-d2f40859-7b9a-43b9-a903-eebac64e2499
+Match Run ID: match-23618436-362d-4629-bf82-8a96ee3cbc58
+Negotiation ID: negotiation-f87b9015-b2bb-4bc9-9698-e5d457e118bc
+A2A Task ID: task-dc7ab3b1-16f6-4edc-9bd7-2ef5c2e8418a
+Agreement ID: agreement-f3fcceec-9142-42d2-bdda-1ebbd137824d
+Deliverables: 릴스 2개, 숏츠 1개, 게시글 1개
 Escrow lock signature: not executed; requires explicit on-chain approval and configured signer/funding
 Settlement release signature: not executed; requires explicit on-chain approval and configured signer/funding
 ```
@@ -116,6 +119,7 @@ WORKAROUND FOR DEMO (truthfully labeled):
 | Web3 local validator | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_LOCALNET=1` |
 | Devnet smoke | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_DEVNET=1`; no on-chain tx executed |
 | Two-window E2E | Passed | e123d02 | 2026-07-31 | Local smoke used `brand@knot.test` and `creator@knot.test`; negotiation `negotiation-6264a765-6426-477a-839a-4f8388438f56` has A2A messages OFFER -> COUNTER -> ACCEPT -> ACCEPT with amounts 300 -> 650 -> 650 -> 650 |
+| Agent work summary | Passed | working tree | 2026-07-31 | Local smoke created `promotion-d9769dbd-32aa-5623-8d0f-d6dd7e2ec77b`; A2A HTTP messages persisted as OFFER 300 -> COUNTER 650 -> ACCEPT 650 -> ACCEPT 650; negotiation/agreement/creator offer show `릴스 2개, 숏츠 1개, 게시글 1개` |
 | Live URL smoke | | | | |
 | Secret scan | | | | |
 
