@@ -109,6 +109,7 @@ WORKAROUND FOR DEMO (truthfully labeled):
 | Backend pytest | Passed | working tree | 2026-07-31 | `.venv/bin/python -m pytest backend/tests/test_api_promotions.py::test_start_negotiation_persists_messages_events_and_agreement backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py backend/tests/test_escrow_devnet.py -q` (17 passed, 1 skipped devnet) |
 | Firestore integration | | | | |
 | A2A contract | Passed | working tree | 2026-07-31 | HTTP boundary test starts separate Creator Agent uvicorn server and Product API calls it; saved initialOffer now produces OFFER -> COUNTER -> ACCEPT -> ACCEPT when below Creator policy |
+| Creator Agent Card | Passed | working tree | 2026-07-31 | `.venv/bin/python -m pytest backend/tests/test_health_apps.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py::test_start_negotiation_uses_creator_a2a_http_when_configured -q` (4 passed); public card no longer advertises fixture-only tenant |
 | Matching no-scan | | | | |
 | Reservation race | | | | |
 | Web3 local validator | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_LOCALNET=1` |
