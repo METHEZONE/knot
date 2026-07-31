@@ -1,6 +1,6 @@
 # API Compatibility Matrix
 
-> Phase 6 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
+> Phase 7 matrix. Existing public routes are preserved; final routes are added as aliases/adapters first.
 
 ## Principles
 
@@ -29,8 +29,8 @@
 | `POST /api/v1/analyses/{analysis_id}:confirm` | Owner-scoped analysis confirmation | Analysis confirmation | Added in Phase 2 | Low |
 | `POST /api/v1/onboarding/brand/analyze-source` | Brand source analysis compatibility shape | Existing frontend `analyzeBrandSource` adapter | Added in Phase 2 | Medium |
 | `POST /api/v1/logout/revoke` | Revoke Firebase refresh tokens | same | Preserve | Low |
-| `GET /api/v1/brand/dashboard` | Brand dashboard projection | Final BrandDashboardView | Preserve | Medium: not full Agent Control Room yet |
-| `GET /api/v1/creator/dashboard` | Creator dashboard projection | Final CreatorDashboardView | Preserve | Medium: accepting-offers state incomplete |
+| `GET /api/v1/brand/dashboard` | Brand dashboard projection consumed with Match Run event/detail reads | Final BrandDashboardView | Phase 7 frontend adapter added | Low |
+| `GET /api/v1/creator/dashboard` | Creator dashboard projection consumed with Creator Agent control and replay reads | Final CreatorDashboardView | Phase 7 frontend adapter added | Low |
 | `GET /api/v1/creator/agent` | Authenticated Creator Agent control state and discovery projection | Creator Agent control view | Added in Phase 3 | Low |
 | `POST /api/v1/creator/agent:publish` | Owner-scoped publish and discovery projection write | Creator publishes Agent for matching | Added in Phase 3 | Low |
 | `POST /api/v1/creator/agent:pause` | Owner-scoped pause and discovery projection write | Creator pauses Agent matching | Added in Phase 3 | Low |
@@ -59,14 +59,14 @@
 | `POST /api/v1/promotions/{promotion_id}/match-runs` | Alias to bounded discovery/ranking behavior with idempotency and canonical events | Start Match Run | Updated in Phase 5 | Medium: returns current synchronous result |
 | `GET /api/v1/match-runs/{match_run_id}` | Get raw Match Run | MatchRun detail | Preserve | Low |
 | `GET /api/v1/match-runs/{match_run_id}/timeline` | Promotion event projection by run | MatchRun timeline | Added in Phase 1 | Medium: event model not final sequence yet |
-| `GET /api/v1/match-runs/{match_run_id}/events` | Alias of timeline | MatchRun events | Added in Phase 1 | Medium |
+| `GET /api/v1/match-runs/{match_run_id}/events` | Canonical Match Run event stream used by live/replay dashboard UI | MatchRun events | Consumed by Phase 7 frontend | Low |
 | `POST /api/v1/match-runs/{match_run_id}:cancel` | Cancel non-terminal Match Run | Match Run cancel | Added in Phase 5 | Low |
 | `GET /api/v1/match-runs/{match_run_id}/candidates` | Candidate snapshots with public score components and safe facts | Candidate snapshots | Updated in Phase 4 | Medium: durable event sequence pending |
 | `POST /api/v1/match-runs/{match_run_id}/candidates/{creator_agent_id}:select` | Manual candidate selection | Not final user behavior | Preserve only for compatibility/dev | High |
 | `POST /api/v1/match-runs/{match_run_id}:start-negotiation` | Registry-validated A2A negotiation after selected candidate | Durable sequential candidate negotiation | Updated in Phase 6 | Medium: reservation/fallback pending |
 | `GET /api/v1/negotiations/{negotiation_id}` | Raw negotiation | Negotiation detail | Preserve | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/messages` | Persisted messages | Negotiation messages | Preserve | Low |
-| `GET /api/v1/negotiations/{negotiation_id}/events` | Decision events | Negotiation timeline/events | Preserve | Low |
+| `GET /api/v1/negotiations/{negotiation_id}/events` | Decision events consumed by live/replay proof ViewModels | Negotiation timeline/events | Consumed by Phase 7 frontend | Low |
 | `GET /api/v1/negotiations/{negotiation_id}/agreement` | Agreement by negotiation | same | Preserve | Low |
 | `POST /api/v1/negotiations/{negotiation_id}:cancel` | Cancel non-terminal negotiation | same | Preserve | Low |
 | `GET /api/v1/agreements/{agreement_id}` | Agreement read | same | Preserve | Low |
@@ -147,3 +147,8 @@ All `/api/v1/dev-admin/*` routes require dev-admin auth checks in current code. 
 - Creator Agent publish writes an `agentRegistry` projection without private policy.
 - Product API negotiation persists `a2aTasks/{taskId}/events`.
 - Real HTTP A2A counter/accept path still works with AgentCard discovery and service auth.
+
+## Contract Tests Added in Phase 7
+
+- Frontend API data source projects canonical Match Run event replay and sanitized Technical Proof from Product API routes.
+- Dashboard controls stay on Product API resource routes; browser code does not write business data directly to Firestore.

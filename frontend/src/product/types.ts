@@ -14,6 +14,21 @@ export type NegotiatedTerm = {
   value: string;
 };
 
+export type AgentRunEvent = {
+  id: string;
+  type: string;
+  label: string;
+  createdAt: string;
+  sequence: number | null;
+  status: "ok" | "warning" | "pending";
+};
+
+export type TechnicalProofItem = {
+  label: string;
+  value: string;
+  status: "ok" | "warning" | "pending";
+};
+
 export type Milestone = {
   id: string;
   title: string;
@@ -80,6 +95,10 @@ export type NegotiationView = {
   publicSummary: string[];
   terms: NegotiatedTerm[];
   termsHash: string;
+  runStatus: string;
+  lastEventAt: string | null;
+  runEvents: AgentRunEvent[];
+  technicalProof: TechnicalProofItem[];
 };
 
 export type CandidateSummary = {

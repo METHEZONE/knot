@@ -324,6 +324,7 @@ export type ApiTimelineEvent = {
   type: string;
   data: Record<string, unknown>;
   createdAt: string;
+  sequence?: number;
 };
 
 export type ApiNegotiationMessage = {
@@ -760,6 +761,13 @@ export class ProductApiClient {
     return response.matchRun;
   }
 
+  async listMatchRunEvents(matchRunId: string) {
+    const response = await this.request<{ events: ApiTimelineEvent[] }>(
+      `/api/v1/match-runs/${matchRunId}/events`,
+    );
+    return response.events;
+  }
+
   async getNegotiation(negotiationId: string) {
     const response = await this.request<{ negotiation: ApiNegotiation }>(
       `/api/v1/negotiations/${negotiationId}`,
@@ -772,6 +780,13 @@ export class ProductApiClient {
       `/api/v1/negotiations/${negotiationId}/messages`,
     );
     return response.messages;
+  }
+
+  async listNegotiationEvents(negotiationId: string) {
+    const response = await this.request<{ events: ApiTimelineEvent[] }>(
+      `/api/v1/negotiations/${negotiationId}/events`,
+    );
+    return response.events;
   }
 
   async startNegotiation(matchRunId: string) {

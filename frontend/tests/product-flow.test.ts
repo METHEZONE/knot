@@ -274,6 +274,192 @@ test("API data source reads a pending negotiation without creating agent resourc
   }
 });
 
+test("API data source projects canonical match run replay and technical proof", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const promotion: ApiPromotion = {
+    promotionId: "promotion-api-live",
+    brandId: "brand-api",
+    brandAgentId: "brand-agent-api",
+    title: "API live Promotion",
+    objective: "awareness",
+    category: "beauty",
+    targetAudience: ["20s"],
+    budget: { totalUsdc: 1200, maxPerCreatorUsdc: 600 },
+    deliverables: [{ format: "reel", count: 1 }],
+    postingWindow: { start: "2026-08-01", end: "2026-08-10" },
+    usageRights: "organicOnly",
+    constraints: { requiredDisclosures: ["ad"], prohibitedClaims: [] },
+    autonomy: { maxNegotiationRounds: 3, autoEscrow: false, autoRelease: false },
+    status: "NEGOTIATING",
+  };
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/api/v1/promotions/promotion-api-live")) {
+      return Response.json({ data: { promotion } });
+    }
+    if (url.endsWith("/api/v1/promotions/promotion-api-live/timeline")) {
+      return Response.json({
+        data: {
+          events: [
+            {
+              eventId: "timeline-match",
+              promotionId: "promotion-api-live",
+              type: "MATCH_RUN_COMPLETED",
+              data: { matchRunId: "match-api-live", selectedCreatorAgentId: "creator-agent-api" },
+              createdAt: "2026-07-31T01:00:00Z",
+            },
+            {
+              eventId: "timeline-negotiation",
+              promotionId: "promotion-api-live",
+              type: "NEGOTIATION_STARTED",
+              data: { negotiationId: "negotiation-api-live" },
+              createdAt: "2026-07-31T01:01:00Z",
+            },
+          ],
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/negotiations/negotiation-api-live")) {
+      return Response.json({
+        data: {
+          negotiation: {
+            negotiationId: "negotiation-api-live",
+            matchRunId: "match-api-live",
+            matchCandidateId: "candidate-api-live",
+            promotionId: "promotion-api-live",
+            brandAgentId: "brand-agent-api",
+            creatorAgentId: "creator-agent-api",
+            contextId: "context-api-live",
+            taskId: "task-api-live",
+            status: "AGREED",
+            currentRound: 2,
+            maxRounds: 3,
+            currentTerms: {
+              compensation: { structure: "flat", baseAmountUsdc: 520 },
+              deliverables: [{ format: "reel", count: 1, postWindow: promotion.postingWindow }],
+              usageRights: "organicOnly",
+              milestones: [{ id: "content", trigger: "contentLiveVerified", releasePct: 100 }],
+            },
+          },
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/negotiations/negotiation-api-live/agreement")) {
+      return Response.json({
+        data: {
+          agreement: {
+            agreementId: "agreement-api-live",
+            negotiationId: "negotiation-api-live",
+            taskId: "task-api-live",
+            artifactId: "artifact-api-live",
+            promotionId: "promotion-api-live",
+            brandAgentId: "brand-agent-api",
+            creatorAgentId: "creator-agent-api",
+            terms: {
+              compensation: { structure: "flat", baseAmountUsdc: 520 },
+              deliverables: [{ format: "reel", count: 1, postWindow: promotion.postingWindow }],
+              usageRights: "organicOnly",
+              milestones: [{ id: "content", trigger: "contentLiveVerified", releasePct: 100 }],
+            },
+            canonicalTermsJson: "{}",
+            termsHash: "sha256:agreement-api-live",
+            status: "AGREED",
+          },
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/match-runs/match-api-live")) {
+      return Response.json({
+        data: {
+          matchRun: {
+            matchRunId: "match-api-live",
+            promotionId: "promotion-api-live",
+            brandAgentId: "brand-agent-api",
+            status: "COMPLETED",
+            selectedCreatorId: "creator-api",
+            selectedCreatorAgentId: "creator-agent-api",
+          },
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/match-runs/match-api-live/candidates")) {
+      return Response.json({
+        data: {
+          candidates: [
+            {
+              creatorId: "creator-api",
+              creatorAgentId: "creator-agent-api",
+              rank: 1,
+              eligible: true,
+              overallScore: 0.92,
+              explanation: "public fit reason",
+            },
+          ],
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/match-runs/match-api-live/events")) {
+      return Response.json({
+        data: {
+          events: [
+            {
+              eventId: "run-ready",
+              promotionId: "promotion-api-live",
+              type: "MATCH_RUN_READY",
+              data: { matchRunId: "match-api-live" },
+              createdAt: "2026-07-31T01:00:00Z",
+              sequence: 1,
+            },
+            {
+              eventId: "run-completed",
+              promotionId: "promotion-api-live",
+              type: "MATCH_RUN_COMPLETED",
+              data: { matchRunId: "match-api-live", selectedCreatorAgentId: "creator-agent-api" },
+              createdAt: "2026-07-31T01:00:04Z",
+              sequence: 5,
+            },
+          ],
+        },
+      });
+    }
+    if (url.endsWith("/api/v1/negotiations/negotiation-api-live/events")) {
+      return Response.json({
+        data: {
+          events: [
+            {
+              eventId: "decision-accept",
+              promotionId: "promotion-api-live",
+              type: "NEGOTIATION_ACCEPT",
+              data: { decisionId: "decision-accept" },
+              createdAt: "2026-07-31T01:01:30Z",
+            },
+          ],
+        },
+      });
+    }
+    return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const view = await createKnotDataSource("api").getNegotiation("brand", {
+      promotionId: "promotion-api-live",
+    });
+    assert.deepEqual(view.runEvents.map((event) => event.type), [
+      "MATCH_RUN_READY",
+      "MATCH_RUN_COMPLETED",
+    ]);
+    assert.ok(view.technicalProof.some((item) => item.label === "Data source" && item.value === "LIVE"));
+    assert.ok(view.technicalProof.some((item) => item.label === "A2A Task ID" && item.value === "task-api-live"));
+    assert.ok(calls.some((url) => url.endsWith("/api/v1/match-runs/match-api-live/events")));
+    assert.ok(calls.some((url) => url.endsWith("/api/v1/negotiations/negotiation-api-live/events")));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("API client does not start negotiation when matching has no eligible creator", async () => {
   const previousFetch = globalThis.fetch;
   const calls: Array<{ url: string; method: string }> = [];

@@ -1,6 +1,6 @@
 # Firestore Migration Plan
 
-> Phase 6 mapping. No live migration or backfill was executed.
+> Phase 7 mapping. No live migration or backfill was executed.
 
 ## Current Collections
 
@@ -102,6 +102,17 @@ python scripts/backfill_creator_discovery_profiles.py --write
 ```
 
 No `--write` run was executed in Phase 3.
+
+Phase 7 adds no schema migration and executes no backfill. The frontend reads dashboard replay/proof only through Product API projections backed by existing collections:
+
+- `matchRuns/{id}/events`
+- `matchRuns/{id}/candidates`
+- `negotiations/{id}/events`
+- `negotiations/{id}/messages`
+- `agentRegistry`
+- `creatorDiscoveryProfiles`
+
+The browser still does not write business data directly to Firestore. Creator Agent ON/OFF and Brand `탐색·협상 시작` actions go through owner-scoped Product API routes.
 
 ## Index Requirements
 

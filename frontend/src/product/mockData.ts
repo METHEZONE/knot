@@ -175,6 +175,32 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     ],
     terms,
     termsHash: "sha256:mock-explicit-fixture-only",
+    runStatus: "DEMO_FIXTURE",
+    lastEventAt: "2026-07-25T09:00:00Z",
+    runEvents: [
+      {
+        id: "fixture-run-ready",
+        type: "MATCH_RUN_READY",
+        label: "조건을 검색 기준으로 바꿨어요.",
+        createdAt: "2026-07-25T08:59:00Z",
+        sequence: 1,
+        status: "ok",
+      },
+      {
+        id: "fixture-run-selected",
+        type: "MATCH_RUN_COMPLETED",
+        label: "제안 가능한 Creator Agent를 찾고 후보를 선택했어요.",
+        createdAt: "2026-07-25T09:00:00Z",
+        sequence: 5,
+        status: "ok",
+      },
+    ],
+    technicalProof: [
+      { label: "Data source", value: "DEMO FIXTURE", status: "warning" },
+      { label: "Match Run ID", value: "match-run-mock-alpha", status: "warning" },
+      { label: "A2A Task ID", value: "a2a-task-20260725-001", status: "warning" },
+      { label: "Agreement termsHash", value: "sha256:mock-explicit-fixture-only", status: "warning" },
+    ],
   },
   creator: {
     role: "creator",
@@ -234,6 +260,32 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     ],
     terms,
     termsHash: "sha256:mock-explicit-fixture-only",
+    runStatus: "DEMO_FIXTURE",
+    lastEventAt: "2026-07-25T09:00:00Z",
+    runEvents: [
+      {
+        id: "fixture-run-ready",
+        type: "MATCH_RUN_READY",
+        label: "조건을 검색 기준으로 바꿨어요.",
+        createdAt: "2026-07-25T08:59:00Z",
+        sequence: 1,
+        status: "ok",
+      },
+      {
+        id: "fixture-run-selected",
+        type: "MATCH_RUN_COMPLETED",
+        label: "제안 가능한 Creator Agent를 찾고 후보를 선택했어요.",
+        createdAt: "2026-07-25T09:00:00Z",
+        sequence: 5,
+        status: "ok",
+      },
+    ],
+    technicalProof: [
+      { label: "Data source", value: "DEMO FIXTURE", status: "warning" },
+      { label: "Match Run ID", value: "match-run-mock-alpha", status: "warning" },
+      { label: "A2A Task ID", value: "a2a-task-20260725-001", status: "warning" },
+      { label: "Agreement termsHash", value: "sha256:mock-explicit-fixture-only", status: "warning" },
+    ],
   },
 };
 

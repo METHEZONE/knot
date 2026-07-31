@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 6 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 7 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -34,7 +34,7 @@
 |---|---|---|---|---|---|---|
 | Brand card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs added; visual card flow still pending |
 | Creator card onboarding | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 2 analysis/session APIs and Phase 3 publish API added; card UX wiring pending |
-| Creator Agent publish/pause | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | N/A | NOT_STARTED | Phase 3 owner-scoped APIs added; visual dashboard controls pending |
+| Creator Agent publish/pause | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | N/A | NOT_STARTED | Phase 7 Creator Dashboard control calls owner-scoped publish/pause/resume APIs |
 | Discovery projection/index | N/A | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 4 Product API matching consumes discovery projections with bounded query |
 | Deterministic ranking | N/A | IMPLEMENTED | IN_PROGRESS | N/A | NOT_STARTED | Phase 4 public score components and deterministic tie-breakers added |
 | Match Run orchestration | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | NOT_STARTED | Phase 5 idempotency, cancel, state history, and canonical events added; worker pending |
@@ -45,8 +45,8 @@
 | Devnet escrow | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing Gateway/devnet config audited; no tx run |
 | Evidence verification | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing evidence route/policy audited |
 | Settlement release | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing release route audited |
-| Dashboard live/replay | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Current dashboards exist; event-driven final UX pending |
-| Technical Proof | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Receipt/ID routes exist; final panel pending |
+| Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
+| Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
 | Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | No deployment in Phase 1 |
 
 ## 3. Phase 1 Changes
@@ -132,7 +132,23 @@
 - Product API persists ordered `a2aTasks/{taskId}/events` alongside task/message/artifact documents.
 - Focused tests verify registry privacy and task event persistence.
 
-## 9. Query-Bound Proof
+## 9. Phase 7 Changes
+
+- Added frontend Product API client methods for:
+  - `GET /api/v1/match-runs/{match_run_id}/events`
+  - `GET /api/v1/negotiations/{negotiation_id}/events`
+- Extended frontend ViewModels with canonical run events, run status, last event time, and sanitized Technical Proof items.
+- Brand Dashboard now includes an Agent Control Room card:
+  - `탐색·협상 시작` calls Product API only.
+  - Candidate cards are rendered from stored candidate snapshots.
+  - Replay is rendered from stored Match Run events, not timers.
+  - Technical Proof is collapsed by default.
+- Creator Dashboard now includes:
+  - `제안 받기 ON/OFF` control wired to Creator Agent publish/pause/resume APIs.
+  - Recent negotiation replay loaded from the same canonical Match Run event stream.
+- Added frontend tests proving API mode reads canonical Match Run event replay and proof through Product API routes.
+
+## 10. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -144,7 +160,7 @@ Maximum paid tool calls: current pay.sh operation is one selected creator path, 
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 10. Test Evidence
+## 11. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -203,8 +219,12 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 6 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
 | Phase 6 frontend unit | VERIFIED: 18 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
 | Phase 6 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 7 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 7 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 7 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 7 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
 
-## 11. Latest Verified E2E
+## 12. Latest Verified E2E
 
 ```text
 Commit:
@@ -225,9 +245,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E or live transaction was executed through Phase 6.
+No E2E or live transaction was executed through Phase 7.
 
-## 12. Known Blockers
+## 13. Known Blockers
 
 ```text
 BLOCKER: External Match Run worker dispatch is not implemented.

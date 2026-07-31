@@ -19,10 +19,14 @@ import {
   ProductApiClient,
   ProductApiError,
   type ApiAgreement,
+  type ApiCandidate,
   type ApiNegotiation,
   type ApiNegotiationMessage,
   type ApiDevAdminOverview,
+  type ApiMatchRun,
+  type ApiTimelineEvent,
   type BrandDashboard,
+  type CreatorAgentControl,
   type CreatorDashboard,
   type CurrentUserContext,
 } from "./apiClient";
@@ -39,6 +43,7 @@ import {
 } from "./mvp";
 import type {
   AgentTask,
+  AgentRunEvent,
   BrandProduct,
   CreatorCriteria,
   CreatorDeal,
@@ -48,6 +53,7 @@ import type {
   Role,
   RoleSession,
   Settlement,
+  TechnicalProofItem,
 } from "./types";
 
 ProductApiClient.setAuthTokenProvider(currentIdToken);
@@ -230,6 +236,7 @@ export function BrandDashboardScreen({ context }: { context: CurrentUserContext 
               <Metric label="체결된 크리에이터" value={dashboard.summary.agreements} />
               <Metric label="에스크로 예치" value={`${baseUnitsToUsdc(dashboard.summary.lockedEscrowBaseUnits)} USDC`} />
             </div>
+            <BrandAgentControlRoom dashboard={dashboard} onReload={reload} />
             <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
               <Panel>
                 <SectionTitle eyebrow="Promotions" title="내 프로모션" />
@@ -317,6 +324,8 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
       <DashboardStatus state={state} retry={() => loadDashboard(() => new ProductApiClient().getCreatorDashboard(), setState)}>
         {(dashboard) => (
           <div className="grid gap-5">
+            <CreatorAgentAvailabilityCard />
+            <CreatorReplayCard dashboard={dashboard} />
             <Panel>
               <SectionTitle eyebrow="Settlement" title="현재 정산 가능 금액" />
               {(() => {
@@ -408,6 +417,475 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
       </DashboardStatus>
     </WorkspaceShell>
   );
+}
+
+type BrandRunProjection = {
+  promotion: BrandDashboard["activePromotions"][number] | null;
+  matchRun: ApiMatchRun | null;
+  candidates: ApiCandidate[];
+  events: AgentRunEvent[];
+  timeline: ApiTimelineEvent[];
+  negotiationId: string | null;
+  agreementId: string | null;
+  proof: TechnicalProofItem[];
+};
+
+function BrandAgentControlRoom({
+  dashboard,
+  onReload,
+}: {
+  dashboard: BrandDashboard;
+  onReload: () => void;
+}) {
+  const [state, setState] = useDashboardState<BrandRunProjection>();
+  const action = useMutationLock();
+  const [error, setError] = useState<string | null>(null);
+  const promotion = dashboard.activePromotions[0] ?? null;
+  const reload = useCallback(
+    () => loadDashboard(() => loadBrandRunProjection(dashboard), setState),
+    [dashboard, setState],
+  );
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  async function runAgent() {
+    if (!promotion) return;
+    await action.run(async () => {
+      setError(null);
+      await new ProductApiClient().runAgentForPromotion(promotion.promotionId);
+      await reload();
+      onReload();
+    }, (caught) => setError(errorMessage(caught)));
+  }
+
+  return (
+    <DashboardStatus state={state} retry={reload}>
+      {(projection) => {
+        const product = projection.promotion ? productSnapshotFromPromotion(projection.promotion) : null;
+        const selected = projection.candidates.find(
+          (candidate) => candidate.creatorAgentId === projection.matchRun?.selectedCreatorAgentId,
+        );
+        const exhausted = Boolean(projection.matchRun) && !projection.matchRun?.selectedCreatorAgentId;
+        const completed = projection.matchRun?.status === "COMPLETED" && Boolean(selected);
+        const running = Boolean(projection.matchRun) && !["COMPLETED", "FAILED", "CANCELED"].includes(String(projection.matchRun?.status));
+        return (
+          <Panel>
+            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+              <div>
+                <SectionTitle
+                  eyebrow="Brand Agent"
+                  title={
+                    !projection.promotion
+                      ? "준비할 Promotion이 없습니다"
+                      : completed
+                        ? "협상 결과를 불러왔습니다"
+                        : exhausted
+                          ? "조건에 맞는 후보가 없습니다"
+                          : running
+                            ? "탐색이 진행 중입니다"
+                            : "준비 완료"
+                  }
+                />
+                {projection.promotion ? (
+                  <div className="grid gap-3">
+                    <InfoBox label="Product" value={product?.name ?? projection.promotion.title} />
+                    <InfoBox label="Format" value={projection.promotion.deliverables.map((item) => `${item.format} x ${item.count}`).join(", ")} />
+                    <InfoBox label="Target" value={`${projection.promotion.targetAudience.join(", ")} · 최대 ${projection.promotion.budget.maxPerCreatorUsdc} USDC`} />
+                    <InfoBox label="Deadline" value={projection.promotion.postingWindow.end} />
+                    {projection.matchRun && <InfoBox label="Match Run" value={`${projection.matchRun.matchRunId} · ${projection.matchRun.status}`} />}
+                    {selected && <InfoBox label="Selected Creator" value={selected.creatorAgentId} />}
+                    {projection.events.at(-1) && <InfoBox label="Last event" value={projection.events.at(-1)?.createdAt ?? ""} />}
+                    {exhausted && (
+                      <InfoBox
+                        label="Attempted candidates"
+                        value={`${projection.candidates.length} · ${sanitizedFailureReasons(projection.candidates)}`}
+                      />
+                    )}
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={runAgent}
+                        disabled={action.status === "submitting" || completed || running}
+                        className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+                      >
+                        {action.status === "submitting" ? "실행 중..." : completed ? "협상 완료" : "탐색·협상 시작"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={reload}
+                        className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold text-muted"
+                      >
+                        새로고침
+                      </button>
+                      {projection.negotiationId && (
+                        <SecondaryLink href={`/brand/negotiations/${projection.negotiationId}`}>실시간으로 보기</SecondaryLink>
+                      )}
+                      {projection.agreementId && (
+                        <PrimaryLink href={`/brand/agreements/${projection.agreementId}`}>협업 보기</PrimaryLink>
+                      )}
+                    </div>
+                    {error && <FormError message={error} />}
+                  </div>
+                ) : (
+                  <EmptyState text="Promotion을 만들면 Brand Agent가 후보 탐색과 협상을 시작할 수 있습니다." />
+                )}
+              </div>
+              <div className="grid gap-4">
+                <CandidateReplay candidates={projection.candidates} selectedCreatorAgentId={projection.matchRun?.selectedCreatorAgentId ?? null} />
+                <CanonicalRunReplay events={projection.events} />
+                <TechnicalProofPanel items={projection.proof} />
+              </div>
+            </div>
+          </Panel>
+        );
+      }}
+    </DashboardStatus>
+  );
+}
+
+function CreatorAgentAvailabilityCard() {
+  const [state, setState] = useDashboardState<{
+    agent: CreatorAgentControl;
+    discoveryProfile: Record<string, unknown> | null;
+  }>();
+  const action = useMutationLock();
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(
+    () => loadDashboard(() => new ProductApiClient().getCreatorAgent(), setState),
+    [setState],
+  );
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  async function setAcceptingOffers(accepting: boolean) {
+    await action.run(async () => {
+      setError(null);
+      const client = new ProductApiClient();
+      if (accepting) {
+        const current = state.type === "ready" ? state.data.agent : null;
+        if (current?.publicationStatus === "PAUSED") await client.resumeCreatorAgent();
+        else await client.publishCreatorAgent();
+      } else {
+        await client.pauseCreatorAgent();
+      }
+      await reload();
+    }, (caught) => setError(errorMessage(caught)));
+  }
+
+  return (
+    <DashboardStatus state={state} retry={reload}>
+      {({ agent, discoveryProfile }) => {
+        const isOn = agent.acceptingOffers && agent.publicationStatus === "PUBLISHED";
+        return (
+          <Panel>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <SectionTitle eyebrow="Creator Agent" title={isOn ? "제안 받는 중" : "제안 수신 꺼짐"} />
+                <p className="text-sm leading-6 text-muted">
+                  최소 기준과 일정은 비공개로 지켜집니다. 브랜드의 제안이 오면 사이트를 닫아도 협상합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAcceptingOffers(!isOn)}
+                disabled={action.status === "submitting"}
+                className={[
+                  "rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-60",
+                  isOn ? "border border-border-subtle bg-surface-raised text-muted" : "bg-accent text-background",
+                ].join(" ")}
+              >
+                {action.status === "submitting" ? "저장 중..." : isOn ? "제안 받기 OFF" : "제안 받기 ON"}
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              <InfoBox label="Publication" value={agent.publicationStatus} />
+              <InfoBox label="Availability" value={agent.availability} />
+              <InfoBox label="Active negotiations" value={`${agent.activeNegotiations}/${agent.maxConcurrentNegotiations}`} />
+              <InfoBox label="Discovery profile" value={discoveryProfile ? "published projection" : "not published"} />
+            </div>
+            {error && <FormError message={error} />}
+          </Panel>
+        );
+      }}
+    </DashboardStatus>
+  );
+}
+
+function CreatorReplayCard({ dashboard }: { dashboard: CreatorDashboard }) {
+  const firstOfferId = dashboard.offers
+    .map((offer) => String(offer.negotiationId ?? ""))
+    .find(Boolean);
+  const [state, setState] = useDashboardState<{
+    negotiation: ApiNegotiation;
+    events: AgentRunEvent[];
+    proof: TechnicalProofItem[];
+  }>();
+  const reload = useCallback(async () => {
+    if (!firstOfferId) {
+      setState({ type: "empty", message: "아직 replay할 Agent 협상이 없습니다." });
+      return;
+    }
+    await loadDashboard(async () => {
+      const client = new ProductApiClient();
+      const detail = await client.getCreatorOfferDetail(firstOfferId);
+      const events = await client.listMatchRunEvents(detail.negotiation.matchRunId);
+      return {
+        negotiation: detail.negotiation,
+        events: controlEventsFromTimeline(events),
+        proof: [
+          { label: "Data source", value: "LIVE", status: "ok" },
+          { label: "Match Run ID", value: detail.negotiation.matchRunId, status: "ok" },
+          { label: "A2A context ID", value: detail.negotiation.contextId, status: "ok" },
+          { label: "A2A Task ID", value: detail.negotiation.taskId, status: "ok" },
+        ] satisfies TechnicalProofItem[],
+      };
+    }, setState);
+  }, [firstOfferId, setState]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  if (state.type === "empty") {
+    return (
+      <Panel>
+        <SectionTitle eyebrow="Replay" title="최근 Agent 협상" />
+        <EmptyState text={state.message} />
+      </Panel>
+    );
+  }
+
+  return (
+    <DashboardStatus state={state} retry={reload}>
+      {({ negotiation, events, proof }) => (
+        <Panel>
+          <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+            <div>
+              <SectionTitle eyebrow="Replay" title="최근 Agent 협상" />
+              <div className="grid gap-3">
+                <InfoBox label="Brand/product" value={negotiation.promotionId} />
+                <InfoBox label="Current offer" value={`${negotiation.currentTerms.compensation.baseAmountUsdc} USDC`} />
+                <InfoBox label="Round" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
+                <SecondaryLink href={`/creator/offers/${negotiation.negotiationId}`}>실시간으로 보기</SecondaryLink>
+              </div>
+              <p className="mt-4 text-sm text-muted">사이트를 나가도 협상은 계속됩니다. 다시 열면 같은 Task와 event history를 불러옵니다.</p>
+            </div>
+            <div className="grid gap-4">
+              <CanonicalRunReplay events={events} />
+              <TechnicalProofPanel items={proof} />
+            </div>
+          </div>
+        </Panel>
+      )}
+    </DashboardStatus>
+  );
+}
+
+async function loadBrandRunProjection(dashboard: BrandDashboard): Promise<BrandRunProjection> {
+  const promotion = dashboard.activePromotions[0] ?? null;
+  if (!promotion) {
+    return {
+      promotion: null,
+      matchRun: null,
+      candidates: [],
+      events: [],
+      timeline: dashboard.recentAgentActivity,
+      negotiationId: null,
+      agreementId: null,
+      proof: [{ label: "Data source", value: "LIVE", status: "pending" }],
+    };
+  }
+
+  const client = new ProductApiClient();
+  const timeline = await client.getTimeline(promotion.promotionId);
+  const matchRunId = latestTimelineString(timeline, "MATCH_RUN_COMPLETED", "matchRunId");
+  const negotiationId = latestTimelineString(timeline, "NEGOTIATION_STARTED", "negotiationId");
+  const agreementId = latestTimelineString(timeline, "AGREEMENT_CREATED", "agreementId");
+  if (!matchRunId) {
+    return {
+      promotion,
+      matchRun: null,
+      candidates: [],
+      events: [],
+      timeline,
+      negotiationId,
+      agreementId,
+      proof: [
+        { label: "Data source", value: "LIVE", status: "ok" },
+        { label: "Promotion ID", value: promotion.promotionId, status: "ok" },
+        { label: "Match Run ID", value: "pending", status: "pending" },
+      ],
+    };
+  }
+
+  const [matchRun, candidates, runEvents] = await Promise.all([
+    client.getMatchRun(matchRunId),
+    client.listCandidates(matchRunId),
+    client.listMatchRunEvents(matchRunId),
+  ]);
+  const events = controlEventsFromTimeline(runEvents);
+  const selected = candidates.find((candidate) => candidate.creatorAgentId === matchRun.selectedCreatorAgentId);
+  return {
+    promotion,
+    matchRun,
+    candidates,
+    events,
+    timeline,
+    negotiationId,
+    agreementId,
+    proof: [
+      { label: "Data source", value: "LIVE", status: "ok" },
+      { label: "Promotion ID", value: promotion.promotionId, status: "ok" },
+      { label: "Match Run ID", value: matchRun.matchRunId, status: "ok" },
+      { label: "Candidate snapshot", value: `${candidates.length} candidates · selected ${selected?.creatorAgentId ?? "none"}`, status: candidates.length ? "ok" : "pending" },
+      { label: "Run event sequence", value: events.map((event) => `${event.sequence ?? "-"}:${event.type}`).join(" -> "), status: events.length ? "ok" : "pending" },
+      { label: "Negotiation ID", value: negotiationId ?? "pending", status: negotiationId ? "ok" : "pending" },
+      { label: "Agreement ID", value: agreementId ?? "pending", status: agreementId ? "ok" : "pending" },
+    ],
+  };
+}
+
+function CandidateReplay({
+  candidates,
+  selectedCreatorAgentId,
+}: {
+  candidates: ApiCandidate[];
+  selectedCreatorAgentId: string | null;
+}) {
+  if (!candidates.length) {
+    return <EmptyState text="저장된 candidate snapshot이 아직 없습니다." />;
+  }
+  return (
+    <div className="rounded border border-border-subtle bg-background p-4">
+      <div className="font-mono text-xs uppercase text-muted">Candidate snapshots</div>
+      <div className="mt-3 grid gap-2">
+        {candidates.slice(0, 3).map((candidate) => (
+          <div
+            key={candidate.creatorAgentId}
+            className={[
+              "rounded border p-3 text-sm",
+              candidate.creatorAgentId === selectedCreatorAgentId
+                ? "border-accent bg-surface-raised"
+                : "border-border-subtle bg-surface",
+            ].join(" ")}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold">{candidate.creatorAgentId}</span>
+              <span className="font-mono text-xs text-muted">rank {candidate.rank ?? "-"} · score {scoreLabel(candidate)}</span>
+            </div>
+            <p className="mt-1 text-muted">{candidate.explanation ?? candidate.hardFilterReasons?.join(", ") ?? "stored candidate snapshot"}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CanonicalRunReplay({ events }: { events: AgentRunEvent[] }) {
+  if (!events.length) {
+    return <EmptyState text="저장된 Match Run 이벤트가 아직 없습니다." />;
+  }
+  return (
+    <div className="rounded border border-border-subtle bg-background p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-mono text-xs uppercase text-muted">Live / replay</div>
+          <div className="mt-1 font-semibold">Canonical event sequence</div>
+        </div>
+        <span className="rounded-full border border-border-subtle px-3 py-1 font-mono text-xs text-muted">LIVE</span>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {events.map((event) => (
+          <div key={event.id} className="rounded border border-border-subtle bg-surface p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold">{event.sequence ?? "-"} · {event.label}</span>
+              <span className="font-mono text-[11px] text-muted">{event.createdAt}</span>
+            </div>
+            <div className="mt-1 font-mono text-[11px] uppercase text-muted">{event.type}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TechnicalProofPanel({ items }: { items: TechnicalProofItem[] }) {
+  return (
+    <details className="rounded border border-border-subtle bg-background p-4">
+      <summary className="cursor-pointer text-sm font-semibold">Technical Proof</summary>
+      <div className="mt-4 grid gap-2">
+        {items.map((item) => (
+          <div key={item.label} className="grid gap-1 rounded border border-border-subtle bg-surface p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[11px] uppercase text-muted">{item.label}</span>
+              <span className={`font-mono text-[11px] uppercase ${item.status === "ok" ? "text-positive" : item.status === "warning" ? "text-caution" : "text-muted"}`}>
+                {item.status}
+              </span>
+            </div>
+            <span className="break-all text-sm font-semibold">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function controlEventsFromTimeline(events: ApiTimelineEvent[]): AgentRunEvent[] {
+  return events.map((event, index) => ({
+    id: event.eventId,
+    type: event.type,
+    label: controlEventLabel(event),
+    createdAt: event.createdAt,
+    sequence: typeof event.sequence === "number" ? event.sequence : index + 1,
+    status: event.type.includes("FAILED") || event.type.includes("CANCELED") ? "warning" : "ok",
+  }));
+}
+
+function controlEventLabel(event: ApiTimelineEvent) {
+  switch (event.type) {
+    case "MATCH_RUN_READY":
+      return "조건을 검색 기준으로 바꿨어요.";
+    case "MATCH_RUN_DISCOVERING":
+      return "제안 가능한 Creator Agent를 찾았어요.";
+    case "MATCH_RUN_RANKING":
+      return "제품 분위기와 가까운 후보를 비교했어요.";
+    case "MATCH_RUN_SELECTING":
+      return "선택할 후보를 확정하고 있어요.";
+    case "MATCH_RUN_COMPLETED": {
+      const selected = typeof event.data.selectedCreatorAgentId === "string" ? event.data.selectedCreatorAgentId : null;
+      return selected ? `${selected}를 선택했어요.` : "조건에 맞는 후보를 찾지 못했어요.";
+    }
+    case "MATCH_RUN_CANCELED":
+      return "사용자가 Match Run을 취소했어요.";
+    default:
+      return event.type;
+  }
+}
+
+function latestTimelineString(events: ApiTimelineEvent[], type: string, fieldName: string) {
+  for (const event of [...events].reverse()) {
+    if (event.type !== type) continue;
+    const value = event.data[fieldName];
+    if (typeof value === "string" && value) return value;
+  }
+  return null;
+}
+
+function scoreLabel(candidate: ApiCandidate) {
+  if (typeof candidate.overallScore !== "number") return "-";
+  return `${Math.round(candidate.overallScore * 100)}`;
+}
+
+function sanitizedFailureReasons(candidates: ApiCandidate[]) {
+  const reasons = candidates
+    .flatMap((candidate) => candidate.hardFilterReasons ?? [])
+    .filter((reason, index, all) => all.indexOf(reason) === index)
+    .slice(0, 3);
+  return reasons.length ? reasons.join(", ") : "no public blocker";
 }
 
 export function BrandPromotionCreateScreen() {
@@ -1913,6 +2391,10 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
         {view.tasks.map((task) => (
           <TaskRow key={task.id} task={task} forceDone={Boolean(view.agreementId)} />
         ))}
+      </div>
+      <div className="mt-5 grid gap-4">
+        <CanonicalRunReplay events={view.runEvents} />
+        <TechnicalProofPanel items={view.technicalProof} />
       </div>
       <PrivacyNote>
         사용자에게는 진행 상태와 최종 결과만 보여줍니다. private policy, 상대의 hard cap, 내부 scoring, A2A 메시지 전문은 숨깁니다.
