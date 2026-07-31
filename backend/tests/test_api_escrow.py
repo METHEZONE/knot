@@ -228,8 +228,8 @@ def test_lock_requires_web3_gateway_for_success() -> None:
 def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
-    pass_evidence(client, agreement, "content")
     escrow = lock(client, agreement, "lk")["escrow"]
+    pass_evidence(client, agreement, "content")
 
     response = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
@@ -261,6 +261,34 @@ def test_release_blocked_without_passing_evidence(monkeypatch) -> None:
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
 
 
+def test_release_blocked_after_failed_evidence_without_settlement(monkeypatch) -> None:
+    client, repository = seeded_gateway(monkeypatch)
+    agreement = accepted_agreement(client)
+    escrow = lock(client, agreement, "lk")["escrow"]
+    evidence = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/missing-disclosure",
+            "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
+        },
+    ).json()["data"]["evidence"]
+    verify = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+    assert verify.status_code == 409
+
+    response = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={"Idempotency-Key": "rel-content"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+    assert repository.list_raw_documents("settlements") == []
+    persisted_escrow = repository.get_raw_document(f"escrows/{escrow['escrowId']}")
+    assert persisted_escrow is not None
+    assert persisted_escrow["status"] == "LOCKED"
+
+
 def test_release_blocked_when_auto_release_disabled(monkeypatch) -> None:
     client, repository = seeded_gateway(monkeypatch)
     promotion = repository.get_promotion("promotion-001")
@@ -271,8 +299,8 @@ def test_release_blocked_when_auto_release_disabled(monkeypatch) -> None:
         )
     )
     agreement = accepted_agreement(client)
-    pass_evidence(client, agreement, "content")
     escrow = lock(client, agreement, "lk")["escrow"]
+    pass_evidence(client, agreement, "content")
     response = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
         headers={"Idempotency-Key": "rel"},
@@ -284,8 +312,8 @@ def test_release_blocked_when_auto_release_disabled(monkeypatch) -> None:
 def test_releasing_one_hundred_percent_milestone_completes_escrow(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
-    pass_evidence(client, agreement, "content")
     escrow = lock(client, agreement, "lk")["escrow"]
+    pass_evidence(client, agreement, "content")
 
     final = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
@@ -368,11 +396,11 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
         Settings(web3_mode="gateway", web3_gateway_base_url="http://web3-gateway.test")
     )
     agreement = accepted_agreement(client)
-    pass_evidence(client, agreement, "content")
 
     lock_data = lock(client, agreement, "gateway-lock")
     lock_receipt = lock_data["receipt"]
     escrow = lock_data["escrow"]
+    pass_evidence(client, agreement, "content")
     assert lock_receipt["gatewayReceipt"]["idempotencyKey"] == "gateway-lock"
     assert FakeGatewayClient.lock_payload["escrowId"] == escrow["escrowId"]
     assert FakeGatewayClient.lock_payload["expectedAmountBaseUnits"] == escrow[
@@ -396,8 +424,8 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
 def test_release_is_idempotent_on_repeated_key(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
-    pass_evidence(client, agreement, "content")
     escrow = lock(client, agreement, "lk")["escrow"]
+    pass_evidence(client, agreement, "content")
     path = f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release"
     first = client.post(path, headers={"Idempotency-Key": "rc"}).json()["data"]
     second = client.post(path, headers={"Idempotency-Key": "rc"}).json()["data"]

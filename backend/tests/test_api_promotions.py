@@ -7,6 +7,7 @@ from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
 from libs.payments.paysh import PayResult
+from libs.payments.settlement import lock_amount_base_units, milestone_amounts_base_units
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
@@ -54,6 +55,43 @@ def accepted_agreement(client: TestClient) -> dict[str, object]:
     return client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation").json()[
         "data"
     ]["agreement"]
+
+
+def fund_agreement_for_evidence(
+    repository: KnotRepository,
+    agreement: dict[str, object],
+) -> dict[str, object]:
+    terms = AgreementTerms.model_validate(agreement["terms"])
+    locked_amount = lock_amount_base_units(terms)
+    milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+    escrow_id = f"escrow-{agreement['agreementId']}"
+    now = "2026-07-31T00:00:00Z"
+    escrow = {
+        "escrowId": escrow_id,
+        "agreementId": agreement["agreementId"],
+        "promotionId": agreement["promotionId"],
+        "brandAgentId": agreement["brandAgentId"],
+        "creatorAgentId": agreement["creatorAgentId"],
+        "network": "solanaDevnet",
+        "programId": "program-test",
+        "mint": "mint-test",
+        "lockedAmountBaseUnits": str(locked_amount),
+        "releasedAmountBaseUnits": "0",
+        "platformFeeBps": 0,
+        "termsHash": agreement["termsHash"],
+        "milestoneAmounts": {
+            milestone_id: str(amount) for milestone_id, amount in milestone_amounts.items()
+        },
+        "status": "LOCKED",
+        "lockSignature": "evidence-lock-signature",
+        "lockReceiptId": "receipt-evidence-lock",
+        "paymentOperationId": "op-evidence-lock",
+        "idempotencyKey": "evidence-lock",
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    repository.save_raw_document(FirestorePaths.escrow(escrow_id), escrow)
+    return escrow
 
 
 def test_list_and_get_seeded_promotions() -> None:
@@ -898,8 +936,9 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
 
 
 def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
+    escrow = fund_agreement_for_evidence(repository, agreement)
 
     submit_response = client.post(
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
@@ -914,6 +953,9 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     assert evidence["status"] == "SUBMITTED"
     assert evidence["milestoneId"] == "content"
     assert evidence["milestoneSnapshot"]["releasePct"] == 100
+    assert evidence["escrowId"] == escrow["escrowId"]
+    assert evidence["url"] == "https://social.example/post/with-brand-and-ad"
+    assert str(evidence["sourceDigest"]).startswith("sha256:")
 
     verify_response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
     assert verify_response.status_code == 200
@@ -926,6 +968,12 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     assert get_response.status_code == 200
     assert get_response.json()["data"]["evidence"]["status"] == "PASSED"
 
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert len(verification_results) == 1
+    assert verification_results[0]["status"] == "VERIFIED"
+    assert verification_results[0]["sourceDigest"] == evidence["sourceDigest"]
+    assert verification_results[0]["provider"] == "deterministic-url-policy"
+
     timeline_response = client.get("/api/v1/promotions/promotion-001/timeline")
     event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
     assert "EVIDENCE_SUBMITTED" in event_types
@@ -933,8 +981,9 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
 
 
 def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
     evidence = client.post(
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
         json={
@@ -956,11 +1005,14 @@ def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
 
     get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
     assert get_response.json()["data"]["evidence"]["status"] == "FAILED"
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert verification_results[0]["status"] == "REJECTED"
 
 
 def test_submit_evidence_rejects_wrong_creator_agent() -> None:
-    client = client_with_seed()
+    client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
 
     response = client.post(
         f"/api/v1/agreements/{agreement['agreementId']}/evidence",
@@ -972,3 +1024,52 @@ def test_submit_evidence_rejects_wrong_creator_agent() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
+
+
+def test_submit_evidence_requires_funded_escrow() -> None:
+    client = client_with_seed()
+    agreement = accepted_agreement(client)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/with-brand-and-ad",
+            "submittedByAgentId": agreement["creatorAgentId"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ESCROW_REQUIRED"
+
+
+def test_submit_evidence_rejects_unsafe_source_url() -> None:
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "http://localhost/post/with-brand-and-ad",
+            "submittedByAgentId": agreement["creatorAgentId"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "UNSAFE_SOURCE_URL"
+
+
+def test_submit_evidence_rejects_duplicate_milestone_submission() -> None:
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+    payload = {
+        "url": "https://social.example/post/with-brand-and-ad",
+        "submittedByAgentId": agreement["creatorAgentId"],
+    }
+    first = client.post(f"/api/v1/agreements/{agreement['agreementId']}/evidence", json=payload)
+    second = client.post(f"/api/v1/agreements/{agreement['agreementId']}/evidence", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "EVIDENCE_ALREADY_SUBMITTED"

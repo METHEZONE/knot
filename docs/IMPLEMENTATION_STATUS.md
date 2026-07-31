@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 9 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Phase 10 on 2026-07-31. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -43,8 +43,8 @@
 | Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
 | pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
 | Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 9 fake-gateway/local tests verify amount/hash/receipt binding; real devnet lock not executed because on-chain action requires approval |
-| Evidence verification | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing evidence route/policy audited |
-| Settlement release | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | IN_PROGRESS | NOT_STARTED | Existing release route audited |
+| Evidence verification | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 requires funded escrow, validates external https source URLs, stores source digest, records verification results, and blocks failed evidence |
+| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 release requires passed evidence, records evidence/source digest on settlement and timeline, and prevents duplicate payout |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
 | Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
 | Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | No deployment in Phase 1 |
@@ -177,7 +177,18 @@
 - Frontend fixture milestone UI was updated away from legacy 30/70 examples.
 - Web3 Gateway build/unit/lint passed. No live devnet transaction was submitted in this phase.
 
-## 12. Query-Bound Proof
+## 12. Phase 10 Changes
+
+- Evidence submission now requires a funded Agreement escrow with `status: LOCKED` and a confirmed `lockSignature`.
+- Evidence submitter authorization is checked before escrow state and source URL validation.
+- Evidence source URLs are normalized through the external-https URL guard and stored with a `sha256:` `sourceDigest`.
+- Duplicate evidence submissions for the same Agreement milestone are rejected with `EVIDENCE_ALREADY_SUBMITTED`.
+- Evidence verification persists a separate `verificationResults/{id}` document with provider, observations, policy decision, status, and source digest.
+- Settlement release now requires a passed evidence document and stores `evidenceId` plus `sourceDigest` on the settlement, released milestone, and `MILESTONE_RELEASED` timeline event.
+- Failed evidence remains persisted but does not authorize release or create a settlement.
+- No live devnet release transaction was submitted in this phase because on-chain actions require explicit approval.
+
+## 13. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -189,7 +200,7 @@ Maximum paid tool calls: one selected creator path in the current synchronous MV
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 13. Test Evidence
+## 14. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -272,8 +283,12 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 9 Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
 | Phase 9 Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
 | Phase 9 Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 10 backend focused tests | VERIFIED: 40 passed, 2 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest tests/test_api_promotions.py tests/test_api_escrow.py` from `backend` |
+| Phase 10 backend full pytest | VERIFIED: 116 passed, 5 skipped, 3 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 10 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 10 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
 
-## 14. Latest Verified E2E
+## 15. Latest Verified E2E
 
 ```text
 Commit:
@@ -294,9 +309,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 9.
+No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 10.
 
-## 15. Known Blockers
+## 16. Known Blockers
 
 ```text
 BLOCKER: External Match Run worker dispatch is not implemented.
@@ -325,7 +340,16 @@ NEXT ACTION: Add rules and managed vector index verification in an infra phase.
 WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
-## 16. Update Rule
+```text
+BLOCKER: Live devnet escrow release signature is not verified.
+IMPACT: Settlement release is verified only through fake-gateway/local tests, not a live Solana devnet transaction.
+EVIDENCE: Phase 10 adds evidence-gated release tests but does not submit an on-chain transaction without approval.
+OWNER: Web3/Payments phase.
+NEXT ACTION: Run an approved devnet lock/release smoke with funded test wallet and record the signature/Explorer URL.
+WORKAROUND FOR DEMO (truthfully labeled): Use fake-gateway/local evidence-gated release proof only.
+```
+
+## 17. Update Rule
 
 For each phase:
 

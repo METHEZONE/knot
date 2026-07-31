@@ -2292,9 +2292,23 @@ def build_api_router(
                 "POLICY_VIOLATION",
                 "Evidence submitter must match the Agreement creator agent.",
             )
+        escrow = _require_funded_escrow_for_agreement(repository, agreement_id)
+        existing_evidence = _find_evidence_for_milestone(
+            repository,
+            agreement_id=agreement_id,
+            milestone_id=payload.milestone_id,
+        )
+        if existing_evidence is not None:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "EVIDENCE_ALREADY_SUBMITTED",
+                "Evidence was already submitted for this milestone.",
+            )
 
         evidence_id = f"evidence-{uuid4()}"
         now = _now()
+        normalized_url = _validate_external_https_url(payload.url)
+        source_digest = sha256_prefixed(normalized_url)
         evidence = {
             "evidenceId": evidence_id,
             "agreementId": agreement_id,
@@ -2302,9 +2316,11 @@ def build_api_router(
             "milestonePath": FirestorePaths.milestone(agreement_id, payload.milestone_id),
             "milestoneSnapshot": milestone,
             "promotionId": agreement["promotionId"],
+            "escrowId": escrow["escrowId"],
             "creatorAgentId": creator_agent_id,
             "submittedByAgentId": payload.submitted_by_agent_id,
-            "url": payload.url,
+            "url": normalized_url,
+            "sourceDigest": source_digest,
             "status": "SUBMITTED",
             "observations": None,
             "policyDecision": None,
@@ -2351,15 +2367,35 @@ def build_api_router(
             payload=payload,
         )
         policy_decision = validate_evidence_observations(observations)
+        verification_status = "PASSED" if policy_decision.allowed else "FAILED"
         verified = {
             **evidence,
-            "status": "PASSED" if policy_decision.allowed else "FAILED",
+            "status": verification_status,
             "observations": observations,
             "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
             "verifiedAt": _now(),
             "updatedAt": _now(),
         }
         repository.save_raw_document(evidence_path, verified)
+        verification_result = {
+            "verificationResultId": f"verification-{evidence_id}",
+            "evidenceId": evidence_id,
+            "agreementId": verified["agreementId"],
+            "milestoneId": verified["milestoneId"],
+            "sourceDigest": verified.get("sourceDigest"),
+            "provider": "deterministic-url-policy",
+            "model": None,
+            "status": "VERIFIED" if policy_decision.allowed else "REJECTED",
+            "observations": observations,
+            "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
+            "createdAt": verified["verifiedAt"],
+        }
+        repository.save_raw_document(
+            FirestorePaths.verification_result(
+                _require_document_str(verification_result, "verificationResultId")
+            ),
+            verification_result,
+        )
         _append_promotion_event(
             repository,
             promotion_id=str(verified["promotionId"]),
@@ -2622,7 +2658,8 @@ def build_api_router(
             )
         milestone = _get_milestone_document(repository, agreement_id, milestone_id)
 
-        if not _milestone_evidence_passed(repository, agreement_id, milestone_id):
+        passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
+        if passed_evidence is None:
             raise _problem(
                 status.HTTP_409_CONFLICT,
                 "POLICY_VIOLATION",
@@ -2728,6 +2765,8 @@ def build_api_router(
             "network": settings.escrow_network,
             "status": gateway_receipt["status"],
             "signature": gateway_receipt["signature"],
+            "evidenceId": passed_evidence["evidenceId"],
+            "sourceDigest": passed_evidence.get("sourceDigest"),
             "receiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -2744,6 +2783,8 @@ def build_api_router(
             "status": "RELEASED",
             "releasedAmountBaseUnits": str(amount),
             "settlementId": settlement_id,
+            "evidenceId": passed_evidence["evidenceId"],
+            "sourceDigest": passed_evidence.get("sourceDigest"),
             "releaseReceiptId": receipt_id,
             "releasedAt": now,
             "updatedAt": now,
@@ -2781,6 +2822,8 @@ def build_api_router(
                 "milestoneId": milestone_id,
                 "amountBaseUnits": str(amount),
                 "settlementId": settlement_id,
+                "evidenceId": passed_evidence["evidenceId"],
+                "sourceDigest": passed_evidence.get("sourceDigest"),
                 "receiptStatus": receipt["status"],
             },
         )
@@ -4338,6 +4381,7 @@ def _match_candidate_by_agent_id(
             return FirestorePaths.match_candidate(match_run_id, creator_id), candidate
     return "", None
 
+
 def _evidence_observations(
     *,
     evidence: dict[str, object],
@@ -4822,6 +4866,35 @@ def _find_escrow_by_agreement(
     return None
 
 
+def _require_funded_escrow_for_agreement(
+    repository: KnotRepository,
+    agreement_id: str,
+) -> dict[str, object]:
+    escrow = _find_escrow_by_agreement(repository, agreement_id)
+    if escrow is None or escrow.get("status") != "LOCKED" or not escrow.get("lockSignature"):
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "ESCROW_REQUIRED",
+            "Evidence can be submitted only after escrow is funded.",
+        )
+    return escrow
+
+
+def _find_evidence_for_milestone(
+    repository: KnotRepository,
+    *,
+    agreement_id: str,
+    milestone_id: str,
+) -> dict[str, object] | None:
+    for document in repository.list_raw_documents(COLLECTIONS.evidence):
+        if (
+            document.get("agreementId") == agreement_id
+            and document.get("milestoneId") == milestone_id
+        ):
+            return document
+    return None
+
+
 def _find_agreement_by_negotiation(
     repository: KnotRepository,
     negotiation_id: str,
@@ -4843,19 +4916,19 @@ def _find_settlement(
     return None
 
 
-def _milestone_evidence_passed(
+def _passed_evidence_for_milestone(
     repository: KnotRepository,
     agreement_id: str,
     milestone_id: str,
-) -> bool:
+) -> dict[str, object] | None:
     for document in repository.list_raw_documents(COLLECTIONS.evidence):
         if (
             document.get("agreementId") == agreement_id
             and document.get("milestoneId") == milestone_id
             and document.get("status") == "PASSED"
         ):
-            return True
-    return False
+            return document
+    return None
 
 
 def _receipt_by_id(repository: KnotRepository, receipt_id: object) -> dict[str, object] | None:
