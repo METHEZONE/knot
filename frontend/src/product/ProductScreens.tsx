@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
+import { useAuth } from "@/auth/AuthProvider";
 import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import {
   authConfigurationError,
@@ -1490,6 +1491,7 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
 export function RoleSignupScreen({ role, session }: { role: Role; session?: RoleSession }) {
   const roleSession = session ?? fallbackRoleSession(role);
   const router = useRouter();
+  const { refresh } = useAuth();
   const nextHref = role === "brand" ? "/brand/product" : "/creator/connect";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
@@ -1508,7 +1510,8 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
       await api.getMe();
       const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
       saveCurrentAccount(account);
-      router.push(nextHref);
+      await refresh();
+      router.replace(nextHref);
     } catch (caught) {
       setError(firebaseAuthErrorMessage(caught));
       setStatus("idle");

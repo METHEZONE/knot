@@ -106,13 +106,13 @@ WORKAROUND FOR DEMO (truthfully labeled):
 | Frontend unit | Passed | working tree | 2026-07-31 | `cd frontend && npm test` (19 passed) |
 | Frontend build | Passed | working tree | 2026-07-31 | `cd frontend && npm run build` |
 | Backend lint/type | | | | |
-| Backend pytest | | | | |
+| Backend pytest | Passed | working tree | 2026-07-31 | `.venv/bin/python -m pytest backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py backend/tests/test_escrow_devnet.py -q` (15 passed, 1 skipped devnet) |
 | Firestore integration | | | | |
-| A2A contract | | | | |
+| A2A contract | Passed | working tree | 2026-07-31 | HTTP boundary test starts separate Creator Agent uvicorn server and Product API calls it |
 | Matching no-scan | | | | |
 | Reservation race | | | | |
-| Web3 local validator | | | | |
-| Devnet smoke | | | | |
+| Web3 local validator | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_LOCALNET=1` |
+| Devnet smoke | Skipped | working tree | 2026-07-31 | `test_escrow_devnet.py` requires `KNOT_RUN_DEVNET=1`; no on-chain tx executed |
 | Two-window E2E | | | | |
 | Live URL smoke | | | | |
 | Secret scan | | | | |
