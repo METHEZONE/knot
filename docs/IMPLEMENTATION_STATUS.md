@@ -47,7 +47,7 @@
 | Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 release requires passed evidence, records evidence/source digest on settlement and timeline, and prevents duplicate payout |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
 | Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
-| Deployment | N/A | N/A | N/A | N/A | NOT_STARTED | No deployment in Phase 1 |
+| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Phase 11 local QA passed; Cloud Run deploy/live smoke requires explicit approval |
 
 ## 3. Phase 1 Changes
 
@@ -188,7 +188,15 @@
 - Failed evidence remains persisted but does not authorize release or create a settlement.
 - No live devnet release transaction was submitted in this phase because on-chain actions require explicit approval.
 
-## 13. Query-Bound Proof
+## 13. Phase 11 Changes
+
+- Final local QA matrix was run across backend, frontend, and Web3 Gateway.
+- A tracked-file secret pattern scan found no matches for the configured high-risk token/key patterns.
+- No Cloud Run deployment, IAM/Secret change, wallet funding, program deployment, or on-chain transaction was executed.
+- No final live two-window E2E was claimed because deployment and devnet signatures remain approval-gated.
+- README was not edited in this phase because it already has unrelated local changes outside this phase.
+
+## 14. Query-Bound Proof
 
 ```text
 Discovery implementation: CreatorDiscoveryRepository over creatorDiscoveryProfiles
@@ -200,7 +208,7 @@ Maximum paid tool calls: one selected creator path in the current synchronous MV
 Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_creator_profile_scan
 ```
 
-## 14. Test Evidence
+## 15. Test Evidence
 
 | Command/suite | Result | Commit | Date | Artifact/log |
 |---|---|---|---|---|
@@ -287,8 +295,21 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 10 backend full pytest | VERIFIED: 116 passed, 5 skipped, 3 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
 | Phase 10 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
 | Phase 10 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 11 backend full pytest | VERIFIED: 116 passed, 5 skipped, 3 warnings | working tree | 2026-07-31 | `../.venv/bin/python -m pytest` from `backend` |
+| Phase 11 backend ruff | VERIFIED: all checks passed | working tree | 2026-07-31 | `../.venv/bin/python -m ruff check .` from `backend` |
+| Phase 11 backend mypy | VERIFIED: no issues in 50 source files | working tree | 2026-07-31 | `../.venv/bin/python -m mypy` from `backend` |
+| Phase 11 frontend typecheck | VERIFIED | working tree | 2026-07-31 | `npm run typecheck` from `frontend` |
+| Phase 11 frontend lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `frontend` |
+| Phase 11 frontend unit | VERIFIED: 19 passed | working tree | 2026-07-31 | `npm test` from `frontend` |
+| Phase 11 frontend build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `frontend` |
+| Phase 11 Web3 build | VERIFIED | working tree | 2026-07-31 | `npm run build` from `web3/gateway` |
+| Phase 11 Web3 unit | VERIFIED: 9 passed | working tree | 2026-07-31 | `npm test` from `web3/gateway` |
+| Phase 11 Web3 lint | VERIFIED | working tree | 2026-07-31 | `npm run lint` from `web3/gateway` |
+| Phase 11 tracked-file secret pattern scan | VERIFIED: no matches | working tree | 2026-07-31 | `git grep` over tracked files for high-risk token/key patterns |
+| Phase 11 Cloud Run deploy/live smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for deployment/IAM/Secret changes |
+| Phase 11 devnet lock/release smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for wallet funding/on-chain transactions |
 
-## 15. Latest Verified E2E
+## 16. Latest Verified E2E
 
 ```text
 Commit:
@@ -309,9 +330,9 @@ Escrow lock signature:
 Settlement release signature:
 ```
 
-No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 10.
+No E2E, live pay.sh purchase, or live devnet transaction was executed through Phase 11.
 
-## 16. Known Blockers
+## 17. Known Blockers
 
 ```text
 BLOCKER: External Match Run worker dispatch is not implemented.
@@ -349,7 +370,7 @@ NEXT ACTION: Run an approved devnet lock/release smoke with funded test wallet a
 WORKAROUND FOR DEMO (truthfully labeled): Use fake-gateway/local evidence-gated release proof only.
 ```
 
-## 17. Update Rule
+## 18. Update Rule
 
 For each phase:
 
