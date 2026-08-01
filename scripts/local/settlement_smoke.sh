@@ -59,9 +59,16 @@ fi
 echo "   확인 URL: http://127.0.0.1:3000/brand/agreements/$AGREEMENT"
 
 step "에스크로 락 — 온체인 (여기서 실제 서명이 나와야 한다)"
-LOCK=$(curl -fsS -X POST -H "Idempotency-Key: lock-$STAMP" "$API/api/v1/agreements/$AGREEMENT/escrow:lock")
-ESCROW=$(printf '%s' "$LOCK" | jqp "d['data']['escrow']['escrowId']")
-SIG=$(printf '%s' "$LOCK" | jqp "d['data']['escrow'].get('lockSignature') or '(없음)'")
+EXISTING_LOCK=$(curl -fsS "$API/api/v1/agreements/$AGREEMENT/escrow")
+ESCROW=$(printf '%s' "$EXISTING_LOCK" | jqp "(d['data'].get('escrow') or {}).get('escrowId') or ''")
+if [[ -n "$ESCROW" ]]; then
+  LOCK="$EXISTING_LOCK"
+  echo "   자동 Agent lock 사용"
+else
+  LOCK=$(curl -fsS -X POST -H "Idempotency-Key: lock-$STAMP" "$API/api/v1/agreements/$AGREEMENT/escrow:lock")
+  ESCROW=$(printf '%s' "$LOCK" | jqp "d['data']['escrow']['escrowId']")
+fi
+SIG=$(printf '%s' "$LOCK" | jqp "(d['data'].get('escrow') or {}).get('lockSignature') or '(없음)'")
 echo "   escrow=$ESCROW"
 echo "   lock signature=$SIG"
 
@@ -69,20 +76,27 @@ step "증빙 제출 + 검증 (milestone=content)"
 EVIDENCE=$(curl -fsS -X POST -H "Content-Type: application/json" \
   -d "{\"url\":\"https://social.example/post/with-brand-and-ad\",\"submittedByAgentId\":\"$CREATOR_AGENT\",\"milestoneId\":\"content\"}" \
   "$API/api/v1/agreements/$AGREEMENT/evidence" | jqp "d['data']['evidence']['evidenceId']")
-curl -fsS -X POST "$API/api/v1/evidence/$EVIDENCE:verify" | python3 -c "
+VERIFY=$(curl -fsS -X POST "$API/api/v1/evidence/$EVIDENCE:verify")
+printf '%s' "$VERIFY" | python3 -c "
 import json,sys
 e=json.load(sys.stdin)['data']['evidence']
 print('   판정:', e.get('verificationResult') or e.get('status') or json.dumps(e)[:200])"
 
 step "마일스톤 릴리즈 — 온체인 정산"
-REL=$(curl -fsS -X POST -H "Idempotency-Key: rel-$STAMP" \
-  "$API/api/v1/escrows/$ESCROW/milestones/content:release")
+AUTO_RELEASED=$(printf '%s' "$VERIFY" | jqp "(d['data'].get('autoRelease') or {}).get('status') == 'RELEASED'")
+if [[ "$AUTO_RELEASED" == "True" ]]; then
+  REL="$VERIFY"
+  echo "   자동 Agent release 사용"
+else
+  REL=$(curl -fsS -X POST -H "Idempotency-Key: rel-$STAMP" \
+    "$API/api/v1/escrows/$ESCROW/milestones/content:release")
+fi
 printf '%s' "$REL" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['data']
-s=d.get('settlement') or {}
+s=(d.get('autoRelease') or {}).get('settlement') or d.get('settlement') or {}
 print('   settlement status:', s.get('status'))
-print('   release signature:', s.get('signature') or d.get('receipt',{}).get('gatewayReceipt',{}).get('signature'))
+print('   release signature:', s.get('signature') or (d.get('autoRelease') or {}).get('receipt',{}).get('gatewayReceipt',{}).get('signature') or d.get('receipt',{}).get('gatewayReceipt',{}).get('signature'))
 print('   amount(baseUnits):', s.get('amountBaseUnits') or s.get('releasedAmountBaseUnits'))
 "
 

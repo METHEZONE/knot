@@ -23,3 +23,15 @@
 - `npm run typecheck` passed in `frontend`.
 - `npm run lint` passed in `frontend`.
 - `npm run build` passed in `frontend`.
+- `scripts/local/settlement_smoke.sh` passed against Solana localnet with Agent auto-lock and auto-release:
+  - Agreement `agreement-ea5fbf12-508c-4c01-b30a-2185168287cb`
+  - Escrow lock signature `5t3Fhmqq97xnxzWRX3nJdxTJz2fzRwKsxvscqUrjGU5RWQvuMHfveHN4Qx7yLvLoi8rV7Jewv3pvQ1e7cib9XvQu`
+  - Release signature `5tD6e7BHjV5XS8gujtkbzZL556DXXDJvXm4PpTcRhdoQE2GfRH4uu4T9aUejGcy6GCjLbmwgCKo9fVWMhBsL19No`
+  - Creator wallet `L2UGwRSz7eXA9w1YoBmmAdYhz4VN5Z6bia6TfYzEBm4` received 650 USDC localnet test tokens.
+
+## Deployment Blockers
+
+- Current Cloud Run `knot-web3` is configured with `KNOT_WEB3_SIGNING_MODE=simulated`, so Product API correctly rejects the receipt.
+- Secret Manager currently has only `knot-a2a-service-token`; no Web3 signer/pay.sh secrets are available.
+- Existing shared devnet escrow config uses mint `7HrvvAexhUwi8LriqvxNqFJTe13ffDH56wiWbFhueK3p` with mint authority `7yihfmYe4JtjcY3fLsE1Ez2Wm6aTMf4TN3U8xqyz5ebe`, but that keypair is not present locally or in Secret Manager.
+- A fresh devnet deploy attempt is blocked by public devnet airdrop rate limits for the generated payer `GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B`.
