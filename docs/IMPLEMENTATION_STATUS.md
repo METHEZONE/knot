@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Phase 10 on 2026-07-31. Do not mark a capability verified without evidence.
+> Updated for Agent settlement automation follow-up on 2026-08-01. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -42,9 +42,9 @@
 | A2A counteroffer | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 6 registry-validated HTTP A2A counter/accept path tested |
 | Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
 | pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
-| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 9 fake-gateway/local tests verify amount/hash/receipt binding; real devnet lock not executed because on-chain action requires approval |
+| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can trigger lock when `KNOT_AGENT_AUTO_SETTLEMENT=1`; fake-gateway tests verify flow. Real devnet lock not executed because on-chain action requires approval |
 | Evidence verification | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 requires funded escrow, validates external https source URLs, stores source digest, records verification results, and blocks failed evidence |
-| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 release requires passed evidence, records evidence/source digest on settlement and timeline, and prevents duplicate payout |
+| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can release after passed evidence when `KNOT_AGENT_AUTO_SETTLEMENT=1`; release still requires confirmed gateway signature and deterministic evidence policy |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
 | Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
 | Deployment | N/A | N/A | N/A | N/A | BLOCKED | Phase 11 local QA passed; Cloud Run deploy/live smoke requires explicit approval |

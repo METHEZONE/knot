@@ -414,6 +414,16 @@ export type ApiReceipt = {
   detail?: string;
 };
 
+export type ApiAgentActionResult = {
+  action: "ESCROW_LOCK" | "MILESTONE_RELEASE" | string;
+  status: "LOCKED" | "RELEASED" | "FAILED" | "SKIPPED" | string;
+  escrow?: ApiEscrow;
+  settlement?: ApiSettlement;
+  receipt?: ApiReceipt;
+  reason?: string;
+  error?: Record<string, unknown>;
+};
+
 export type BrandDashboard = {
   brand: Record<string, unknown>;
   summary: {
@@ -926,11 +936,15 @@ export class ProductApiClient {
   }
 
   async verifyEvidence(evidenceId: string) {
-    const response = await this.request<{ evidence: ApiEvidence }>(
+    const response = await this.verifyEvidenceWithAgentActions(evidenceId);
+    return response.evidence;
+  }
+
+  async verifyEvidenceWithAgentActions(evidenceId: string) {
+    return this.request<{ evidence: ApiEvidence; autoRelease?: ApiAgentActionResult | null }>(
       `/api/v1/evidence/${evidenceId}:verify`,
       { method: "POST" },
     );
-    return response.evidence;
   }
 
   async lockEscrow(agreementId: string) {

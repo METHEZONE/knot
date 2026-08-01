@@ -2261,6 +2261,22 @@ def build_api_router(
                     "taskId": task_id,
                 },
             )
+        auto_escrow: dict[str, object] | None = None
+        if agreement is not None and settings.agent_auto_settlement:
+            agreement_id = str(agreement["agreementId"])
+            try:
+                lock_response = lock_escrow(
+                    agreement_id,
+                    idempotency_key=f"agent-lock-{agreement_id}",
+                )
+                lock_data = lock_response.get("data")
+                auto_escrow = {
+                    "action": "ESCROW_LOCK",
+                    "status": "LOCKED",
+                    **(lock_data if isinstance(lock_data, dict) else {}),
+                }
+            except HTTPException as exc:
+                auto_escrow = _agent_action_error("ESCROW_LOCK", exc)
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
@@ -2271,7 +2287,13 @@ def build_api_router(
                 "status": negotiation_status,
             },
         )
-        return _ok({"negotiation": negotiation, "agreement": agreement})
+        return _ok(
+            {
+                "negotiation": negotiation,
+                "agreement": agreement,
+                "autoEscrow": auto_escrow,
+            }
+        )
 
     @router.get("/negotiations/{negotiation_id}")
     def get_negotiation(negotiation_id: str) -> dict[str, object]:
@@ -2500,7 +2522,40 @@ def build_api_router(
                     "evidence": verified,
                 },
             )
-        return _ok({"evidence": verified})
+        auto_release: dict[str, object] | None = None
+        if settings.agent_auto_settlement:
+            agreement_id = _require_document_str(verified, "agreementId")
+            milestone_id = _require_document_str(verified, "milestoneId")
+            escrow = _find_escrow_by_agreement(repository, agreement_id)
+            if escrow is None:
+                auto_release = {
+                    "action": "MILESTONE_RELEASE",
+                    "status": "SKIPPED",
+                    "reason": "ESCROW_NOT_LOCKED",
+                }
+            elif escrow.get("status") == "LOCKED":
+                escrow_id = _require_document_str(escrow, "escrowId")
+                try:
+                    release_response = release_milestone(
+                        escrow_id,
+                        milestone_id,
+                        idempotency_key=f"agent-release-{escrow_id}-{milestone_id}",
+                    )
+                    release_data = release_response.get("data")
+                    auto_release = {
+                        "action": "MILESTONE_RELEASE",
+                        "status": "RELEASED",
+                        **(release_data if isinstance(release_data, dict) else {}),
+                    }
+                except HTTPException as exc:
+                    auto_release = _agent_action_error("MILESTONE_RELEASE", exc)
+            else:
+                auto_release = {
+                    "action": "MILESTONE_RELEASE",
+                    "status": "SKIPPED",
+                    "reason": f"ESCROW_{escrow.get('status', 'UNKNOWN')}",
+                }
+        return _ok({"evidence": verified, "autoRelease": auto_release})
 
     @router.get("/promotions/{promotion_id}/timeline")
     def get_promotion_timeline(promotion_id: str) -> dict[str, object]:
@@ -5446,6 +5501,15 @@ def _not_found(resource: str, resource_id: str) -> HTTPException:
         "RESOURCE_NOT_FOUND",
         f"{resource} {resource_id} was not found.",
     )
+
+
+def _agent_action_error(action: str, exc: HTTPException) -> dict[str, object]:
+    detail = exc.detail if isinstance(exc.detail, dict) else {"detail": str(exc.detail)}
+    return {
+        "action": action,
+        "status": "FAILED",
+        "error": detail,
+    }
 
 
 def _problem(status_code: int, code: str, detail: str) -> HTTPException:

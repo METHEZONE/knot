@@ -391,9 +391,12 @@ function EvidenceForm({
     onError(null);
     try {
       const evidence = await client.submitEvidence(agreement, milestoneId, url);
-      const verified = await client.verifyEvidence(evidence.evidenceId);
-      setLastEvidence(verified);
-      if (verified.status === "PASSED") {
+      const verification = await client.verifyEvidenceWithAgentActions(evidence.evidenceId);
+      setLastEvidence(verification.evidence);
+      if (
+        verification.evidence.status === "PASSED" &&
+        verification.autoRelease?.status !== "RELEASED"
+      ) {
         await client.releaseMilestone(escrowId, milestoneId);
       }
       await onRefresh();

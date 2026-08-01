@@ -30,6 +30,8 @@ ENV_FILE="${KNOT_ENV_FILE:-.env.local}"
 # 서비스에 로컬 환경 주입 (파일명을 .env로 바꾸면 pytest까지 오염되므로 여기서 명시적으로 source)
 echo "▸ 환경: $ENV_FILE"
 set -a; . "$ROOT/$ENV_FILE"; set +a
+export KNOT_AGENT_AUTO_SETTLEMENT="${KNOT_AGENT_AUTO_SETTLEMENT:-1}"
+echo "  + Agent 정산 자동화: KNOT_AGENT_AUTO_SETTLEMENT=$KNOT_AGENT_AUTO_SETTLEMENT"
 
 # 정산 배선(localnet_bootstrap.py)이 돌아 있으면 덧입힌다 → 게이트웨이 실서명 모드 + 로컬 mint
 if [[ -f "$LOGS/env.localnet" ]]; then
