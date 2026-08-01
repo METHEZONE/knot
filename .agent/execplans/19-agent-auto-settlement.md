@@ -18,6 +18,7 @@
 
 ## Verification
 
+- `bash -n scripts/deploy_cloud_run_demo.sh` passed after wiring Web3 Gateway deployment into the release script.
 - `python -m pytest backend/tests/test_api_escrow.py -q` passed.
 - `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q` passed.
 - `npm run typecheck` passed in `frontend`.
@@ -28,6 +29,13 @@
   - Escrow lock signature `5t3Fhmqq97xnxzWRX3nJdxTJz2fzRwKsxvscqUrjGU5RWQvuMHfveHN4Qx7yLvLoi8rV7Jewv3pvQ1e7cib9XvQu`
   - Release signature `5tD6e7BHjV5XS8gujtkbzZL556DXXDJvXm4PpTcRhdoQE2GfRH4uu4T9aUejGcy6GCjLbmwgCKo9fVWMhBsL19No`
   - Creator wallet `L2UGwRSz7eXA9w1YoBmmAdYhz4VN5Z6bia6TfYzEBm4` received 650 USDC localnet test tokens.
+
+## Deployment Script Fix
+
+- `scripts/deploy_cloud_run_demo.sh` now deploys `knot-web3` instead of leaving the gateway out of the release path.
+- Product API deployment now sets `KNOT_WEB3_MODE=gateway`, `WEB3_GATEWAY_BASE_URL`, `KNOT_AGENT_AUTO_SETTLEMENT=1`, and the same `KNOT_ESCROW_PROGRAM_ID` / `KNOT_USDC_MINT` values as the Web3 Gateway.
+- The script now requires `PAYSH_RESOURCE_ID` instead of silently deploying `replace-me`.
+- In `devnet` signing mode, Web3 Gateway deployment requires Secret Manager entries for `KNOT_BRAND_KEYPAIR_JSON`, `KNOT_CREATOR_KEYPAIR_JSON`, and `KNOT_AGENT_KEYPAIR_JSON`.
 
 ## Deployment Blockers
 

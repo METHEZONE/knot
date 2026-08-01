@@ -25,7 +25,7 @@
 | Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
 | A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a`, `backend/libs/a2a/registry.py` | Phase 6 focused tests | Registry lookup, AgentCard validation, service auth, dedupe, terminal guard, task event persistence covered |
 | Agreement | IN_PROGRESS | `backend/apps/api/routes.py`, `backend/libs/domain/hashing.py` | Audit complete | Final one-milestone shape pending |
-| Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Audit complete | Devnet path exists; no Phase 1 on-chain action |
+| Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Localnet smoke complete | Agent auto lock/release is verified on localnet; shared devnet deploy needs signer/pay.sh secrets and funded wallet |
 | Cloud Run | IN_PROGRESS | `infra/cloudbuild/*.yaml` | Audit complete | No deployment in Phase 1 |
 
 ## 2. Capability Matrix
@@ -42,12 +42,12 @@
 | A2A counteroffer | IN_PROGRESS | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 6 registry-validated HTTP A2A counter/accept path tested |
 | Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
 | pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
-| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can trigger lock when `KNOT_AGENT_AUTO_SETTLEMENT=1`; localnet on-chain smoke confirmed lock signature `5t3Fhm...XvQu`. Shared devnet deploy remains blocked by missing funded signer/pay.sh secrets |
+| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can trigger lock when `KNOT_AGENT_AUTO_SETTLEMENT=1`; localnet on-chain smoke confirmed lock signature `5t3Fhm...XvQu`. Deploy script now requires a real Web3 Gateway path; shared devnet remains blocked by missing funded signer/pay.sh secrets |
 | Evidence verification | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 requires funded escrow, validates external https source URLs, stores source digest, records verification results, and blocks failed evidence |
-| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation released after passed evidence in localnet smoke: release signature `5tD6e7...19No`, creator token balance 650 USDC. Shared devnet deploy remains blocked by missing funded signer/pay.sh secrets |
+| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation released after passed evidence in localnet smoke: release signature `5tD6e7...19No`, creator token balance 650 USDC. Deploy script now wires API to Web3 Gateway; shared devnet remains blocked by missing funded signer/pay.sh secrets |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 dashboards read canonical Match Run events, candidate snapshots, and negotiation resources through Product API |
 | Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
-| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Phase 11 local QA passed; Cloud Run deploy/live smoke requires explicit approval |
+| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Release script now deploys Web3 Gateway and forbids `PAYSH_RESOURCE_ID=replace-me`; Cloud Run live smoke is blocked until signer/pay.sh secrets and devnet funding exist |
 
 ## 3. Phase 1 Changes
 

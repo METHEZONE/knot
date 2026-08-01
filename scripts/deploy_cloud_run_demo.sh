@@ -6,6 +6,14 @@ REGION="${REGION:-us-central1}"
 REPOSITORY="${REPOSITORY:-knot}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 A2A_SECRET_NAME="${A2A_SECRET_NAME:-knot-a2a-service-token}"
+WEB3_SIGNING_MODE="${KNOT_WEB3_SIGNING_MODE:-devnet}"
+SOLANA_CLUSTER="${SOLANA_CLUSTER:-devnet}"
+SOLANA_RPC_URL="${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
+KNOT_USDC_MINT="${KNOT_USDC_MINT:-4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU}"
+KNOT_ESCROW_PROGRAM_ID="${KNOT_ESCROW_PROGRAM_ID:-Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj}"
+BRAND_KEYPAIR_SECRET_NAME="${BRAND_KEYPAIR_SECRET_NAME:-knot-web3-brand-keypair-json}"
+CREATOR_KEYPAIR_SECRET_NAME="${CREATOR_KEYPAIR_SECRET_NAME:-knot-web3-creator-keypair-json}"
+AGENT_KEYPAIR_SECRET_NAME="${AGENT_KEYPAIR_SECRET_NAME:-knot-web3-agent-keypair-json}"
 
 AR_HOST="${REGION}-docker.pkg.dev"
 IMAGE_BASE="${AR_HOST}/${PROJECT_ID}/${REPOSITORY}"
@@ -56,6 +64,7 @@ service_url() {
 API_IMAGE="${IMAGE_BASE}/knot-api:${TAG}"
 CREATOR_IMAGE="${IMAGE_BASE}/knot-creator-agent:${TAG}"
 WEB_IMAGE="${IMAGE_BASE}/knot-web:${TAG}"
+WEB3_IMAGE="${IMAGE_BASE}/knot-web3:${TAG}"
 
 require_env "NEXT_PUBLIC_FIREBASE_API_KEY"
 require_env "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"
@@ -64,6 +73,23 @@ require_env "NEXT_PUBLIC_FIREBASE_APP_ID"
 require_env "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"
 require_env "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"
 require_env "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID"
+require_env "PAYSH_RESOURCE_ID"
+
+if [[ "${WEB3_SIGNING_MODE}" == "devnet" ]]; then
+  echo "▸ Web3 Gateway will run in devnet signing mode."
+  echo "  Required Secret Manager secrets:"
+  echo "  - ${BRAND_KEYPAIR_SECRET_NAME} -> KNOT_BRAND_KEYPAIR_JSON"
+  echo "  - ${CREATOR_KEYPAIR_SECRET_NAME} -> KNOT_CREATOR_KEYPAIR_JSON"
+  echo "  - ${AGENT_KEYPAIR_SECRET_NAME} -> KNOT_AGENT_KEYPAIR_JSON"
+fi
+
+build_image "infra/cloudbuild/web3.yaml" "${WEB3_IMAGE}"
+deploy_service "knot-web3" "${WEB3_IMAGE}" \
+  --allow-unauthenticated \
+  --set-env-vars="KNOT_SERVICE_NAME=knot-web3,GIT_SHA=${TAG},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},SOLANA_CLUSTER=${SOLANA_CLUSTER},SOLANA_RPC_URL=${SOLANA_RPC_URL},KNOT_WEB3_SIGNING_MODE=${WEB3_SIGNING_MODE},KNOT_ESCROW_PROGRAM_ID=${KNOT_ESCROW_PROGRAM_ID},KNOT_USDC_MINT=${KNOT_USDC_MINT}" \
+  --set-secrets="KNOT_BRAND_KEYPAIR_JSON=${BRAND_KEYPAIR_SECRET_NAME}:latest,KNOT_CREATOR_KEYPAIR_JSON=${CREATOR_KEYPAIR_SECRET_NAME}:latest,KNOT_AGENT_KEYPAIR_JSON=${AGENT_KEYPAIR_SECRET_NAME}:latest"
+
+WEB3_URL="$(service_url "knot-web3")"
 
 build_image "infra/cloudbuild/creator-agent.yaml" "${CREATOR_IMAGE}"
 deploy_service "knot-creator-agent" "${CREATOR_IMAGE}" \
@@ -76,7 +102,7 @@ CREATOR_URL="$(service_url "knot-creator-agent")/a2a/v1"
 build_image "infra/cloudbuild/api.yaml" "${API_IMAGE}"
 deploy_service "knot-api" "${API_IMAGE}" \
   --allow-unauthenticated \
-  --set-env-vars="KNOT_REPOSITORY_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},KNOT_AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROJECT_ID},KNOT_SERVICE_NAME=knot-api,KNOT_CREATOR_A2A_MODE=http,CREATOR_AGENT_BASE_URL=${CREATOR_URL},CREATOR_A2A_TIMEOUT_SECONDS=60,KNOT_WEB3_MODE=not_configured,KNOT_GEMINI_MODE=vertex,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,PAYSH_MODE=sandbox,PAYSH_RESOURCE_ID=${PAYSH_RESOURCE_ID:-replace-me},PAYSH_TIMEOUT_SECONDS=90" \
+  --set-env-vars="KNOT_REPOSITORY_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},KNOT_AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROJECT_ID},KNOT_SERVICE_NAME=knot-api,KNOT_CREATOR_A2A_MODE=http,CREATOR_AGENT_BASE_URL=${CREATOR_URL},CREATOR_A2A_TIMEOUT_SECONDS=60,KNOT_WEB3_MODE=gateway,WEB3_GATEWAY_BASE_URL=${WEB3_URL},KNOT_AGENT_AUTO_SETTLEMENT=1,SOLANA_CLUSTER=${SOLANA_CLUSTER},SOLANA_RPC_URL=${SOLANA_RPC_URL},KNOT_ESCROW_PROGRAM_ID=${KNOT_ESCROW_PROGRAM_ID},KNOT_USDC_MINT=${KNOT_USDC_MINT},KNOT_GEMINI_MODE=vertex,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,PAYSH_MODE=sandbox,PAYSH_RESOURCE_ID=${PAYSH_RESOURCE_ID},PAYSH_TIMEOUT_SECONDS=90" \
   --set-secrets="KNOT_A2A_SERVICE_TOKEN=${A2A_SECRET_NAME}:latest"
 
 API_URL="$(service_url "knot-api")"
@@ -98,5 +124,5 @@ WEB_URL="$(service_url "knot-web")"
 
 echo "knot-api: ${API_URL}"
 echo "knot-creator-agent: ${CREATOR_URL}"
-echo "knot-web3: not deployed by this script"
+echo "knot-web3: ${WEB3_URL}"
 echo "knot-web: ${WEB_URL}"
