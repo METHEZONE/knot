@@ -23,6 +23,7 @@ type LockInput = {
   escrowId: string;
   termsHash: string;
   expectedAmountBaseUnits: string;
+  creatorDestination: string;
   agentId?: string;
   milestoneIds: string[];
   milestoneAmountsBaseUnits: string[];
@@ -31,6 +32,7 @@ type LockInput = {
 type ReleaseInput = {
   escrowId: string;
   milestoneId: string;
+  creatorDestination?: string;
 };
 
 export type LiveLockContext = {
@@ -38,6 +40,7 @@ export type LiveLockContext = {
   campaignId: bigint;
   campaign: string;
   creator: string;
+  creatorDestination?: string;
   creatorToken: string;
   agentAuthority: string;
   treasuryToken: string;
@@ -63,6 +66,7 @@ export async function submitEscrowLock(
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
   const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
   const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
+  const creatorDestination = new PublicKey(input.creatorDestination);
   const agent = await loadAgentKeypair(config, input.agentId);
   const programId = new PublicKey(config.allowedProgramId);
   const configPda = pda(["config"], programId);
@@ -141,8 +145,9 @@ export async function submitEscrowLock(
       campaignId,
       campaign: campaign.toBase58(),
       creator: creator.publicKey.toBase58(),
+      creatorDestination: creatorDestination.toBase58(),
       creatorToken: (
-        await getOrCreateAssociatedTokenAccount(connection, brand, mint, creator.publicKey)
+        await getOrCreateAssociatedTokenAccount(connection, brand, mint, creatorDestination)
       ).address.toBase58(),
       agentAuthority: agent.publicKey.toBase58(),
       treasuryToken: treasuryToken.toBase58(),
@@ -167,6 +172,13 @@ export async function submitMilestoneRelease(
   const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
   const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
   const agent = await loadAgentKeypair(config, context.agentId);
+  if (
+    input.creatorDestination &&
+    context.creatorDestination &&
+    context.creatorDestination !== input.creatorDestination
+  ) {
+    throw new Error("Release creatorDestination does not match locked escrow context");
+  }
   const programId = new PublicKey(config.allowedProgramId);
   const campaign = new PublicKey(context.campaign);
   await sendIx(
@@ -219,6 +231,9 @@ function loadKeypair(jsonValue: string | undefined, filePath: string | undefined
 // per-agent 키: agentId + gcpProjectId 있으면 Secret Manager(knot-agent-key-{agentId})에서 로드,
 // 없으면 config의 고정 agent 키로 폴백. (백엔드 provision과 동일한 number[] JSON 포맷)
 async function loadAgentKeypair(config: GatewayConfig, agentId?: string): Promise<Keypair> {
+  if (config.agentKeypairJson || config.agentKeypairPath) {
+    return loadKeypair(config.agentKeypairJson, config.agentKeypairPath, "agent");
+  }
   if (agentId && config.gcpProjectId) {
     const secret = await fetchAgentSecret(config.gcpProjectId, agentId);
     return Keypair.fromSecretKey(Uint8Array.from(secret));

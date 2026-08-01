@@ -333,6 +333,18 @@ def build_api_router(
         user = _bootstrap_authenticated_user(repository, auth_user)
         updated = {**user, "walletAddress": payload.wallet_address, "updatedAt": _now()}
         repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
+        if updated.get("role") == "CREATOR" and isinstance(updated.get("creatorId"), str):
+            creator_path = FirestorePaths.creator_profile(str(updated["creatorId"]))
+            creator = repository.get_raw_document(creator_path)
+            if creator is not None:
+                repository.save_raw_document(
+                    creator_path,
+                    {
+                        **creator,
+                        "walletAddress": payload.wallet_address,
+                        "updatedAt": updated["updatedAt"],
+                    },
+                )
         _append_audit(
             repository,
             action="USER_WALLET_SET",
@@ -2622,6 +2634,9 @@ def build_api_router(
                 f"Agreement {agreement_id} already has an escrow.",
             )
 
+        milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        creator_destination_wallet = _creator_settlement_wallet(repository, agreement)
+
         _claim_idempotency(
             repository,
             key,
@@ -2631,6 +2646,7 @@ def build_api_router(
                 "amount": locked_amount,
                 "programId": settings.escrow_program_id,
                 "mint": settings.usdc_mint,
+                "creatorDestinationWallet": creator_destination_wallet,
             },
             owner_path=f"lock:{agreement_id}",
         )
@@ -2639,7 +2655,6 @@ def build_api_router(
         escrow_id = f"escrow-{uuid4()}"
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
-        milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
         try:
             gateway_receipt = _require_confirmed_gateway_receipt(
                 _lock_with_web3_gateway(
@@ -2649,6 +2664,7 @@ def build_api_router(
                     escrow_id=escrow_id,
                     locked_amount=locked_amount,
                     milestone_amounts=milestone_amounts,
+                    creator_destination_wallet=creator_destination_wallet,
                 ),
                 expected={
                     "agreementId": agreement_id,
@@ -2702,6 +2718,7 @@ def build_api_router(
             "promotionId": agreement["promotionId"],
             "brandAgentId": agreement["brandAgentId"],
             "creatorAgentId": agreement["creatorAgentId"],
+            "creatorDestinationWallet": creator_destination_wallet,
             "network": settings.escrow_network,
             "programId": settings.escrow_program_id,
             "mint": settings.usdc_mint,
@@ -2908,6 +2925,7 @@ def build_api_router(
             "milestoneId": milestone_id,
             "amountBaseUnits": str(amount),
             "network": settings.escrow_network,
+            "creatorDestinationWallet": escrow.get("creatorDestinationWallet"),
             "status": gateway_receipt["status"],
             "signature": gateway_receipt["signature"],
             "evidenceId": passed_evidence["evidenceId"],
@@ -4191,6 +4209,38 @@ def _find_user_by_email(
     return "", None
 
 
+def _creator_settlement_wallet(
+    repository: KnotRepository,
+    document: dict[str, object],
+) -> str:
+    creator_id = document.get("creatorId")
+    creator_agent_id = document.get("creatorAgentId")
+    for user in repository.list_raw_documents(COLLECTIONS.users):
+        if (
+            isinstance(creator_id, str)
+            and user.get("creatorId") == creator_id
+            or isinstance(creator_agent_id, str)
+            and (
+                user.get("agentId") == creator_agent_id
+                or user.get("creatorAgentId") == creator_agent_id
+            )
+        ):
+            wallet = user.get("walletAddress")
+            if isinstance(wallet, str) and wallet:
+                return wallet
+    if isinstance(creator_id, str):
+        creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
+        if creator is not None:
+            wallet = creator.get("walletAddress")
+            if isinstance(wallet, str) and wallet:
+                return wallet
+    raise _problem(
+        status.HTTP_409_CONFLICT,
+        "CREATOR_WALLET_REQUIRED",
+        "Creator must connect a settlement wallet before Agent escrow can be locked.",
+    )
+
+
 def _append_unique_str(value: object, item: str) -> list[str]:
     items = [entry for entry in value if isinstance(entry, str)] if isinstance(value, list) else []
     if item not in items:
@@ -5240,6 +5290,7 @@ def _lock_with_web3_gateway(
     escrow_id: str,
     locked_amount: int,
     milestone_amounts: dict[str, int],
+    creator_destination_wallet: str,
 ) -> dict[str, object]:
     if settings.web3_mode != "gateway":
         raise _problem(
@@ -5263,7 +5314,8 @@ def _lock_with_web3_gateway(
                 "programId": settings.escrow_program_id,
                 "network": settings.escrow_network,
                 "brandAuthority": agreement["brandAgentId"],
-                "creatorDestination": agreement["creatorAgentId"],
+                "creatorDestination": creator_destination_wallet,
+                "agentId": agreement["brandAgentId"],
             },
         )
     except Web3GatewayError as exc:
@@ -5301,7 +5353,8 @@ def _release_with_web3_gateway(
             "mint": settings.usdc_mint,
             "programId": settings.escrow_program_id,
             "network": settings.escrow_network,
-            "creatorDestination": escrow["creatorAgentId"],
+            "creatorDestination": escrow.get("creatorDestinationWallet")
+            or _creator_settlement_wallet(repository, escrow),
         }
         if lock_context:
             payload["lockContext"] = lock_context

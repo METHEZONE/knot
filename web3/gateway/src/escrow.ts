@@ -13,8 +13,10 @@ const liveLockContextSchema = z.object({
   campaignId: z.string().regex(/^[0-9]+$/),
   campaign: z.string().min(1),
   creator: z.string().min(1),
+  creatorDestination: z.string().min(1).optional(),
   creatorToken: z.string().min(1),
   agentAuthority: z.string().min(1),
+  agentId: z.string().min(1).optional(),
   treasuryToken: z.string().min(1),
   mint: z.string().min(1),
   milestoneIds: z.array(z.string().min(1)).min(1).max(8),
@@ -155,6 +157,7 @@ export class EscrowLockService {
           escrowId: result.data.escrowId,
           termsHash: result.data.termsHash,
           expectedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+          creatorDestination: result.data.creatorDestination,
           milestoneIds,
           milestoneAmountsBaseUnits: milestoneAmounts,
           agentId: result.data.agentId
@@ -288,7 +291,8 @@ export class EscrowLockService {
       try {
         const live = await submitMilestoneRelease(config, context, {
           escrowId,
-          milestoneId
+          milestoneId,
+          creatorDestination: result.data.creatorDestination
         });
         const receipt: GatewayReceipt = {
           status: live.status,
@@ -352,18 +356,23 @@ export class EscrowLockService {
 }
 
 function serializeLiveContext(context: LiveLockContext): Record<string, JsonValue> {
-  return {
+  const serialized: Record<string, JsonValue> = {
     escrowId: context.escrowId,
     campaignId: context.campaignId.toString(),
     campaign: context.campaign,
     creator: context.creator,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
+    ...(context.agentId ? { agentId: context.agentId } : {}),
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,
     milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
   };
+  if (context.creatorDestination) {
+    serialized.creatorDestination = context.creatorDestination;
+  }
+  return serialized;
 }
 
 function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveLockContext {
@@ -372,8 +381,10 @@ function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveL
     campaignId: BigInt(context.campaignId),
     campaign: context.campaign,
     creator: context.creator,
+    creatorDestination: context.creatorDestination,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
+    agentId: context.agentId,
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,

@@ -396,6 +396,7 @@ export type ApiEscrow = {
   promotionId: string;
   lockedAmountBaseUnits: string;
   releasedAmountBaseUnits: string;
+  creatorDestinationWallet?: string | null;
   milestoneAmounts?: Record<string, string>;
   status: "LOCKED" | "COMPLETED" | string;
   lockSignature: string | null;
@@ -408,6 +409,7 @@ export type ApiSettlement = {
   agreementId: string;
   milestoneId: string;
   amountBaseUnits: string;
+  creatorDestinationWallet?: string | null;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   signature: string | null;
 };

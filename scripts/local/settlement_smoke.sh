@@ -58,6 +58,7 @@ echo "   signingMode=${KNOT_WEB3_SIGNING_MODE:-?} (devnet/testnet/live 이어야
 solana-keygen new --no-bip39-passphrase -s -f -o "$KNOT_AGENT_KEYPAIR_PATH" >/dev/null
 solana-keygen new --no-bip39-passphrase -s -f -o "$KNOT_CREATOR_KEYPAIR_PATH" >/dev/null
 echo "   에이전트/크리에이터 지갑 새로 발급 (비-멱등 토큰계정 생성 회피)"
+CREATOR_PUB=$(solana address -k "$KNOT_CREATOR_KEYPAIR_PATH")
 
 if [[ "${1:-}" == "--agreement" ]]; then
   AGREEMENT="${2:?--agreement <agreementId> 필요}"
@@ -68,6 +69,9 @@ else
   if [[ "$PROMOTION" == "promotion-lip-balm" ]]; then
     step "데모 Creator Agent 활성화 (c1@knot.com → agent-creator-1)"
     CREATOR_AUTH="$(emulator_token user-creator-1 c1@knot.com)"
+    curl -fsS -X POST -H "Authorization: Bearer $CREATOR_AUTH" -H "Content-Type: application/json" \
+      -d "{\"walletAddress\":\"$CREATOR_PUB\"}" "$API/api/v1/me/wallet" >/dev/null
+    echo "   c1 정산 지갑=$CREATOR_PUB"
     PUBLISHED=$(curl -fsS -X POST -H "Authorization: Bearer $CREATOR_AUTH" "$API/api/v1/creator/agent:publish")
     printf '%s' "$PUBLISHED" | python3 -c "
 import json,sys
@@ -144,7 +148,6 @@ print('   amount(baseUnits):', s.get('amountBaseUnits') or s.get('releasedAmount
 "
 
 step "온체인 확인 — 크리에이터 토큰 잔액"
-CREATOR_PUB=$(solana address -k "$KNOT_CREATOR_KEYPAIR_PATH")
 spl_out=$(solana --url "$RPC" balance "$CREATOR_PUB" 2>/dev/null || true)
 echo "   creator wallet=$CREATOR_PUB  SOL=$spl_out"
 python3 - <<PY

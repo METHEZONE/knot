@@ -340,7 +340,21 @@ Settlement release signature: 36g7WZXGXJbjyTtpMnB3igCMkZQEXpp4aqeaGsEDbdfkx6ZtYX
 Stored A2A transport: HTTP_A2A at http://127.0.0.1:8081/a2a/v1
 ```
 
-Local E2E was verified through localnet. Live testnet pay.sh purchase and live testnet escrow remain blocked until testnet program/mint, signer/pay.sh secrets, and funded wallets exist.
+Local E2E was re-verified through localnet with settlement paid to the Creator user's registered wallet:
+
+```text
+Verified at: 2026-08-01T09:50Z
+Negotiation ID: negotiation-600d1f89-25bd-4a9c-a089-897d3ae28720
+Agreement ID: agreement-b61cf0d6-0d75-4c37-a7e0-e90894088c5b
+Escrow ID: escrow-c71c1d90-efc6-423b-b145-991b7c827d48
+Creator destination wallet: 36sz8beXQGyzfoSbzSnZi4gyKsqs4gthU8skR2fDFpsV
+A2A message count/transport: 4 / HTTP_A2A
+Escrow lock signature: jK3ptNCZVZURgRcR1y5Yb6xp4KQBJS5mhTQFRes9oHpXHCWw6Pbd9Ke5Jr4nT2tZig8LbcezDevtw7WQ5GiR5wA
+Settlement release signature: 4aoP1TNCprGrSy5jgxqByF5cBE9DHYqMTkJTB8WhAxuqtBNh5RaJzkKvg8Ge4u2DK7yFvdxPUHM7zN4NoSk6bYgN
+Creator localnet token balance: 2300
+```
+
+Live testnet pay.sh purchase and live testnet escrow remain blocked until testnet program/mint, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain testnet transactions exist.
 
 ## 17. Known Blockers
 
@@ -373,11 +387,11 @@ WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 
 ```text
 BLOCKER: Live testnet escrow release signature is not verified.
-IMPACT: Settlement release is verified only through fake-gateway/local tests, not a live Solana testnet transaction.
-EVIDENCE: Phase 10 adds evidence-gated release tests but does not submit an on-chain transaction without approval.
+IMPACT: Settlement release is verified through localnet live signing, not a shared Solana testnet transaction.
+EVIDENCE: Localnet lock/release paid the Creator registered wallet, but no testnet transaction was submitted without approval.
 OWNER: Web3/Payments phase.
-NEXT ACTION: Run an approved testnet lock/release smoke with funded test wallet and record the signature/Explorer URL.
-WORKAROUND FOR DEMO (truthfully labeled): Use fake-gateway/local evidence-gated release proof only.
+NEXT ACTION: Configure/deploy the testnet program + mint + signer secrets, fund testnet wallets, then run an approved testnet lock/release smoke and record the signature/Explorer URL.
+WORKAROUND FOR DEMO (truthfully labeled): Use localnet live-signing proof until testnet is funded and approved.
 ```
 
 ## 18. Update Rule

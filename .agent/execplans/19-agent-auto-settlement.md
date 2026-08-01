@@ -77,3 +77,20 @@
 - Current Cloud Run `knot-web3` is configured with `KNOT_WEB3_SIGNING_MODE=simulated`, so Product API correctly rejects the receipt.
 - Secret Manager currently has only `knot-a2a-service-token`; no Web3 signer/pay.sh secrets are available.
 - Testnet still needs a deployed escrow program, initialized config, funded signer wallets, and the selected testnet SPL mint before live Cloud Run lock/release can be claimed.
+
+## Wallet Destination Follow-up
+
+- Product API now requires a Creator settlement wallet before Agent escrow lock; missing wallets fail with `CREATOR_WALLET_REQUIRED` instead of silently using an Agent ID as a payment destination.
+- `/api/v1/me/wallet` now mirrors a Creator user's Phantom address into the Creator profile so settlement and profile state do not drift.
+- Escrow documents persist `creatorDestinationWallet`; Settlement documents copy the same value for replay/debug.
+- Web3 Gateway now creates the release ATA for the requested `creatorDestination` while keeping the delegated Creator signer for milestone submission.
+- Gateway live context now persists both `creatorDestination` and `agentId`, so release can survive gateway restarts and reject destination mismatch.
+- Local smoke now registers the generated c1 settlement wallet before negotiation and confirmed release to that wallet:
+  - Negotiation `negotiation-600d1f89-25bd-4a9c-a089-897d3ae28720`
+  - Agreement `agreement-b61cf0d6-0d75-4c37-a7e0-e90894088c5b`
+  - Escrow `escrow-c71c1d90-efc6-423b-b145-991b7c827d48`
+  - Creator destination `36sz8beXQGyzfoSbzSnZi4gyKsqs4gthU8skR2fDFpsV`
+  - Lock signature `jK3ptNCZVZURgRcR1y5Yb6xp4KQBJS5mhTQFRes9oHpXHCWw6Pbd9Ke5Jr4nT2tZig8LbcezDevtw7WQ5GiR5wA`
+  - Release signature `4aoP1TNCprGrSy5jgxqByF5cBE9DHYqMTkJTB8WhAxuqtBNh5RaJzkKvg8Ge4u2DK7yFvdxPUHM7zN4NoSk6bYgN`
+  - Creator localnet token balance `2300` raw `2300000000`
+- New short-form Promotion matching check selected `creator-1 / agent-creator-1` after c1 fixture support for `short`/`post` deliverables.

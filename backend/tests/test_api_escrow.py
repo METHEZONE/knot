@@ -12,6 +12,12 @@ def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
     seed_demo_repository(repository)
+    creator_001 = repository.get_raw_document("creatorProfiles/creator-001")
+    if creator_001 is not None:
+        repository.save_raw_document(
+            "creatorProfiles/creator-001",
+            {**creator_001, "walletAddress": "creator-wallet"},
+        )
     return TestClient(create_app(settings=settings, repository=repository)), repository
 
 
@@ -52,8 +58,10 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                     "campaignId": "123",
                     "campaign": "campaign-pda",
                     "creator": "creator-wallet",
+                    "creatorDestination": payload["creatorDestination"],
                     "creatorToken": "creator-token",
                     "agentAuthority": "agent-wallet",
+                    "agentId": payload["agentId"],
                     "treasuryToken": "treasury-token",
                     "mint": payload["mint"],
                     "milestoneIds": payload["milestoneIds"],
@@ -140,6 +148,7 @@ def test_lock_creates_escrow_with_confirmed_receipt_and_no_fee(monkeypatch) -> N
     assert escrow["status"] == "LOCKED"
     assert escrow["platformFeeBps"] == 0
     assert escrow["network"] == "solanaTestnet"
+    assert escrow["creatorDestinationWallet"] == "creator-wallet"
     assert escrow["releasedAmountBaseUnits"] == "0"
     assert int(escrow["lockedAmountBaseUnits"]) > 0
     assert escrow["termsHash"] == agreement["termsHash"]

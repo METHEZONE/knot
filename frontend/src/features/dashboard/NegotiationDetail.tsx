@@ -358,6 +358,7 @@ function WalletSettlementPanel({
         <Metric label="Phantom 지갑" value={wallet.address ?? textValue(balance, "address", "미연결")} />
         <Metric label="잔고" value={walletBalanceLabel(balance)} />
         <Metric label="Escrow" value={escrow ? `${escrow.status} · ${baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)}` : "아직 잠김 없음"} />
+        <Metric label={role === "brand" ? "크리에이터 수령 지갑" : "수령 지갑"} value={escrow?.creatorDestinationWallet ?? "정산 지갑 연결 필요"} />
         <Metric label="정산 tx" value={latestSettlement?.signature ?? "정산 전"} />
       </div>
       <button
@@ -477,18 +478,41 @@ function MilestonePanel({
                   : `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`}
             </p>
             <WorkItemList terms={agreement.terms} compact />
-            {role === "creator" && escrow && !released ? (
-              <EvidenceForm
-                agreement={agreement}
-                escrowId={escrow.escrowId}
-                milestoneId={milestone.id}
-                onRefresh={onRefresh}
-                onError={onError}
-              />
+            {role === "creator" ? (
+              escrow && !released ? (
+                <EvidenceForm
+                  agreement={agreement}
+                  escrowId={escrow.escrowId}
+                  milestoneId={milestone.id}
+                  onRefresh={onRefresh}
+                  onError={onError}
+                />
+              ) : (
+                <EvidencePlaceholder released={released} hasEscrow={Boolean(escrow)} />
+              )
             ) : null}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function EvidencePlaceholder({ released, hasEscrow }: { released: boolean; hasEscrow: boolean }) {
+  return (
+    <div className="mt-4 flex flex-col gap-2">
+      <input
+        disabled
+        placeholder="https://instagram.com/p/..."
+        className="sketch-alt ink border border-border-subtle bg-surface px-3 py-2 text-sm text-muted outline-none opacity-70"
+      />
+      <p className="text-xs text-muted">
+        {released
+          ? "이미 Agent 검토와 정산이 완료되어 추가 제출이 잠겼습니다."
+          : hasEscrow
+            ? "제출 준비 중입니다."
+            : "에스크로가 먼저 잠겨야 영상 링크를 제출할 수 있습니다."}
+      </p>
     </div>
   );
 }
