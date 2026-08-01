@@ -310,7 +310,7 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 11 shared-cluster lock/release smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for wallet funding/on-chain transactions |
 | Testnet configuration update | VERIFIED | working tree | 2026-08-01 | Web3/API now accept `solanaTestnet`; deploy script defaults to `SOLANA_CLUSTER=testnet` and requires explicit program/mint |
 | Agent auto settlement localnet smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced lock signature `37VZrW...8JcF` and release signature `4hi1QB...HfrB` |
-| HTTP A2A detail and settlement smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced negotiation `negotiation-1a78cf83-27e9-41c1-90f1-710a0012aa59`, `HTTP_A2A` stored messages, lock signature `BJb3co...Mu5x`, and release signature `4wfyk1...MH4G` |
+| HTTP A2A detail and settlement smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced t1/c1 negotiation `negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf`, `HTTP_A2A` stored messages, lock signature `2huL2V...xVCd`, and release signature `3yymJR...Rbz5` |
 | A2A/profiles regression tests | VERIFIED | working tree | 2026-08-01 | `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q`: 44 passed, 2 warnings |
 | Frontend dashboard detail checks | VERIFIED | working tree | 2026-08-01 | `npm --prefix frontend run lint`, `npm --prefix frontend run typecheck`, and `npm --prefix frontend run build` passed |
 | Demo Auth emulator accounts | VERIFIED | working tree | 2026-08-01 | `t1@knot.com` and `c1@knot.com` created with password `000000` |
@@ -328,12 +328,14 @@ Verified at: 2026-08-01
 Verifier: Codex
 Brand test account: t1@knot.com / 000000
 Creator test account: c1@knot.com / 000000
-Match Run ID: match-83124276-012e-4ca9-8140-8c78bc6fc12b
-Negotiation ID: negotiation-1a78cf83-27e9-41c1-90f1-710a0012aa59
-A2A Task ID: task-f1b3270b-ff88-4075-9272-fae4e4f2f4dc
-Agreement ID: agreement-f6fefb03-cde8-4154-9482-44f88ec0a19f
-Escrow lock signature: BJb3coUxfi7xx1bVmvDTYLHnMCPALFaKToCjr5msEkr5SitKAzguwYDpRC5dfbXYsDpBbk7yaYNAs2SxLajMu5x
-Settlement release signature: 4wfyk12ZZjfT5x4chAGhsid22WCmxMe675RhpmPncRqHo7kx7Q3DgWiMuj1F2uFE7E4VL5raSsGcf2hp5GKGMH4G
+Brand resource: brand-1 / agent-brand-1 / 루미에르 뷰티
+Creator resource: creator-1 / agent-creator-1 / 민지의 뷰티룸
+Match Run ID: match-4566bc16-fa38-47fa-8ca3-ed8428a31218
+Negotiation ID: negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf
+A2A Task ID: task-940a1dc5-836c-434d-834e-b46c9bd7bdd1
+Agreement ID: agreement-8573a2bf-2083-489f-bb1e-e6d3fe857a57
+Escrow lock signature: 2huL2VYVoX9hSwhbYuEyXqo2d4sLF6SEBzKeQ8BW3izVAKszHvpWxFc37UTxLWiWjpfxB6aK4QcMtGSYD3ZPxVCd
+Settlement release signature: 3yymJRqj7UCTRNvSCVZWLPeHWbCmzQrTEp1UE8Xa9v7XqNhBN7ea374b71nDHZrJvLX3QQKXat9d46H14Z8URbz5
 Stored A2A transport: HTTP_A2A at http://127.0.0.1:8081/a2a/v1
 ```
 

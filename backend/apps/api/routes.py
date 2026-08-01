@@ -931,6 +931,7 @@ def build_api_router(
         user = _require_completed_role(repository, auth_user, "CREATOR")
         agent, creator = _require_creator_agent_context(repository, user)
         now = _now()
+        active_creator = creator.model_copy(update={"active": True})
         updated_agent = {
             **agent,
             "status": "ACTIVE",
@@ -943,10 +944,11 @@ def build_api_router(
             "updatedAt": now,
         }
         discovery = build_creator_discovery_projection(
-            creator,
+            active_creator,
             updated_agent,
             updated_at=now,
         )
+        repository.save_creator_profile(active_creator)
         repository.save_raw_document(
             FirestorePaths.agent(_require_document_str(updated_agent, "agentId")),
             updated_agent,

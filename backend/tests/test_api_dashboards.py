@@ -176,6 +176,9 @@ def test_creator_agent_publish_pause_resume_maintains_discovery_projection_priva
     )
     assert stored_projection is not None
     assert stored_projection["creatorAgentId"] == creator["agentId"]
+    stored_creator = repository.get_creator_profile(creator["creatorId"])
+    assert stored_creator is not None
+    assert stored_creator.active is True
     registry_entry = repository.get_raw_document(
         FirestorePaths.agent_registry_entry(creator["agentId"])
     )

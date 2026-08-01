@@ -50,12 +50,15 @@
 - Local `dev_stack.sh` now refuses to run the demo in in-process Creator Agent mode; if `.env.local` says `KNOT_CREATOR_A2A_MODE=local`, the script exports `KNOT_CREATOR_A2A_MODE=http`.
 - Negotiation documents now persist public `brandSnapshot`, `creatorSnapshot`, and `promotionSnapshot` data so Brand and Creator detail pages show the actual counterparty profile and agreed work.
 - Negotiation messages now persist `transport` and `a2aEndpoint`; the detail UI exposes those fields plus the stored A2A payload for each message.
-- Local smoke after this fix used Product API -> Creator Agent HTTP A2A and Agent auto settlement:
-  - Agreement `agreement-f6fefb03-cde8-4154-9482-44f88ec0a19f`
-  - Negotiation `negotiation-1a78cf83-27e9-41c1-90f1-710a0012aa59`
-  - Escrow `escrow-ef92462e-cbd1-4529-ba38-edb205b79116`
-  - Escrow lock signature `BJb3coUxfi7xx1bVmvDTYLHnMCPALFaKToCjr5msEkr5SitKAzguwYDpRC5dfbXYsDpBbk7yaYNAs2SxLajMu5x`
-  - Release signature `4wfyk12ZZjfT5x4chAGhsid22WCmxMe675RhpmPncRqHo7kx7Q3DgWiMuj1F2uFE7E4VL5raSsGcf2hp5GKGMH4G`
+- Creator Agent publish now also activates the creator profile so a real owner-backed Creator can pass deterministic matching hard filters.
+- `scripts/local/settlement_smoke.sh` now defaults to `promotion-lip-balm`, publishes `c1@knot.com`'s `agent-creator-1`, selects that candidate, and then starts the A2A negotiation.
+- Local smoke after this fix used `t1@knot.com` Brand resources and `c1@knot.com` Creator resources through Product API -> Creator Agent HTTP A2A and Agent auto settlement:
+  - Selected Creator `creator-1` / `agent-creator-1`
+  - Agreement `agreement-8573a2bf-2083-489f-bb1e-e6d3fe857a57`
+  - Negotiation `negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf`
+  - Escrow `escrow-caee4b80-68b2-4080-b1c9-d4d6926aac8a`
+  - Escrow lock signature `2huL2VYVoX9hSwhbYuEyXqo2d4sLF6SEBzKeQ8BW3izVAKszHvpWxFc37UTxLWiWjpfxB6aK4QcMtGSYD3ZPxVCd`
+  - Release signature `3yymJRqj7UCTRNvSCVZWLPeHWbCmzQrTEp1UE8Xa9v7XqNhBN7ea374b71nDHZrJvLX3QQKXat9d46H14Z8URbz5`
   - Message API confirmed `transport: HTTP_A2A` and `a2aEndpoint: http://127.0.0.1:8081/a2a/v1` on both stored messages.
 
 ## Deployment Script Fix

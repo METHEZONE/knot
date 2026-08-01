@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # knot — 정산 전체 경로 스모크 (로컬넷 실서명). "정산이 되는가"를 판정한다.
 #
-#   scripts/local/settlement_smoke.sh                        # 시드 프로모션(promotion-001) 자동 전체
+#   scripts/local/settlement_smoke.sh                        # 데모 계정 프로모션(promotion-lip-balm) 자동 전체
 #   scripts/local/settlement_smoke.sh <promotionId>          # 브라우저에서 내가 만든 프로모션으로
 #   scripts/local/settlement_smoke.sh --agreement <id>       # 이미 만들어진 합의만 정산
 #
@@ -13,13 +13,30 @@
 #
 # 흐름: 매칭 → A2A 협상/합의 → 에스크로 락(온체인) → 증빙 제출/검증 → 마일스톤 릴리즈(온체인)
 #       → 크리에이터 USDC 잔액이 실제로 늘었는지 온체인 확인
-# 메모리 저장소는 기동 시 데모 시드(promotion-001)가 들어 있어 브랜드/크리에이터 계정 없이도 돈다.
+# 메모리 저장소는 기동 시 t1/c1 데모 시드(promotion-lip-balm)가 들어 있어 바로 돈다.
 set -euo pipefail
 RUNTIME="${KNOT_LOG_DIR:-/tmp/knot-local}"
 STAMP="$(date +%s)"
 jqp() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1]))" "$1"; }
 step() { printf '\n▸ %s\n' "$1"; }
 wait_http() { local url="$1" n="${2:-30}"; for _ in $(seq 1 "$n"); do curl -fsS -m 5 "$url" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
+emulator_token() {
+  python3 - "$1" "$2" <<'PY'
+import base64
+import json
+import sys
+
+uid, email = sys.argv[1], sys.argv[2]
+header = {"alg": "none", "typ": "JWT"}
+payload = {"uid": uid, "user_id": uid, "sub": uid, "email": email}
+
+def enc(value):
+    raw = json.dumps(value, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+print(f"{enc(header)}.{enc(payload)}.")
+PY
+}
 
 [[ -f "$RUNTIME/env.localnet" ]] || { echo "❌ 정산 배선 없음 → .venv/bin/python scripts/local/localnet_bootstrap.py 먼저"; exit 1; }
 # shellcheck disable=SC1091
@@ -47,10 +64,29 @@ if [[ "${1:-}" == "--agreement" ]]; then
   step "기존 합의 사용: $AGREEMENT"
   CREATOR_AGENT=$(curl -fsS "$API/api/v1/agreements/$AGREEMENT" | jqp "d['data']['agreement']['creatorAgentId']")
 else
-  PROMOTION="${1:-promotion-001}"
+  PROMOTION="${1:-promotion-lip-balm}"
+  if [[ "$PROMOTION" == "promotion-lip-balm" ]]; then
+    step "데모 Creator Agent 활성화 (c1@knot.com → agent-creator-1)"
+    CREATOR_AUTH="$(emulator_token user-creator-1 c1@knot.com)"
+    PUBLISHED=$(curl -fsS -X POST -H "Authorization: Bearer $CREATOR_AUTH" "$API/api/v1/creator/agent:publish")
+    printf '%s' "$PUBLISHED" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']
+print('   creatorAgent=', d['agent']['agentId'])
+print('   discovery=', d['discoveryProfile']['creatorId'], d['discoveryProfile']['agentStatus'])
+"
+  fi
   step "매칭 실행 ($PROMOTION)"
   MATCH=$(curl -fsS -X POST "$API/api/v1/promotions/$PROMOTION/matches:run" | jqp "d['data']['matchRun']['matchRunId']")
   echo "   matchRun=$MATCH"
+  if [[ "$PROMOTION" == "promotion-lip-balm" ]]; then
+    SELECTED=$(curl -fsS -X POST "$API/api/v1/match-runs/$MATCH/candidates/agent-creator-1:select")
+    printf '%s' "$SELECTED" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']['matchRun']
+print('   selectedCreator=', d.get('selectedCreatorId'), d.get('selectedCreatorAgentId'))
+"
+  fi
 
   step "A2A 협상 → 합의(Agreement) 생성"
   AGREEMENT_JSON=$(curl -fsS -X POST "$API/api/v1/match-runs/$MATCH:start-negotiation")

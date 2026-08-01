@@ -77,8 +77,8 @@
     },
     "autonomy": {
       "maxNegotiationRounds": 3,
-      "autoEscrow": false,
-      "autoRelease": false
+      "autoEscrow": true,
+      "autoRelease": true
     },
     "status": "ACTIVE",
     "activeNegotiationCount": 0,
