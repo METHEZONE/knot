@@ -1851,6 +1851,7 @@ def build_api_router(
             raise _not_found("agentPolicy", creator_agent_id)
         registry_entry = _require_creator_agent_registry_entry(repository, creator_agent_id)
         creator_a2a_base_url = _creator_a2a_base_url(settings, registry_entry)
+        brand = repository.get_raw_document(FirestorePaths.brand(promotion.brand_id))
 
         terms = build_initial_terms(
             promotion,
@@ -2110,9 +2111,13 @@ def build_api_router(
             "productName": promotion_document.get("productName") or promotion.title,
             "brandId": promotion.brand_id,
             "brandAgentId": promotion.brand_agent_id,
+            "brandDisplayName": _brand_display_name(brand, fallback=promotion.brand_id),
+            "brandSnapshot": _public_brand_snapshot(brand),
             "creatorId": creator.creator_id,
             "creatorAgentId": creator_agent_id,
             "creatorDisplayName": creator.display_name,
+            "creatorSnapshot": _public_creator_snapshot(creator),
+            "promotionSnapshot": _public_promotion_snapshot(promotion_document),
             "contextId": context_id,
             "taskId": task_id,
             "status": negotiation_status,
@@ -2153,6 +2158,10 @@ def build_api_router(
             created_at=now,
         )
         for message_document in persisted_messages:
+            message_document["transport"] = (
+                "HTTP_A2A" if settings.creator_a2a_mode == "http" else "IN_PROCESS_A2A"
+            )
+            message_document["a2aEndpoint"] = creator_a2a_base_url
             repository.save_raw_document(
                 FirestorePaths.negotiation_message(
                     negotiation_id,
@@ -2185,6 +2194,7 @@ def build_api_router(
             task_id=task_id,
             created_at=now,
             promotion=promotion_document,
+            brand=brand,
             creator=creator,
         )
         if artifact is not None:
@@ -4471,6 +4481,7 @@ def _agreement_document(
     task_id: str,
     created_at: str,
     promotion: dict[str, object] | None = None,
+    brand: dict[str, object] | None = None,
     creator: CreatorProfile | None = None,
 ) -> dict[str, object] | None:
     if decision.get("type") != NegotiationMessageType.ACCEPT.value:
@@ -4506,6 +4517,7 @@ def _agreement_document(
         "productName": negotiation.get("productName"),
         "brandId": negotiation.get("brandId"),
         "brandAgentId": negotiation["brandAgentId"],
+        "brandDisplayName": negotiation.get("brandDisplayName"),
         "creatorId": negotiation.get("creatorId"),
         "creatorAgentId": negotiation["creatorAgentId"],
         "creatorDisplayName": negotiation.get("creatorDisplayName"),
@@ -4513,6 +4525,7 @@ def _agreement_document(
         "workItems": _terms_work_items(terms),
         "deliverableSummary": _terms_deliverable_summary(terms),
         "currentAmountUsdc": _terms_base_amount_usdc(terms),
+        "brandSnapshot": _public_brand_snapshot(brand),
         "promotionSnapshot": _public_promotion_snapshot(promotion),
         "creatorSnapshot": _public_creator_snapshot(creator),
         "canonicalTermsJson": canonical_terms_json(agreement_terms),
@@ -4534,6 +4547,27 @@ def _public_promotion_snapshot(promotion: dict[str, object] | None) -> dict[str,
         "category": promotion.get("category"),
         "objective": promotion.get("objective"),
     }
+
+
+def _public_brand_snapshot(brand: dict[str, object] | None) -> dict[str, object] | None:
+    if brand is None:
+        return None
+    return {
+        "brandId": brand.get("brandId"),
+        "displayName": brand.get("displayName") or brand.get("brandName"),
+        "websiteUrl": brand.get("websiteUrl"),
+        "categories": brand.get("categories")
+        or ([brand.get("category")] if brand.get("category") else []),
+        "targetAudience": brand.get("targetAudience"),
+        "description": brand.get("description"),
+    }
+
+
+def _brand_display_name(brand: dict[str, object] | None, *, fallback: str) -> str:
+    if brand is None:
+        return fallback
+    value = brand.get("displayName") or brand.get("brandName")
+    return str(value) if isinstance(value, str) and value else fallback
 
 
 def _public_creator_snapshot(creator: CreatorProfile | None) -> dict[str, object] | None:

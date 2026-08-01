@@ -496,6 +496,18 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert agreement["canonicalTermsJson"].startswith("{")
     assert agreement["hashAlgorithm"] == "sha256"
     assert agreement["hashVersion"] == "knot.agreement-terms.v1"
+    assert agreement["brandDisplayName"] == "Demo Skincare Brand"
+    assert agreement["brandSnapshot"] == {
+        "brandId": "brand-001",
+        "displayName": "Demo Skincare Brand",
+        "websiteUrl": None,
+        "categories": [],
+        "targetAudience": None,
+        "description": None,
+    }
+    assert agreement["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
+    assert agreement["creatorSnapshot"]["completedDealCount"] == 12
+    assert agreement["promotionSnapshot"]["productName"] == "Summer skincare launch"
     assert agreement["terms"]["milestones"] == [
         {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
     ]
@@ -505,6 +517,10 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert messages_response.status_code == 200
     messages = messages_response.json()["data"]["messages"]
     assert [message["role"] for message in messages] == ["ROLE_USER", "ROLE_AGENT"]
+    assert [message["transport"] for message in messages] == [
+        "IN_PROCESS_A2A",
+        "IN_PROCESS_A2A",
+    ]
     task_events = repository.list_raw_documents(
         f"{COLLECTIONS.a2a_tasks}/{negotiation['taskId']}/{COLLECTIONS.a2a_events}"
     )
@@ -744,12 +760,24 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
     metadata = captured["request"]["metadata"]  # type: ignore[index]
     assert metadata["creatorNegotiationContext"]["creatorAgentId"] == "creator-agent-001"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
+    assert body["negotiation"]["brandDisplayName"] == "Demo Skincare Brand"
+    assert body["negotiation"]["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
     assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"
+    assert body["agreement"]["brandSnapshot"]["displayName"] == "Demo Skincare Brand"
+    assert body["agreement"]["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
     messages = client.get(
         f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
     ).json()["data"]["messages"]
     assert [message["role"] for message in messages] == ["ROLE_USER", "ROLE_AGENT"]
+    assert [message["transport"] for message in messages] == ["HTTP_A2A", "HTTP_A2A"]
+    assert [message["a2aEndpoint"] for message in messages] == [
+        "http://creator-agent.test/a2a/v1",
+        "http://creator-agent.test/a2a/v1",
+    ]
+    assert messages[1]["a2aMessage"]["parts"][0]["data"]["rationale"] == (
+        "Accepted through Creator A2A HTTP."
+    )
 
 
 def test_start_negotiation_http_failure_does_not_create_fake_agreement(monkeypatch) -> None:

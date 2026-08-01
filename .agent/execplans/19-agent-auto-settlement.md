@@ -18,6 +18,12 @@
 
 ## Verification
 
+- `bash -n scripts/local/dev_stack.sh` passed after forcing local demo A2A back to HTTP when `.env.local` contains `KNOT_CREATOR_A2A_MODE=local`.
+- `python -m ruff check backend/apps/api/routes.py backend/tests/test_api_promotions.py` passed.
+- `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q` passed with 44 tests.
+- `npm --prefix frontend run lint` passed.
+- `npm --prefix frontend run typecheck` passed when run after the production build completed.
+- `npm --prefix frontend run build` passed.
 - `bash -n scripts/deploy_cloud_run_demo.sh` passed after wiring Web3 Gateway deployment into the release script.
 - `python -m pytest backend/tests/test_api_escrow.py -q` passed.
 - `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q` passed.
@@ -38,6 +44,19 @@
 - Local Firebase Auth emulator demo accounts created:
   - Brand: `t1@knot.com` / `000000`
   - Creator: `c1@knot.com` / `000000`
+
+## A2A Detail Follow-up
+
+- Local `dev_stack.sh` now refuses to run the demo in in-process Creator Agent mode; if `.env.local` says `KNOT_CREATOR_A2A_MODE=local`, the script exports `KNOT_CREATOR_A2A_MODE=http`.
+- Negotiation documents now persist public `brandSnapshot`, `creatorSnapshot`, and `promotionSnapshot` data so Brand and Creator detail pages show the actual counterparty profile and agreed work.
+- Negotiation messages now persist `transport` and `a2aEndpoint`; the detail UI exposes those fields plus the stored A2A payload for each message.
+- Local smoke after this fix used Product API -> Creator Agent HTTP A2A and Agent auto settlement:
+  - Agreement `agreement-f6fefb03-cde8-4154-9482-44f88ec0a19f`
+  - Negotiation `negotiation-1a78cf83-27e9-41c1-90f1-710a0012aa59`
+  - Escrow `escrow-ef92462e-cbd1-4529-ba38-edb205b79116`
+  - Escrow lock signature `BJb3coUxfi7xx1bVmvDTYLHnMCPALFaKToCjr5msEkr5SitKAzguwYDpRC5dfbXYsDpBbk7yaYNAs2SxLajMu5x`
+  - Release signature `4wfyk12ZZjfT5x4chAGhsid22WCmxMe675RhpmPncRqHo7kx7Q3DgWiMuj1F2uFE7E4VL5raSsGcf2hp5GKGMH4G`
+  - Message API confirmed `transport: HTTP_A2A` and `a2aEndpoint: http://127.0.0.1:8081/a2a/v1` on both stored messages.
 
 ## Deployment Script Fix
 

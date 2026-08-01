@@ -307,9 +307,13 @@ export type ApiNegotiation = {
   productName?: string;
   brandId?: string;
   brandAgentId: string;
+  brandDisplayName?: string;
+  brandSnapshot?: Record<string, unknown> | null;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
+  creatorSnapshot?: Record<string, unknown> | null;
+  promotionSnapshot?: Record<string, unknown> | null;
   contextId: string;
   taskId: string;
   status:
@@ -340,12 +344,14 @@ export type ApiAgreement = {
   productName?: string;
   brandId?: string;
   brandAgentId: string;
+  brandDisplayName?: string;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
   terms: ApiAgreementTerms;
   deliverableSummary?: string;
   workItems?: Array<Record<string, unknown>>;
+  brandSnapshot?: Record<string, unknown> | null;
   promotionSnapshot?: Record<string, unknown> | null;
   creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
@@ -371,6 +377,8 @@ export type ApiNegotiationMessage = {
   sequence?: number;
   payload?: Record<string, unknown>;
   a2aMessage?: Record<string, unknown>;
+  transport?: "HTTP_A2A" | "IN_PROCESS_A2A" | string;
+  a2aEndpoint?: string;
   createdAt: string;
 };
 
