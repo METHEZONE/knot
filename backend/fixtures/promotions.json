@@ -57,6 +57,7 @@
       "totalUsdc": 1000,
       "maxPerCreatorUsdc": 500
     },
+    "initialOffer": 250,
     "deliverables": [
       {
         "format": "reel",

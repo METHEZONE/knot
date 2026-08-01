@@ -310,7 +310,7 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 11 shared-cluster lock/release smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for wallet funding/on-chain transactions |
 | Testnet configuration update | VERIFIED | working tree | 2026-08-01 | Web3/API now accept `solanaTestnet`; deploy script defaults to `SOLANA_CLUSTER=testnet` and requires explicit program/mint |
 | Agent auto settlement localnet smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced lock signature `37VZrW...8JcF` and release signature `4hi1QB...HfrB` |
-| HTTP A2A detail and settlement smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced t1/c1 negotiation `negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf`, `HTTP_A2A` stored messages, lock signature `2huL2V...xVCd`, and release signature `3yymJR...Rbz5` |
+| HTTP A2A detail and settlement smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced t1/c1 negotiation `negotiation-82d63da5-24cc-41a5-a9c4-ddeb9c50cb9a`, `HTTP_A2A` stored messages `OFFER -> COUNTER -> ACCEPT -> ACCEPT`, lock signature `4vSNcS...sdW9`, and release signature `36g7WZ...AQnC` |
 | A2A/profiles regression tests | VERIFIED | working tree | 2026-08-01 | `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q`: 44 passed, 2 warnings |
 | Frontend dashboard detail checks | VERIFIED | working tree | 2026-08-01 | `npm --prefix frontend run lint`, `npm --prefix frontend run typecheck`, and `npm --prefix frontend run build` passed |
 | Demo Auth emulator accounts | VERIFIED | working tree | 2026-08-01 | `t1@knot.com` and `c1@knot.com` created with password `000000` |
@@ -330,12 +330,13 @@ Brand test account: t1@knot.com / 000000
 Creator test account: c1@knot.com / 000000
 Brand resource: brand-1 / agent-brand-1 / 루미에르 뷰티
 Creator resource: creator-1 / agent-creator-1 / 민지의 뷰티룸
-Match Run ID: match-4566bc16-fa38-47fa-8ca3-ed8428a31218
-Negotiation ID: negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf
-A2A Task ID: task-940a1dc5-836c-434d-834e-b46c9bd7bdd1
-Agreement ID: agreement-8573a2bf-2083-489f-bb1e-e6d3fe857a57
-Escrow lock signature: 2huL2VYVoX9hSwhbYuEyXqo2d4sLF6SEBzKeQ8BW3izVAKszHvpWxFc37UTxLWiWjpfxB6aK4QcMtGSYD3ZPxVCd
-Settlement release signature: 3yymJRqj7UCTRNvSCVZWLPeHWbCmzQrTEp1UE8Xa9v7XqNhBN7ea374b71nDHZrJvLX3QQKXat9d46H14Z8URbz5
+Match Run ID: match-3ee3e6a9-7210-451c-8f2f-a4e78dae7f60
+Negotiation ID: negotiation-82d63da5-24cc-41a5-a9c4-ddeb9c50cb9a
+A2A Task ID: task-4d996f19-5160-47fa-a5ff-1facdfd13655
+Agreement ID: agreement-97f6c6f2-a594-493b-ad55-4bfa7ca54ef4
+A2A message sequence: OFFER -> COUNTER -> ACCEPT -> ACCEPT
+Escrow lock signature: 4vSNcSLjgJgK3jGYQKvinLxsyRnno8LcJeospGERKGkTbV8jVpBzE6QVU6MBG5u3Hf9p71JXjNopHanMeX9AsdW9
+Settlement release signature: 36g7WZXGXJbjyTtpMnB3igCMkZQEXpp4aqeaGsEDbdfkx6ZtYXQRfkZdmbaX7ap5KeC5icpzSo3BN1a2jafbAQnC
 Stored A2A transport: HTTP_A2A at http://127.0.0.1:8081/a2a/v1
 ```
 

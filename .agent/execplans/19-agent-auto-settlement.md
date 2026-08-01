@@ -52,13 +52,15 @@
 - Negotiation messages now persist `transport` and `a2aEndpoint`; the detail UI exposes those fields plus the stored A2A payload for each message.
 - Creator Agent publish now also activates the creator profile so a real owner-backed Creator can pass deterministic matching hard filters.
 - `scripts/local/settlement_smoke.sh` now defaults to `promotion-lip-balm`, publishes `c1@knot.com`'s `agent-creator-1`, selects that candidate, and then starts the A2A negotiation.
+- `promotion-lip-balm` starts at `initialOffer: 250`, below the Creator's 300 USDC minimum, so the demo now produces an actual counteroffer loop instead of one-turn acceptance.
 - Local smoke after this fix used `t1@knot.com` Brand resources and `c1@knot.com` Creator resources through Product API -> Creator Agent HTTP A2A and Agent auto settlement:
   - Selected Creator `creator-1` / `agent-creator-1`
-  - Agreement `agreement-8573a2bf-2083-489f-bb1e-e6d3fe857a57`
-  - Negotiation `negotiation-0698843e-0748-4495-9ba5-9886d5afa9cf`
-  - Escrow `escrow-caee4b80-68b2-4080-b1c9-d4d6926aac8a`
-  - Escrow lock signature `2huL2VYVoX9hSwhbYuEyXqo2d4sLF6SEBzKeQ8BW3izVAKszHvpWxFc37UTxLWiWjpfxB6aK4QcMtGSYD3ZPxVCd`
-  - Release signature `3yymJRqj7UCTRNvSCVZWLPeHWbCmzQrTEp1UE8Xa9v7XqNhBN7ea374b71nDHZrJvLX3QQKXat9d46H14Z8URbz5`
+  - Agreement `agreement-97f6c6f2-a594-493b-ad55-4bfa7ca54ef4`
+  - Negotiation `negotiation-82d63da5-24cc-41a5-a9c4-ddeb9c50cb9a`
+  - A2A messages `OFFER -> COUNTER -> ACCEPT -> ACCEPT`
+  - Escrow `escrow-37cf71b0-1f98-4194-b06e-fc61ed20abbf`
+  - Escrow lock signature `4vSNcSLjgJgK3jGYQKvinLxsyRnno8LcJeospGERKGkTbV8jVpBzE6QVU6MBG5u3Hf9p71JXjNopHanMeX9AsdW9`
+  - Release signature `36g7WZXGXJbjyTtpMnB3igCMkZQEXpp4aqeaGsEDbdfkx6ZtYXQRfkZdmbaX7ap5KeC5icpzSo3BN1a2jafbAQnC`
   - Message API confirmed `transport: HTTP_A2A` and `a2aEndpoint: http://127.0.0.1:8081/a2a/v1` on both stored messages.
 
 ## Deployment Script Fix

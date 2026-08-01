@@ -134,17 +134,10 @@ export function NegotiationDetail({
         />
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
-        <div className="grid gap-5">
-          <CounterpartyProfilePanel role={role} negotiation={negotiation} agreement={agreement} />
-          <WorkSummaryPanel role={role} negotiation={negotiation} agreement={agreement} />
-          <WalletSettlementPanel role={role} escrowBundle={escrowBundle} />
-        </div>
-
-        <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
-          <MessageThread role={role} messages={messages} />
-        </section>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <CounterpartyProfilePanel role={role} negotiation={negotiation} agreement={agreement} />
+        <WorkSummaryPanel role={role} negotiation={negotiation} agreement={agreement} />
+        <WalletSettlementPanel role={role} escrowBundle={escrowBundle} />
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
@@ -172,6 +165,11 @@ export function NegotiationDetail({
           />
         )}
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
+      </section>
+
+      <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
+        <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
+        <MessageThread role={role} messages={messages} />
       </section>
     </div>
   );
@@ -276,7 +274,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   }
 
   return (
-    <div className="flex max-h-[620px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
+    <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
       {visible.map((message, index) => {
         const side = messageSide(message, index);
         const mine = side === role;
