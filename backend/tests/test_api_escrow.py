@@ -12,6 +12,12 @@ def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
     seed_demo_repository(repository)
+    creator_001 = repository.get_raw_document("creatorProfiles/creator-001")
+    if creator_001 is not None:
+        repository.save_raw_document(
+            "creatorProfiles/creator-001",
+            {**creator_001, "walletAddress": "creator-wallet"},
+        )
     return TestClient(create_app(settings=settings, repository=repository)), repository
 
 
@@ -43,7 +49,7 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                 "idempotencyKey": idempotency_key,
                 "signature": "lock-signature-confirmed" if status == "CONFIRMED" else None,
                 "explorerUrl": (
-                    "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=devnet"
+                    "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=testnet"
                     if status == "CONFIRMED"
                     else None
                 ),
@@ -52,8 +58,10 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                     "campaignId": "123",
                     "campaign": "campaign-pda",
                     "creator": "creator-wallet",
+                    "creatorDestination": payload["creatorDestination"],
                     "creatorToken": "creator-token",
                     "agentAuthority": "agent-wallet",
+                    "agentId": payload["agentId"],
                     "treasuryToken": "treasury-token",
                     "mint": payload["mint"],
                     "milestoneIds": payload["milestoneIds"],
@@ -82,7 +90,7 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                 "idempotencyKey": idempotency_key,
                 "signature": "release-signature-confirmed" if status == "CONFIRMED" else None,
                 "explorerUrl": (
-                    "https://explorer.solana.com/tx/release-signature-confirmed?cluster=devnet"
+                    "https://explorer.solana.com/tx/release-signature-confirmed?cluster=testnet"
                     if status == "CONFIRMED"
                     else None
                 ),
@@ -139,7 +147,8 @@ def test_lock_creates_escrow_with_confirmed_receipt_and_no_fee(monkeypatch) -> N
     escrow = data["escrow"]
     assert escrow["status"] == "LOCKED"
     assert escrow["platformFeeBps"] == 0
-    assert escrow["network"] == "solanaDevnet"
+    assert escrow["network"] == "solanaTestnet"
+    assert escrow["creatorDestinationWallet"] == "creator-wallet"
     assert escrow["releasedAmountBaseUnits"] == "0"
     assert int(escrow["lockedAmountBaseUnits"]) > 0
     assert escrow["termsHash"] == agreement["termsHash"]
@@ -151,6 +160,32 @@ def test_lock_creates_escrow_with_confirmed_receipt_and_no_fee(monkeypatch) -> N
     assert escrow_response.status_code == 200
     assert escrow_response.json()["data"]["escrow"]["escrowId"] == escrow["escrowId"]
     assert escrow_response.json()["data"]["settlements"] == []
+
+
+def test_start_negotiation_auto_locks_escrow_when_enabled(monkeypatch) -> None:
+    install_confirmed_gateway(monkeypatch)
+    client, repository = seeded(
+        Settings(
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            agent_auto_settlement=True,
+        )
+    )
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
+
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    agreement = data["agreement"]
+    assert data["autoEscrow"]["status"] == "LOCKED"
+    assert data["autoEscrow"]["escrow"]["agreementId"] == agreement["agreementId"]
+    escrows = repository.list_raw_documents("escrows")
+    assert len(escrows) == 1
+    assert escrows[0]["lockSignature"] == "lock-signature-confirmed"
+    assert timeline_types(client).count("ESCROW_LOCKED") == 1
 
 
 def test_lock_requires_idempotency_key() -> None:
@@ -247,6 +282,45 @@ def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch)
     receipt_id = data["receipt"]["receiptId"]
     assert client.get(f"/api/v1/transaction-receipts/{receipt_id}").status_code == 200
     assert "MILESTONE_RELEASED" in timeline_types(client)
+
+
+def test_verify_evidence_auto_releases_when_enabled(monkeypatch) -> None:
+    install_confirmed_gateway(monkeypatch)
+    client, repository = seeded(
+        Settings(
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            agent_auto_settlement=True,
+        )
+    )
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+    agreement = client.post(
+        f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation"
+    ).json()["data"]["agreement"]
+    evidence = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": CLEAN_EVIDENCE_URL,
+            "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
+        },
+    ).json()["data"]["evidence"]
+
+    response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["evidence"]["status"] == "PASSED"
+    assert data["autoRelease"]["status"] == "RELEASED"
+    settlement = data["autoRelease"]["settlement"]
+    assert settlement["signature"] == "release-signature-confirmed"
+    escrows = repository.list_raw_documents("escrows")
+    assert escrows[0]["status"] == "COMPLETED"
+    assert repository.list_raw_documents("settlements")[0]["settlementId"] == settlement[
+        "settlementId"
+    ]
 
 
 def test_release_blocked_without_passing_evidence(monkeypatch) -> None:
@@ -349,7 +423,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                 "network": payload["network"],
                 "idempotencyKey": idempotency_key,
                 "signature": "lock-signature-confirmed",
-                "explorerUrl": "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=devnet",
+                "explorerUrl": "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=testnet",
                 "liveContext": {
                     "escrowId": payload["escrowId"],
                     "campaignId": "123",
@@ -388,7 +462,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                 "network": payload["network"],
                 "idempotencyKey": idempotency_key,
                 "signature": "release-signature-confirmed",
-                "explorerUrl": "https://explorer.solana.com/tx/release-signature-confirmed?cluster=devnet",
+                "explorerUrl": "https://explorer.solana.com/tx/release-signature-confirmed?cluster=testnet",
             }
 
     monkeypatch.setattr("apps.api.routes.Web3GatewayClient", FakeGatewayClient)

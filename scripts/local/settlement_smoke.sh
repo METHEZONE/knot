@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # knot — 정산 전체 경로 스모크 (로컬넷 실서명). "정산이 되는가"를 판정한다.
 #
-#   scripts/local/settlement_smoke.sh                        # 시드 프로모션(promotion-001) 자동 전체
+#   scripts/local/settlement_smoke.sh                        # 데모 계정 프로모션(promotion-lip-balm) 자동 전체
 #   scripts/local/settlement_smoke.sh <promotionId>          # 브라우저에서 내가 만든 프로모션으로
 #   scripts/local/settlement_smoke.sh --agreement <id>       # 이미 만들어진 합의만 정산
 #
@@ -9,41 +9,88 @@
 # 결과는 /brand/agreements/{agreementId} 화면에서 Escrow state·signature 로 확인하면 된다.
 #
 # 전제: scripts/local/localnet_bootstrap.py 실행 후 dev_stack.sh 로 스택 기동
-#       (게이트웨이가 KNOT_WEB3_SIGNING_MODE=devnet + 로컬넷 RPC 여야 한다)
+#       (게이트웨이가 KNOT_WEB3_SIGNING_MODE=devnet/testnet/live + 로컬넷 RPC 여야 한다)
 #
 # 흐름: 매칭 → A2A 협상/합의 → 에스크로 락(온체인) → 증빙 제출/검증 → 마일스톤 릴리즈(온체인)
 #       → 크리에이터 USDC 잔액이 실제로 늘었는지 온체인 확인
-# 메모리 저장소는 기동 시 데모 시드(promotion-001)가 들어 있어 브랜드/크리에이터 계정 없이도 돈다.
+# 메모리 저장소는 기동 시 t1/c1 데모 시드(promotion-lip-balm)가 들어 있어 바로 돈다.
 set -euo pipefail
-API="${KNOT_API:-http://127.0.0.1:18080}"
-RPC="${SOLANA_RPC_URL:-http://127.0.0.1:8899}"
 RUNTIME="${KNOT_LOG_DIR:-/tmp/knot-local}"
 STAMP="$(date +%s)"
 jqp() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1]))" "$1"; }
 step() { printf '\n▸ %s\n' "$1"; }
+wait_http() { local url="$1" n="${2:-30}"; for _ in $(seq 1 "$n"); do curl -fsS -m 5 "$url" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
+emulator_token() {
+  python3 - "$1" "$2" <<'PY'
+import base64
+import json
+import sys
+
+uid, email = sys.argv[1], sys.argv[2]
+header = {"alg": "none", "typ": "JWT"}
+payload = {"uid": uid, "user_id": uid, "sub": uid, "email": email}
+
+def enc(value):
+    raw = json.dumps(value, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+print(f"{enc(header)}.{enc(payload)}.")
+PY
+}
 
 [[ -f "$RUNTIME/env.localnet" ]] || { echo "❌ 정산 배선 없음 → .venv/bin/python scripts/local/localnet_bootstrap.py 먼저"; exit 1; }
 # shellcheck disable=SC1091
 . "$RUNTIME/env.localnet"
+API="${KNOT_API:-http://127.0.0.1:18080}"
+RPC="${SOLANA_RPC_URL:-http://127.0.0.1:8899}"
+
+wait_http "$API/healthz" 30 || { echo "❌ Product API 준비 안 됨: $API/healthz"; exit 1; }
+wait_http "${WEB3_GATEWAY_BASE_URL:-http://127.0.0.1:8082}/healthz" 30 || {
+  echo "❌ Web3 Gateway 준비 안 됨: ${WEB3_GATEWAY_BASE_URL:-http://127.0.0.1:8082}/healthz"
+  exit 1
+}
 
 step "서명 모드 / 지갑 준비"
-echo "   signingMode=${KNOT_WEB3_SIGNING_MODE:-?} (devnet 이어야 실서명. simulated 면 Product API가 정산 성공으로 안 받는다)"
+echo "   signingMode=${KNOT_WEB3_SIGNING_MODE:-?} (devnet/testnet/live 이어야 실서명. simulated 면 Product API가 정산 성공으로 안 받는다)"
 # 게이트웨이가 에이전트/크리에이터 토큰계정을 비-멱등 createAccount 로 만들기 때문에(solana.ts:95,140)
 # 같은 지갑으로 두 번째 락을 걸면 "Provided owner is not allowed" 로 실패한다.
 # → 스모크는 매 실행마다 지갑을 새로 뽑는다. (게이트웨이는 키페어 파일을 요청마다 읽으므로 재시작 불필요)
 solana-keygen new --no-bip39-passphrase -s -f -o "$KNOT_AGENT_KEYPAIR_PATH" >/dev/null
 solana-keygen new --no-bip39-passphrase -s -f -o "$KNOT_CREATOR_KEYPAIR_PATH" >/dev/null
 echo "   에이전트/크리에이터 지갑 새로 발급 (비-멱등 토큰계정 생성 회피)"
+CREATOR_PUB=$(solana address -k "$KNOT_CREATOR_KEYPAIR_PATH")
 
 if [[ "${1:-}" == "--agreement" ]]; then
   AGREEMENT="${2:?--agreement <agreementId> 필요}"
   step "기존 합의 사용: $AGREEMENT"
   CREATOR_AGENT=$(curl -fsS "$API/api/v1/agreements/$AGREEMENT" | jqp "d['data']['agreement']['creatorAgentId']")
 else
-  PROMOTION="${1:-promotion-001}"
+  PROMOTION="${1:-promotion-lip-balm}"
+  if [[ "$PROMOTION" == "promotion-lip-balm" ]]; then
+    step "데모 Creator Agent 활성화 (c1@knot.com → agent-creator-1)"
+    CREATOR_AUTH="$(emulator_token user-creator-1 c1@knot.com)"
+    curl -fsS -X POST -H "Authorization: Bearer $CREATOR_AUTH" -H "Content-Type: application/json" \
+      -d "{\"walletAddress\":\"$CREATOR_PUB\"}" "$API/api/v1/me/wallet" >/dev/null
+    echo "   c1 정산 지갑=$CREATOR_PUB"
+    PUBLISHED=$(curl -fsS -X POST -H "Authorization: Bearer $CREATOR_AUTH" "$API/api/v1/creator/agent:publish")
+    printf '%s' "$PUBLISHED" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']
+print('   creatorAgent=', d['agent']['agentId'])
+print('   discovery=', d['discoveryProfile']['creatorId'], d['discoveryProfile']['agentStatus'])
+"
+  fi
   step "매칭 실행 ($PROMOTION)"
   MATCH=$(curl -fsS -X POST "$API/api/v1/promotions/$PROMOTION/matches:run" | jqp "d['data']['matchRun']['matchRunId']")
   echo "   matchRun=$MATCH"
+  if [[ "$PROMOTION" == "promotion-lip-balm" ]]; then
+    SELECTED=$(curl -fsS -X POST "$API/api/v1/match-runs/$MATCH/candidates/agent-creator-1:select")
+    printf '%s' "$SELECTED" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']['matchRun']
+print('   selectedCreator=', d.get('selectedCreatorId'), d.get('selectedCreatorAgentId'))
+"
+  fi
 
   step "A2A 협상 → 합의(Agreement) 생성"
   AGREEMENT_JSON=$(curl -fsS -X POST "$API/api/v1/match-runs/$MATCH:start-negotiation")
@@ -59,9 +106,16 @@ fi
 echo "   확인 URL: http://127.0.0.1:3000/brand/agreements/$AGREEMENT"
 
 step "에스크로 락 — 온체인 (여기서 실제 서명이 나와야 한다)"
-LOCK=$(curl -fsS -X POST -H "Idempotency-Key: lock-$STAMP" "$API/api/v1/agreements/$AGREEMENT/escrow:lock")
-ESCROW=$(printf '%s' "$LOCK" | jqp "d['data']['escrow']['escrowId']")
-SIG=$(printf '%s' "$LOCK" | jqp "d['data']['escrow'].get('lockSignature') or '(없음)'")
+EXISTING_LOCK=$(curl -fsS "$API/api/v1/agreements/$AGREEMENT/escrow")
+ESCROW=$(printf '%s' "$EXISTING_LOCK" | jqp "(d['data'].get('escrow') or {}).get('escrowId') or ''")
+if [[ -n "$ESCROW" ]]; then
+  LOCK="$EXISTING_LOCK"
+  echo "   자동 Agent lock 사용"
+else
+  LOCK=$(curl -fsS -X POST -H "Idempotency-Key: lock-$STAMP" "$API/api/v1/agreements/$AGREEMENT/escrow:lock")
+  ESCROW=$(printf '%s' "$LOCK" | jqp "d['data']['escrow']['escrowId']")
+fi
+SIG=$(printf '%s' "$LOCK" | jqp "(d['data'].get('escrow') or {}).get('lockSignature') or '(없음)'")
 echo "   escrow=$ESCROW"
 echo "   lock signature=$SIG"
 
@@ -69,25 +123,31 @@ step "증빙 제출 + 검증 (milestone=content)"
 EVIDENCE=$(curl -fsS -X POST -H "Content-Type: application/json" \
   -d "{\"url\":\"https://social.example/post/with-brand-and-ad\",\"submittedByAgentId\":\"$CREATOR_AGENT\",\"milestoneId\":\"content\"}" \
   "$API/api/v1/agreements/$AGREEMENT/evidence" | jqp "d['data']['evidence']['evidenceId']")
-curl -fsS -X POST "$API/api/v1/evidence/$EVIDENCE:verify" | python3 -c "
+VERIFY=$(curl -fsS -X POST "$API/api/v1/evidence/$EVIDENCE:verify")
+printf '%s' "$VERIFY" | python3 -c "
 import json,sys
 e=json.load(sys.stdin)['data']['evidence']
 print('   판정:', e.get('verificationResult') or e.get('status') or json.dumps(e)[:200])"
 
 step "마일스톤 릴리즈 — 온체인 정산"
-REL=$(curl -fsS -X POST -H "Idempotency-Key: rel-$STAMP" \
-  "$API/api/v1/escrows/$ESCROW/milestones/content:release")
+AUTO_RELEASED=$(printf '%s' "$VERIFY" | jqp "(d['data'].get('autoRelease') or {}).get('status') == 'RELEASED'")
+if [[ "$AUTO_RELEASED" == "True" ]]; then
+  REL="$VERIFY"
+  echo "   자동 Agent release 사용"
+else
+  REL=$(curl -fsS -X POST -H "Idempotency-Key: rel-$STAMP" \
+    "$API/api/v1/escrows/$ESCROW/milestones/content:release")
+fi
 printf '%s' "$REL" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['data']
-s=d.get('settlement') or {}
+s=(d.get('autoRelease') or {}).get('settlement') or d.get('settlement') or {}
 print('   settlement status:', s.get('status'))
-print('   release signature:', s.get('signature') or d.get('receipt',{}).get('gatewayReceipt',{}).get('signature'))
+print('   release signature:', s.get('signature') or (d.get('autoRelease') or {}).get('receipt',{}).get('gatewayReceipt',{}).get('signature') or d.get('receipt',{}).get('gatewayReceipt',{}).get('signature'))
 print('   amount(baseUnits):', s.get('amountBaseUnits') or s.get('releasedAmountBaseUnits'))
 "
 
 step "온체인 확인 — 크리에이터 토큰 잔액"
-CREATOR_PUB=$(solana address -k "$KNOT_CREATOR_KEYPAIR_PATH")
 spl_out=$(solana --url "$RPC" balance "$CREATOR_PUB" 2>/dev/null || true)
 echo "   creator wallet=$CREATOR_PUB  SOL=$spl_out"
 python3 - <<PY

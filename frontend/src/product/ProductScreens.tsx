@@ -1796,7 +1796,7 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
         <Panel>
           <SectionTitle eyebrow="Next" title="정산 준비" />
           <p className="text-muted">
-            실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Devnet escrow로 진행됩니다.
+            실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Testnet escrow로 진행됩니다.
           </p>
           <div className="mt-5">
             {view.agreementId ? (
@@ -2131,7 +2131,7 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
           <Input label="Wallet address" placeholder={wallet.address ?? roleSession.walletAddress} />
-          <InfoBox label="Network" value="Solana Devnet" />
+          <InfoBox label="Network" value="Solana Testnet" />
           <button
             type="button"
             onClick={() => {
@@ -2600,7 +2600,7 @@ function SettlementActionPanel({
     <Panel>
       <SectionTitle eyebrow="Action" title="Escrow 실행" />
       <p className="text-sm text-muted">
-        Escrow 성공 처리는 Web3 Gateway가 확인한 Solana Devnet signature가 있을 때만 가능합니다. 페이지
+        Escrow 성공 처리는 Web3 Gateway가 확인한 Solana Testnet signature가 있을 때만 가능합니다. 페이지
         진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
       </p>
       {error && <FormError message={error} />}
@@ -3013,7 +3013,7 @@ function TxBox({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded border border-border-subtle bg-background p-3">
       <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
-      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live devnet transaction"}</div>
+      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live testnet transaction"}</div>
     </div>
   );
 }

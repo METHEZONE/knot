@@ -57,6 +57,7 @@
       "totalUsdc": 1000,
       "maxPerCreatorUsdc": 500
     },
+    "initialOffer": 250,
     "deliverables": [
       {
         "format": "reel",
@@ -77,8 +78,8 @@
     },
     "autonomy": {
       "maxNegotiationRounds": 3,
-      "autoEscrow": false,
-      "autoRelease": false
+      "autoEscrow": true,
+      "autoRelease": true
     },
     "status": "ACTIVE",
     "activeNegotiationCount": 0,

@@ -2,7 +2,7 @@
   {
     "userId": "user-brand-1",
     "uid": "user-brand-1",
-    "email": "test1@knot.demo",
+    "email": "t1@knot.com",
     "displayName": "루미에르 뷰티 담당자",
     "role": "BRAND",
     "onboardingStatus": "COMPLETED",
@@ -11,8 +11,8 @@
     "status": "ACTIVE",
     "schemaVersion": 2,
     "authProvider": "demo-fixture",
-    "demoLoginId": "test1",
-    "demoPasswordHint": "0000",
+    "demoLoginId": "t1",
+    "demoPasswordHint": "000000",
     "demoNamespace": "knot-demo-v1",
     "createdAt": "2026-07-27T00:00:00Z",
     "updatedAt": "2026-07-27T00:00:00Z"
@@ -38,7 +38,7 @@
   {
     "userId": "user-creator-1",
     "uid": "user-creator-1",
-    "email": "test3@knot.demo",
+    "email": "c1@knot.com",
     "displayName": "민지의 뷰티룸",
     "role": "CREATOR",
     "onboardingStatus": "COMPLETED",
@@ -47,8 +47,8 @@
     "status": "ACTIVE",
     "schemaVersion": 2,
     "authProvider": "demo-fixture",
-    "demoLoginId": "test3",
-    "demoPasswordHint": "0000",
+    "demoLoginId": "c1",
+    "demoPasswordHint": "000000",
     "demoNamespace": "knot-demo-v1",
     "createdAt": "2026-07-27T00:00:00Z",
     "updatedAt": "2026-07-27T00:00:00Z"

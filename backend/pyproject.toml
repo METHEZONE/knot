@@ -50,7 +50,7 @@ asyncio_mode = "auto"
 addopts = "-p no:pytest_anchorpy"
 markers = [
     "integration: pay.sh/네트워크 필요",
-    "devnet: 배포된 프로그램 + 펀딩된 지갑 필요 (KNOT_RUN_DEVNET=1)",
+    "devnet: legacy marker for shared Solana cluster tests; use KNOT_RUN_TESTNET=1",
 ]
 
 [tool.mypy]

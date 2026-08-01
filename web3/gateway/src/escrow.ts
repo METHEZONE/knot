@@ -13,13 +13,18 @@ const liveLockContextSchema = z.object({
   campaignId: z.string().regex(/^[0-9]+$/),
   campaign: z.string().min(1),
   creator: z.string().min(1),
+  creatorDestination: z.string().min(1).optional(),
   creatorToken: z.string().min(1),
   agentAuthority: z.string().min(1),
+  agentId: z.string().min(1).optional(),
   treasuryToken: z.string().min(1),
   mint: z.string().min(1),
   milestoneIds: z.array(z.string().min(1)).min(1).max(8),
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
 });
+
+const networkSchema = z.enum(["solanaDevnet", "solanaTestnet", "solanaLocalnet"]);
+type SolanaEscrowNetwork = z.infer<typeof networkSchema>;
 
 export const lockRequestSchema = z.object({
   agreementId: z.string().min(1),
@@ -30,7 +35,7 @@ export const lockRequestSchema = z.object({
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8).optional(),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: z.literal("solanaDevnet"),
+  network: networkSchema,
   brandAuthority: z.string().min(1),
   creatorDestination: z.string().min(1),
   agentId: z.string().min(1).optional()
@@ -44,7 +49,7 @@ export const releaseRequestSchema = z.object({
   expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: z.literal("solanaDevnet"),
+  network: networkSchema,
   creatorDestination: z.string().min(1),
   lockContext: liveLockContextSchema.optional()
 });
@@ -59,7 +64,7 @@ export type GatewayReceipt = {
   releasedAmountBaseUnits?: string;
   mint: string;
   programId: string;
-  network: "solanaDevnet";
+  network: SolanaEscrowNetwork;
   idempotencyKey: string;
   signature: string | null;
   explorerUrl: string | null;
@@ -145,13 +150,14 @@ export class EscrowLockService {
       };
     }
 
-    if (config.signingMode === "devnet") {
+    if (config.signingMode === "live") {
       try {
         const live = await submitEscrowLock(config, {
           agreementId: result.data.agreementId,
           escrowId: result.data.escrowId,
           termsHash: result.data.termsHash,
           expectedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+          creatorDestination: result.data.creatorDestination,
           milestoneIds,
           milestoneAmountsBaseUnits: milestoneAmounts,
           agentId: result.data.agentId
@@ -179,7 +185,7 @@ export class EscrowLockService {
           statusCode: 202,
           body: {
             data: receipt,
-            detail: "Escrow lock submitted and confirmed on Solana devnet"
+            detail: `Escrow lock submitted and confirmed on Solana ${config.solanaCluster}`
           }
         };
       } catch (error) {
@@ -269,7 +275,7 @@ export class EscrowLockService {
       };
     }
 
-    if (config.signingMode === "devnet") {
+    if (config.signingMode === "live") {
       const context = this.liveLocks.get(escrowId) ?? (
         result.data.lockContext ? parseLiveContext(result.data.lockContext) : undefined
       );
@@ -285,7 +291,8 @@ export class EscrowLockService {
       try {
         const live = await submitMilestoneRelease(config, context, {
           escrowId,
-          milestoneId
+          milestoneId,
+          creatorDestination: result.data.creatorDestination
         });
         const receipt: GatewayReceipt = {
           status: live.status,
@@ -309,7 +316,7 @@ export class EscrowLockService {
           statusCode: 202,
           body: {
             data: receipt,
-            detail: "Milestone release submitted and confirmed on Solana devnet"
+            detail: `Milestone release submitted and confirmed on Solana ${config.solanaCluster}`
           }
         };
       } catch (error) {
@@ -349,18 +356,23 @@ export class EscrowLockService {
 }
 
 function serializeLiveContext(context: LiveLockContext): Record<string, JsonValue> {
-  return {
+  const serialized: Record<string, JsonValue> = {
     escrowId: context.escrowId,
     campaignId: context.campaignId.toString(),
     campaign: context.campaign,
     creator: context.creator,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
+    ...(context.agentId ? { agentId: context.agentId } : {}),
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,
     milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
   };
+  if (context.creatorDestination) {
+    serialized.creatorDestination = context.creatorDestination;
+  }
+  return serialized;
 }
 
 function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveLockContext {
@@ -369,8 +381,10 @@ function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveL
     campaignId: BigInt(context.campaignId),
     campaign: context.campaign,
     creator: context.creator,
+    creatorDestination: context.creatorDestination,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
+    agentId: context.agentId,
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,

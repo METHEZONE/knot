@@ -176,6 +176,9 @@ def test_creator_agent_publish_pause_resume_maintains_discovery_projection_priva
     )
     assert stored_projection is not None
     assert stored_projection["creatorAgentId"] == creator["agentId"]
+    stored_creator = repository.get_creator_profile(creator["creatorId"])
+    assert stored_creator is not None
+    assert stored_creator.active is True
     registry_entry = repository.get_raw_document(
         FirestorePaths.agent_registry_entry(creator["agentId"])
     )
@@ -226,11 +229,11 @@ def test_seeded_demo_dashboards_show_expected_agreements_and_payouts() -> None:
 
     brand = client.get(
         "/api/v1/brand/dashboard",
-        headers=auth_headers("user-brand-1", "test1@knot.demo"),
+        headers=auth_headers("user-brand-1", "t1@knot.com"),
     )
     creator_one = client.get(
         "/api/v1/creator/dashboard",
-        headers=auth_headers("user-creator-1", "test3@knot.demo"),
+        headers=auth_headers("user-creator-1", "c1@knot.com"),
     )
     creator_two = client.get(
         "/api/v1/creator/dashboard",

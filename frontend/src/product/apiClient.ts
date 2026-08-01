@@ -307,9 +307,13 @@ export type ApiNegotiation = {
   productName?: string;
   brandId?: string;
   brandAgentId: string;
+  brandDisplayName?: string;
+  brandSnapshot?: Record<string, unknown> | null;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
+  creatorSnapshot?: Record<string, unknown> | null;
+  promotionSnapshot?: Record<string, unknown> | null;
   contextId: string;
   taskId: string;
   status:
@@ -340,12 +344,14 @@ export type ApiAgreement = {
   productName?: string;
   brandId?: string;
   brandAgentId: string;
+  brandDisplayName?: string;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
   terms: ApiAgreementTerms;
   deliverableSummary?: string;
   workItems?: Array<Record<string, unknown>>;
+  brandSnapshot?: Record<string, unknown> | null;
   promotionSnapshot?: Record<string, unknown> | null;
   creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
@@ -371,6 +377,8 @@ export type ApiNegotiationMessage = {
   sequence?: number;
   payload?: Record<string, unknown>;
   a2aMessage?: Record<string, unknown>;
+  transport?: "HTTP_A2A" | "IN_PROCESS_A2A" | string;
+  a2aEndpoint?: string;
   createdAt: string;
 };
 
@@ -388,6 +396,7 @@ export type ApiEscrow = {
   promotionId: string;
   lockedAmountBaseUnits: string;
   releasedAmountBaseUnits: string;
+  creatorDestinationWallet?: string | null;
   milestoneAmounts?: Record<string, string>;
   status: "LOCKED" | "COMPLETED" | string;
   lockSignature: string | null;
@@ -400,6 +409,7 @@ export type ApiSettlement = {
   agreementId: string;
   milestoneId: string;
   amountBaseUnits: string;
+  creatorDestinationWallet?: string | null;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   signature: string | null;
 };
@@ -412,6 +422,16 @@ export type ApiReceipt = {
   explorerUrl: string | null;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   detail?: string;
+};
+
+export type ApiAgentActionResult = {
+  action: "ESCROW_LOCK" | "MILESTONE_RELEASE" | string;
+  status: "LOCKED" | "RELEASED" | "FAILED" | "SKIPPED" | string;
+  escrow?: ApiEscrow;
+  settlement?: ApiSettlement;
+  receipt?: ApiReceipt;
+  reason?: string;
+  error?: Record<string, unknown>;
 };
 
 export type BrandDashboard = {
@@ -926,11 +946,15 @@ export class ProductApiClient {
   }
 
   async verifyEvidence(evidenceId: string) {
-    const response = await this.request<{ evidence: ApiEvidence }>(
+    const response = await this.verifyEvidenceWithAgentActions(evidenceId);
+    return response.evidence;
+  }
+
+  async verifyEvidenceWithAgentActions(evidenceId: string) {
+    return this.request<{ evidence: ApiEvidence; autoRelease?: ApiAgentActionResult | null }>(
       `/api/v1/evidence/${evidenceId}:verify`,
       { method: "POST" },
     );
-    return response.evidence;
   }
 
   async lockEscrow(agreementId: string) {

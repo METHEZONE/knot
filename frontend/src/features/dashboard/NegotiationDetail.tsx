@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
+import { usePhantomWallet } from "@/features/wallet/usePhantomWallet";
 import {
   type ApiAgreement,
   type ApiAgreementEscrowBundle,
@@ -133,13 +134,10 @@ export function NegotiationDetail({
         />
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <CounterpartyProfilePanel role={role} negotiation={negotiation} agreement={agreement} />
         <WorkSummaryPanel role={role} negotiation={negotiation} agreement={agreement} />
-
-        <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
-          <MessageThread role={role} messages={messages} />
-        </section>
+        <WalletSettlementPanel role={role} escrowBundle={escrowBundle} />
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
@@ -168,7 +166,64 @@ export function NegotiationDetail({
         )}
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
       </section>
+
+      <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
+        <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
+        <MessageThread role={role} messages={messages} />
+      </section>
     </div>
+  );
+}
+
+function CounterpartyProfilePanel({
+  role,
+  negotiation,
+  agreement,
+}: {
+  role: Role;
+  negotiation: ApiNegotiation;
+  agreement: ApiAgreement | null;
+}) {
+  const brand = agreement?.brandSnapshot ?? negotiation.brandSnapshot ?? null;
+  const creator = agreement?.creatorSnapshot ?? negotiation.creatorSnapshot ?? null;
+  const promotion = agreement?.promotionSnapshot ?? negotiation.promotionSnapshot ?? null;
+  const counterparty = role === "brand" ? creator : brand;
+  const counterpartyTitle =
+    role === "brand"
+      ? textValue(counterparty, "displayName", agreement?.creatorDisplayName ?? negotiation.creatorDisplayName ?? negotiation.creatorAgentId)
+      : textValue(counterparty, "displayName", agreement?.brandDisplayName ?? negotiation.brandDisplayName ?? negotiation.brandAgentId);
+  const counterpartyAgent =
+    role === "brand"
+      ? textValue(counterparty, "creatorAgentId", negotiation.creatorAgentId)
+      : negotiation.brandAgentId;
+
+  return (
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <SectionHeader
+        eyebrow={role === "brand" ? "Creator profile" : "Brand profile"}
+        title={counterpartyTitle}
+      />
+      <div className="grid gap-3">
+        <Metric label={role === "brand" ? "Creator Agent" : "Brand Agent"} value={counterpartyAgent} />
+        {role === "brand" ? (
+          <>
+            <Metric label="카테고리" value={listValue(counterparty, "categories")} />
+            <Metric label="완료된 거래" value={textValue(counterparty, "completedDealCount", "0")} />
+          </>
+        ) : (
+          <>
+            <Metric label="웹사이트" value={textValue(counterparty, "websiteUrl", "미등록")} />
+            <Metric label="타깃" value={textValue(counterparty, "targetAudience", "미등록")} />
+          </>
+        )}
+        <Metric label="프로모션" value={textValue(promotion, "productName", negotiation.productName ?? negotiation.promotionTitle ?? "프로모션")} />
+      </div>
+      <p className="mt-3 text-sm text-muted">
+        {role === "brand"
+          ? "이 협상은 위 Creator Agent와 체결된 기록입니다."
+          : "이 협상은 위 Brand Agent가 보낸 제안에서 체결된 기록입니다."}
+      </p>
+    </section>
   );
 }
 
@@ -219,7 +274,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   }
 
   return (
-    <div className="flex max-h-[620px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
+    <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
       {visible.map((message, index) => {
         const side = messageSide(message, index);
         const mine = side === role;
@@ -238,7 +293,18 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
               <p className="font-mono text-[10px] uppercase opacity-70">
                 {side === "brand" ? "Brand Agent" : "Creator Agent"} · #{message.sequence ?? index + 1}
               </p>
+              <p className="mt-1 font-mono text-[10px] opacity-70">
+                {message.transport ?? "A2A_STORED"} · {message.a2aEndpoint ?? message.taskId}
+              </p>
               <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
+              <details className="mt-3">
+                <summary className="cursor-pointer font-mono text-[10px] uppercase opacity-70">
+                  A2A payload
+                </summary>
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[10px] text-foreground">
+                  {formatA2aPayload(message)}
+                </pre>
+              </details>
               <p className="mt-2 font-mono text-[10px] opacity-60">{formatTime(message.createdAt)}</p>
             </div>
           </motion.div>
@@ -250,6 +316,66 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
         </div>
       ) : null}
     </div>
+  );
+}
+
+function WalletSettlementPanel({
+  role,
+  escrowBundle,
+}: {
+  role: Role;
+  escrowBundle: ApiAgreementEscrowBundle | null;
+}) {
+  const client = useMemo(() => new ProductApiClient(), []);
+  const wallet = usePhantomWallet();
+  const [balance, setBalance] = useState<Record<string, unknown> | null>(null);
+  const escrow = escrowBundle?.escrow ?? null;
+  const latestSettlement = escrowBundle?.settlements?.[escrowBundle.settlements.length - 1] ?? null;
+
+  const loadBalance = useCallback(async () => {
+    setBalance(await client.getMyWalletBalance());
+  }, [client]);
+
+  useEffect(() => {
+    let active = true;
+    client
+      .getMyWalletBalance()
+      .then((nextBalance) => {
+        if (active) setBalance(nextBalance);
+      })
+      .catch(() => {
+        if (active) setBalance({ connected: false });
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, wallet.address]);
+
+  return (
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <SectionHeader eyebrow="Wallet & settlement" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
+      <div className="grid gap-3">
+        <Metric label="Phantom 지갑" value={wallet.address ?? textValue(balance, "address", "미연결")} />
+        <Metric label="잔고" value={walletBalanceLabel(balance)} />
+        <Metric label="Escrow" value={escrow ? `${escrow.status} · ${baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)}` : "아직 잠김 없음"} />
+        <Metric label={role === "brand" ? "크리에이터 수령 지갑" : "수령 지갑"} value={escrow?.creatorDestinationWallet ?? "정산 지갑 연결 필요"} />
+        <Metric label="정산 tx" value={latestSettlement?.signature ?? "정산 전"} />
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          void wallet.connect().then(() => loadBalance());
+        }}
+        disabled={wallet.status === "connecting" || wallet.status === "saving"}
+        className="sketch-pill mt-4 bg-accent px-4 py-2 text-background disabled:opacity-50"
+      >
+        {wallet.status === "connecting" ? "Phantom 연결 중..." : wallet.status === "saving" ? "지갑 저장 중..." : "Phantom 지갑 연결"}
+      </button>
+      {wallet.error ? <p className="mt-2 text-sm text-negative">{wallet.error}</p> : null}
+      <p className="mt-3 text-sm text-muted">
+        Agent가 정책 한도 안에서 escrow lock/release를 실행하고, Phantom 지갑은 사용자의 수령/확인 지갑으로 저장됩니다.
+      </p>
+    </section>
   );
 }
 
@@ -352,18 +478,41 @@ function MilestonePanel({
                   : `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`}
             </p>
             <WorkItemList terms={agreement.terms} compact />
-            {role === "creator" && escrow && !released ? (
-              <EvidenceForm
-                agreement={agreement}
-                escrowId={escrow.escrowId}
-                milestoneId={milestone.id}
-                onRefresh={onRefresh}
-                onError={onError}
-              />
+            {role === "creator" ? (
+              escrow && !released ? (
+                <EvidenceForm
+                  agreement={agreement}
+                  escrowId={escrow.escrowId}
+                  milestoneId={milestone.id}
+                  onRefresh={onRefresh}
+                  onError={onError}
+                />
+              ) : (
+                <EvidencePlaceholder released={released} hasEscrow={Boolean(escrow)} />
+              )
             ) : null}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function EvidencePlaceholder({ released, hasEscrow }: { released: boolean; hasEscrow: boolean }) {
+  return (
+    <div className="mt-4 flex flex-col gap-2">
+      <input
+        disabled
+        placeholder="https://instagram.com/p/..."
+        className="sketch-alt ink border border-border-subtle bg-surface px-3 py-2 text-sm text-muted outline-none opacity-70"
+      />
+      <p className="text-xs text-muted">
+        {released
+          ? "이미 Agent 검토와 정산이 완료되어 추가 제출이 잠겼습니다."
+          : hasEscrow
+            ? "제출 준비 중입니다."
+            : "에스크로가 먼저 잠겨야 영상 링크를 제출할 수 있습니다."}
+      </p>
     </div>
   );
 }
@@ -391,9 +540,12 @@ function EvidenceForm({
     onError(null);
     try {
       const evidence = await client.submitEvidence(agreement, milestoneId, url);
-      const verified = await client.verifyEvidence(evidence.evidenceId);
-      setLastEvidence(verified);
-      if (verified.status === "PASSED") {
+      const verification = await client.verifyEvidenceWithAgentActions(evidence.evidenceId);
+      setLastEvidence(verification.evidence);
+      if (
+        verification.evidence.status === "PASSED" &&
+        verification.autoRelease?.status !== "RELEASED"
+      ) {
         await client.releaseMilestone(escrowId, milestoneId);
       }
       await onRefresh();
@@ -492,6 +644,19 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
   return rationale ?? type;
 }
 
+function formatA2aPayload(message: ApiNegotiationMessage) {
+  const a2aData = firstA2aPartData(message.a2aMessage);
+  return JSON.stringify(a2aData ?? message.payload ?? {}, null, 2);
+}
+
+function firstA2aPartData(a2aMessage: Record<string, unknown> | undefined) {
+  const parts = a2aMessage?.parts;
+  if (!Array.isArray(parts)) return null;
+  const first = parts[0];
+  if (!isRecord(first)) return null;
+  return first.data ?? null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -500,6 +665,28 @@ function numberFromUnknown(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
   return null;
+}
+
+function textValue(source: Record<string, unknown> | null | undefined, key: string, fallback: string) {
+  const value = source?.[key];
+  if (typeof value === "string" && value) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString();
+  return fallback;
+}
+
+function listValue(source: Record<string, unknown> | null | undefined, key: string) {
+  const value = source?.[key];
+  if (Array.isArray(value)) return value.map(String).join(", ") || "미등록";
+  return typeof value === "string" && value ? value : "미등록";
+}
+
+function walletBalanceLabel(balance: Record<string, unknown> | null) {
+  if (!balance) return "조회 중";
+  if (!balance || balance.connected === false) return "지갑 미연결";
+  if (typeof balance.error === "string") return balance.error;
+  const sol = typeof balance.sol === "number" ? `${balance.sol.toLocaleString()} SOL` : "SOL -";
+  const usdc = typeof balance.usdc === "number" ? `${balance.usdc.toLocaleString()} USDC` : "USDC -";
+  return `${usdc} / ${sol}`;
 }
 
 function formatDeliverable(format: string) {

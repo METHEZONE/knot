@@ -15,12 +15,12 @@ set -euo pipefail
 UID_TARGET="${1:-user-brand-1}"
 PROJECT="${DEMO_EMULATOR_PROJECT:-demo-knot}"
 EMU="${FIREBASE_AUTH_EMULATOR:-127.0.0.1:9099}"
-PASSWORD="${DEMO_PASSWORD:-knot-demo-1234}"
+PASSWORD="${DEMO_PASSWORD:-000000}"
 
 case "$UID_TARGET" in
-  user-brand-1)   EMAIL="test1@knot.demo"; NAME="루미에르 뷰티 담당자" ;;
+  user-brand-1)   EMAIL="t1@knot.com"; NAME="루미에르 뷰티 담당자" ;;
   user-brand-2)   EMAIL="test2@knot.demo"; NAME="바삭데이 담당자" ;;
-  user-creator-1) EMAIL="test3@knot.demo"; NAME="민지의 뷰티룸" ;;
+  user-creator-1) EMAIL="c1@knot.com"; NAME="민지의 뷰티룸" ;;
   user-creator-2) EMAIL="test4@knot.demo"; NAME="하루한입" ;;
   *) EMAIL="$UID_TARGET@knot.demo"; NAME="$UID_TARGET" ;;
 esac
