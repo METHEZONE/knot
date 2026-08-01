@@ -226,11 +226,11 @@ def test_seeded_demo_dashboards_show_expected_agreements_and_payouts() -> None:
 
     brand = client.get(
         "/api/v1/brand/dashboard",
-        headers=auth_headers("user-brand-1", "test1@knot.demo"),
+        headers=auth_headers("user-brand-1", "t1@knot.com"),
     )
     creator_one = client.get(
         "/api/v1/creator/dashboard",
-        headers=auth_headers("user-creator-1", "test3@knot.demo"),
+        headers=auth_headers("user-creator-1", "c1@knot.com"),
     )
     creator_two = client.get(
         "/api/v1/creator/dashboard",

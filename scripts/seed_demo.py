@@ -18,7 +18,7 @@ from libs.repositories.store import InMemoryDocumentStore, KnotRepository  # noq
 DEMO_AUTH_USERS = [
     {
         "uid": "user-brand-1",
-        "email": "test1@knot.demo",
+        "email": "t1@knot.com",
         "display_name": "루미에르 뷰티 담당자",
     },
     {
@@ -28,7 +28,7 @@ DEMO_AUTH_USERS = [
     },
     {
         "uid": "user-creator-1",
-        "email": "test3@knot.demo",
+        "email": "c1@knot.com",
         "display_name": "민지의 뷰티룸",
     },
     {
@@ -86,7 +86,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--auth-password",
-        default="0000",
+        default="000000",
         help=(
             "Password for Firebase Auth demo users. "
             "Firebase may reject passwords shorter than 6 chars."

@@ -24,22 +24,32 @@
 - `npm run typecheck` passed in `frontend`.
 - `npm run lint` passed in `frontend`.
 - `npm run build` passed in `frontend`.
+- `npm test` passed in `web3/gateway` with 12 tests.
+- `npm run build` passed in `web3/gateway`.
+- `npm run lint` passed in `web3/gateway`.
+- `python -m pytest backend/tests/test_api_escrow.py backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_dashboards.py -q` passed with 50 tests.
 - `scripts/local/settlement_smoke.sh` passed against Solana localnet with Agent auto-lock and auto-release:
-  - Agreement `agreement-ea5fbf12-508c-4c01-b30a-2185168287cb`
-  - Escrow lock signature `5t3Fhmqq97xnxzWRX3nJdxTJz2fzRwKsxvscqUrjGU5RWQvuMHfveHN4Qx7yLvLoi8rV7Jewv3pvQ1e7cib9XvQu`
-  - Release signature `5tD6e7BHjV5XS8gujtkbzZL556DXXDJvXm4PpTcRhdoQE2GfRH4uu4T9aUejGcy6GCjLbmwgCKo9fVWMhBsL19No`
-  - Creator wallet `L2UGwRSz7eXA9w1YoBmmAdYhz4VN5Z6bia6TfYzEBm4` received 650 USDC localnet test tokens.
+  - Agreement `agreement-0ab12d48-e76a-4175-afed-aa72d893e631`
+  - Negotiation `negotiation-229dd677-e7ca-4d51-be2b-1a720c31d5c5`
+  - Escrow `escrow-39f81b07-ba5b-468f-a934-431b69932e5a`
+  - Escrow lock signature `37VZrWZV5YGz56Q2AAeuBC52z1fmADZBKVcN7CXPPALCW5mBZzNnwnnGMjxdcYqu31pzNaBkMdc3EUimREn48JcF`
+  - Release signature `4hi1QBNKbVgSQoAwiSDeEjHTotVj2eLpeVyRJ8WLzb5yoyCKajQBwQQMf3PXxZ5UczrmMhVnZ51TWsCnczVEHfrB`
+  - Creator wallet `BTUfxMqG5HZ3XLvfXwgPb514Cbhf2e5xMGYyXPNG8dtr` received 650 USDC localnet test tokens.
+- Local Firebase Auth emulator demo accounts created:
+  - Brand: `t1@knot.com` / `000000`
+  - Creator: `c1@knot.com` / `000000`
 
 ## Deployment Script Fix
 
 - `scripts/deploy_cloud_run_demo.sh` now deploys `knot-web3` instead of leaving the gateway out of the release path.
 - Product API deployment now sets `KNOT_WEB3_MODE=gateway`, `WEB3_GATEWAY_BASE_URL`, `KNOT_AGENT_AUTO_SETTLEMENT=1`, and the same `KNOT_ESCROW_PROGRAM_ID` / `KNOT_USDC_MINT` values as the Web3 Gateway.
 - The script now requires `PAYSH_RESOURCE_ID` instead of silently deploying `replace-me`.
-- In `devnet` signing mode, Web3 Gateway deployment requires Secret Manager entries for `KNOT_BRAND_KEYPAIR_JSON`, `KNOT_CREATOR_KEYPAIR_JSON`, and `KNOT_AGENT_KEYPAIR_JSON`.
+- The shared demo target is now Solana testnet: `SOLANA_CLUSTER=testnet`, `SOLANA_RPC_URL=https://api.testnet.solana.com`, `KNOT_ESCROW_NETWORK=solanaTestnet`, and `KNOT_WEB3_SIGNING_MODE=testnet`.
+- In live signing mode, Web3 Gateway deployment requires Secret Manager entries for `KNOT_BRAND_KEYPAIR_JSON`, `KNOT_CREATOR_KEYPAIR_JSON`, and `KNOT_AGENT_KEYPAIR_JSON`.
+- Testnet deployment requires explicit `KNOT_ESCROW_PROGRAM_ID` and `KNOT_USDC_MINT`; the script no longer reuses devnet defaults.
 
 ## Deployment Blockers
 
 - Current Cloud Run `knot-web3` is configured with `KNOT_WEB3_SIGNING_MODE=simulated`, so Product API correctly rejects the receipt.
 - Secret Manager currently has only `knot-a2a-service-token`; no Web3 signer/pay.sh secrets are available.
-- Existing shared devnet escrow config uses mint `7HrvvAexhUwi8LriqvxNqFJTe13ffDH56wiWbFhueK3p` with mint authority `7yihfmYe4JtjcY3fLsE1Ez2Wm6aTMf4TN3U8xqyz5ebe`, but that keypair is not present locally or in Secret Manager.
-- A fresh devnet deploy attempt is blocked by public devnet airdrop rate limits for the generated payer `GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B`.
+- Testnet still needs a deployed escrow program, initialized config, funded signer wallets, and the selected testnet SPL mint before live Cloud Run lock/release can be claimed.

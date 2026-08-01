@@ -12,7 +12,7 @@
 → Promotion / Offer
 → 실제 A2A 협상
 → Agreement
-→ Solana devnet Escrow
+→ Solana testnet Escrow
 ```
 
 Society Map은 MVP 범위에서 제외한다.
@@ -56,7 +56,7 @@ Phase 1  Firebase Auth와 실제 사용자 세션
 Phase 2  1페이지 온보딩과 역할별 대시보드
 Phase 3  Promotion/Offer/Agreement 중심 resource route
 Phase 4  실제 HTTP A2A
-Phase 5  실제 Solana devnet escrow
+Phase 5  실제 Solana testnet escrow
 Phase 6  안전한 /dev/admin
 Phase 7  E2E·mock 제거·구 route 정리
 ```
@@ -73,4 +73,4 @@ Phase 7  E2E·mock 제거·구 route 정리
 - dev admin은 관리자 권한 없이는 접근할 수 없다.
 - 사용자 삭제는 Firebase Auth와 Firestore를 함께 처리하고 audit log를 남긴다.
 - 실제 A2A는 Product API와 Creator A2A Service 사이의 HTTP 통신이다.
-- 실제 escrow 성공은 Solana devnet signature가 확인된 경우에만 표시한다.
+- 실제 escrow 성공은 Solana testnet signature가 확인된 경우에만 표시한다.

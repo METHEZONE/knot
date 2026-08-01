@@ -489,7 +489,7 @@ export function ManagerChat({ role }: { role: Role }) {
 
             <AgentMessage role={role} at={6}>
               에스크로에 잠갔어요.
-              <Card title="에스크로 · Solana devnet">
+              <Card title="에스크로 · Solana testnet">
                 <EscrowVault total={deal.agreedUsdc} released={paid} />
                 <div className="mt-4 flex flex-col gap-2.5">
                   {deal.milestones.map((m, i) => {

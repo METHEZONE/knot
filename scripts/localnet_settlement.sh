@@ -3,8 +3,8 @@
 #
 # Runs the on-chain milestone-settlement test against your OWN local
 # solana-test-validator — no devnet, no airdrop limits, fast. This is the
-# "each teammate tests locally" environment; the shared devnet deploy happens
-# after merge via scripts/deploy_devnet.sh. See docs/SOLANA_ENVIRONMENTS.md.
+# "each teammate tests locally" environment; the shared testnet deploy happens
+# after merge via scripts/deploy_devnet.sh.
 #
 #   scripts/localnet_settlement.sh
 #
@@ -69,5 +69,5 @@ solana airdrop 100 --url "$RPC" >/dev/null 2>&1 || true
 solana program deploy "$SO" --program-id "$KP" --url "$RPC" >/dev/null
 
 echo "▸ running settlement test on localnet"
-KNOT_RUN_LOCALNET=1 KNOT_ESCROW_PROGRAM_ID="$PROG_ID" KNOT_DEVNET_RPC="$RPC" \
+KNOT_RUN_LOCALNET=1 KNOT_ESCROW_PROGRAM_ID="$PROG_ID" SOLANA_RPC_URL="$RPC" \
   "$PY" -m pytest backend/tests/test_escrow_devnet.py -q

@@ -72,7 +72,7 @@ def fund_agreement_for_evidence(
         "promotionId": agreement["promotionId"],
         "brandAgentId": agreement["brandAgentId"],
         "creatorAgentId": agreement["creatorAgentId"],
-        "network": "solanaDevnet",
+        "network": "solanaTestnet",
         "programId": "program-test",
         "mint": "mint-test",
         "lockedAmountBaseUnits": str(locked_amount),

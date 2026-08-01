@@ -21,9 +21,8 @@ def _load_dotenv() -> None:
                 os.environ[key] = val
 
 
-# Real devnet knot-escrow program id and USDC-SPL mint (see programs/knot-escrow
-# and backend/.env.example). Used to stamp escrow/receipt records so they stay
-# consistent when on-chain signing is wired.
+# Last known knot-escrow program id and SPL mint defaults. Live shared
+# deployments must override both values for the selected Solana cluster.
 DEFAULT_ESCROW_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
 DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
@@ -55,7 +54,7 @@ class Settings(BaseModel):
     paysh_daily_spend_cap_usdc: float = 1.0
     paysh_allowed_resource_prefixes: list[str] = ["https://debugger.pay.sh/mpp/quote/"]
     paysh_failure_policy: str = "continue"
-    escrow_network: str = "solanaDevnet"
+    escrow_network: str = "solanaTestnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
     agent_wallet_provision: bool = False
@@ -106,7 +105,10 @@ def get_settings(service_name: str | None = None) -> Settings:
             os.getenv("PAYSH_ALLOWED_RESOURCE_PREFIXES", "https://debugger.pay.sh/mpp/quote/")
         ),
         paysh_failure_policy=os.getenv("PAYSH_FAILURE_POLICY", "continue"),
-        escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
+        escrow_network=os.getenv(
+            "KNOT_ESCROW_NETWORK",
+            _solana_network_label(os.getenv("SOLANA_CLUSTER", "testnet")),
+        ),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         agent_wallet_provision=os.getenv("KNOT_AGENT_WALLET_PROVISION", "").lower()
         in ("1", "true", "yes"),
@@ -127,3 +129,12 @@ def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _solana_network_label(cluster: str) -> str:
+    normalized = cluster.strip().lower()
+    if normalized == "testnet":
+        return "solanaTestnet"
+    if normalized == "localnet":
+        return "solanaLocalnet"
+    return "solanaDevnet"

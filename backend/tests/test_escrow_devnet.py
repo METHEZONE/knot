@@ -1,8 +1,8 @@
-"""에스크로 온체인 정산 통합 테스트 — 로컬 샌드박스 또는 devnet.
+"""에스크로 온체인 정산 통합 테스트 — 로컬 샌드박스 또는 testnet.
 
 두 환경 (docs/SOLANA_ENVIRONMENTS.md 참고):
   로컬 샌드박스(추천, 각자 로컬):  scripts/localnet_settlement.sh
-  공유 devnet:                    KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -s
+  공유 testnet:                   KNOT_RUN_TESTNET=1 pytest backend/tests/test_escrow_devnet.py -s
 
 anchorpy 0.21 은 anchor 1.x 의 새 IDL 포맷을 파싱하지 못하므로, 이 테스트는
 anchorpy Program 대신 solders 로 인스트럭션을 직접 빌드해 배포된 프로그램을 호출한다.
@@ -22,15 +22,16 @@ pytestmark = pytest.mark.devnet
 
 # Two environments (see docs/SOLANA_ENVIRONMENTS.md):
 #   local sandbox — KNOT_RUN_LOCALNET=1 (solana-test-validator, per developer)
-#   shared devnet — KNOT_RUN_DEVNET=1
+#   shared testnet — KNOT_RUN_TESTNET=1
 _LOCALNET = os.environ.get("KNOT_RUN_LOCALNET") == "1"
-_RUN = _LOCALNET or os.environ.get("KNOT_RUN_DEVNET") == "1"
-_RPC = os.environ.get("KNOT_DEVNET_RPC") or (
-    "http://127.0.0.1:8899" if _LOCALNET else "https://api.devnet.solana.com"
+_TESTNET = os.environ.get("KNOT_RUN_TESTNET") == "1"
+_RUN = _LOCALNET or _TESTNET or os.environ.get("KNOT_RUN_DEVNET") == "1"
+_RPC = os.environ.get("SOLANA_RPC_URL") or os.environ.get("KNOT_DEVNET_RPC") or (
+    "http://127.0.0.1:8899" if _LOCALNET else "https://api.testnet.solana.com"
 )
 # Settle time between dependent txs. Local validators need a small gap so a
 # just-confirmed tx (e.g. mint_to) is visible to the next tx's preflight; the
-# public devnet needs a larger gap to avoid 429 rate-limits.
+    # public test clusters need a larger gap to avoid 429 rate-limits.
 _THROTTLE = 1.0 if ("127.0.0.1" in _RPC or "localhost" in _RPC) else 2.0
 
 
@@ -55,7 +56,7 @@ def _disc(name: str) -> bytes:
 
 
 async def _rpc(fn, tries: int = 9):
-    """Retry through the rate-limited public devnet RPC (429 / transient)."""
+    """Retry through rate-limited public Solana RPCs (429 / transient)."""
     for i in range(tries):
         try:
             result = await fn()
@@ -77,7 +78,10 @@ async def _rpc(fn, tries: int = 9):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(not _RUN, reason="set KNOT_RUN_LOCALNET=1 (sandbox) or KNOT_RUN_DEVNET=1")
+@pytest.mark.skipif(
+    not _RUN,
+    reason="set KNOT_RUN_LOCALNET=1 (sandbox) or KNOT_RUN_TESTNET=1",
+)
 async def test_full_milestone_flow() -> None:
     from solana.rpc.async_api import AsyncClient
     from solana.rpc.commitment import Confirmed
@@ -168,7 +172,7 @@ async def test_full_milestone_flow() -> None:
     vault_auth, _ = pdas.vault_authority_pda(campaign)
     vault, _ = pdas.vault_pda(campaign)
     reputation, _ = pdas.reputation_pda(creator.pubkey())
-    terms_hash = hashlib.sha256(b"knot-devnet-test").digest()
+    terms_hash = hashlib.sha256(b"knot-solana-cluster-test").digest()
 
     # agent(=funder)가 캠페인을 열고 자기 예산에서 vault로 예치 (사람 없이 자율 락)
     await send(

@@ -43,7 +43,7 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                 "idempotencyKey": idempotency_key,
                 "signature": "lock-signature-confirmed" if status == "CONFIRMED" else None,
                 "explorerUrl": (
-                    "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=devnet"
+                    "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=testnet"
                     if status == "CONFIRMED"
                     else None
                 ),
@@ -82,7 +82,7 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                 "idempotencyKey": idempotency_key,
                 "signature": "release-signature-confirmed" if status == "CONFIRMED" else None,
                 "explorerUrl": (
-                    "https://explorer.solana.com/tx/release-signature-confirmed?cluster=devnet"
+                    "https://explorer.solana.com/tx/release-signature-confirmed?cluster=testnet"
                     if status == "CONFIRMED"
                     else None
                 ),
@@ -139,7 +139,7 @@ def test_lock_creates_escrow_with_confirmed_receipt_and_no_fee(monkeypatch) -> N
     escrow = data["escrow"]
     assert escrow["status"] == "LOCKED"
     assert escrow["platformFeeBps"] == 0
-    assert escrow["network"] == "solanaDevnet"
+    assert escrow["network"] == "solanaTestnet"
     assert escrow["releasedAmountBaseUnits"] == "0"
     assert int(escrow["lockedAmountBaseUnits"]) > 0
     assert escrow["termsHash"] == agreement["termsHash"]
@@ -414,7 +414,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                 "network": payload["network"],
                 "idempotencyKey": idempotency_key,
                 "signature": "lock-signature-confirmed",
-                "explorerUrl": "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=devnet",
+                "explorerUrl": "https://explorer.solana.com/tx/lock-signature-confirmed?cluster=testnet",
                 "liveContext": {
                     "escrowId": payload["escrowId"],
                     "campaignId": "123",
@@ -453,7 +453,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                 "network": payload["network"],
                 "idempotencyKey": idempotency_key,
                 "signature": "release-signature-confirmed",
-                "explorerUrl": "https://explorer.solana.com/tx/release-signature-confirmed?cluster=devnet",
+                "explorerUrl": "https://explorer.solana.com/tx/release-signature-confirmed?cluster=testnet",
             }
 
     monkeypatch.setattr("apps.api.routes.Web3GatewayClient", FakeGatewayClient)

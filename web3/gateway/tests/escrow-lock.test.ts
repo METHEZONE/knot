@@ -12,7 +12,7 @@ function lockPayload(overrides: Record<string, unknown> = {}) {
     expectedAmountBaseUnits: "650000000",
     mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
     programId: "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj",
-    network: "solanaDevnet",
+    network: "solanaTestnet",
     brandAuthority: "brand-wallet",
     creatorDestination: "creator-wallet",
     ...overrides
@@ -28,7 +28,7 @@ function releasePayload(overrides: Record<string, unknown> = {}) {
     expectedAmountBaseUnits: "455000000",
     mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
     programId: "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj",
-    network: "solanaDevnet",
+    network: "solanaTestnet",
     creatorDestination: "creator-wallet",
     ...overrides
   };

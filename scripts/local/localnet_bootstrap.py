@@ -10,7 +10,7 @@
   5) 게이트웨이/백엔드가 쓸 환경변수를 생성 파일로 기록 → dev_stack.sh 가 자동 source
 
 왜 필요한가: Product API 는 시뮬레이션 영수증을 정산 성공으로 인정하지 않는다(CONFIRMED + 실서명 필수).
-그래서 게이트웨이를 KNOT_WEB3_SIGNING_MODE=devnet 으로 띄우되 RPC 만 로컬넷을 향하게 한다.
+그래서 게이트웨이를 KNOT_WEB3_SIGNING_MODE=devnet/testnet/live 로 띄우되 RPC 만 로컬넷을 향하게 한다.
 게이트웨이는 온체인 config 의 treasury 로부터 mint 를 읽어 KNOT_USDC_MINT 와 일치하는지 검사하므로
 (solana.ts), 로컬에서 만든 mint 주소를 양쪽에 주입해줘야 한다.
 
@@ -199,12 +199,10 @@ def write_env(info: dict[str, str]) -> None:
         "# 자동 생성 — scripts/local/localnet_bootstrap.py (편집 금지, 재생성됨)\n"
         "# 로컬넷에서 실제 서명을 내는 정산 프로필. dev_stack.sh 가 프로필 파일 뒤에 source 한다.\n"
         "KNOT_WEB3_MODE=gateway\n"
-        "KNOT_WEB3_SIGNING_MODE=devnet\n"
+        "KNOT_WEB3_SIGNING_MODE=live\n"
         f"SOLANA_RPC_URL={RPC}\n"
         "SOLANA_CLUSTER=localnet\n"
-        # 게이트웨이 zod 스키마가 network 를 "solanaDevnet" 리터럴로 고정하고 있어(escrow.ts) 로컬넷에서도
-        # 이 라벨을 써야 통과한다. 실제 RPC는 로컬넷 — 영수증의 network 값만 devnet으로 표기된다.
-        "KNOT_ESCROW_NETWORK=solanaDevnet\n"
+        "KNOT_ESCROW_NETWORK=solanaLocalnet\n"
         f"KNOT_ESCROW_PROGRAM_ID={info['program_id']}\n"
         f"KNOT_USDC_MINT={info['mint']}\n"
         f"KNOT_BRAND_KEYPAIR_PATH={info['brand']}\n"

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# KNOT — deploy the escrow program to the SHARED devnet.
+# KNOT — deploy the escrow program to the shared Solana test cluster.
 #
 # Run after merge, by the holder of the program keypair
 # (target/deploy/knot_escrow-keypair.json). This is the shared environment used
-# for the demo; day-to-day testing happens on each developer's local validator
-# (scripts/localnet_settlement.sh). See docs/SOLANA_ENVIRONMENTS.md.
+# for the demo; day-to-day testing happens on each developer's local validator.
 #
-#   scripts/deploy_devnet.sh
+#   SOLANA_CLUSTER=testnet SOLANA_RPC_URL=https://api.testnet.solana.com scripts/deploy_devnet.sh
 #
-# The wallet (~/.config/solana/id.json) needs devnet SOL — deploy rent is
+# The wallet (~/.config/solana/id.json) needs cluster SOL — deploy rent is
 # ~2.03 SOL; top up at https://faucet.solana.com if low.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 
-RPC="https://api.devnet.solana.com"
+CLUSTER="${SOLANA_CLUSTER:-testnet}"
+RPC="${SOLANA_RPC_URL:-https://api.testnet.solana.com}"
 SO="target/deploy/knot_escrow.so"
 KP="target/deploy/knot_escrow-keypair.json"
 
@@ -30,8 +30,8 @@ done
 anchor build >/dev/null
 PROG_ID="$(solana address -k "$KP")"
 BAL="$(solana balance --url "$RPC" 2>/dev/null | awk '{print $1}')"
-echo "▸ deploying $PROG_ID to devnet (wallet balance: ${BAL:-?} SOL)"
+echo "▸ deploying $PROG_ID to ${CLUSTER} (wallet balance: ${BAL:-?} SOL)"
 solana program deploy "$SO" --program-id "$KP" --url "$RPC"
 echo "✓ deployed."
-echo "  verify: solana program show $PROG_ID --url devnet"
-echo "  test:   KNOT_RUN_DEVNET=1 pytest backend/tests/test_escrow_devnet.py -q"
+echo "  verify: solana program show $PROG_ID --url $RPC"
+echo "  test:   KNOT_RUN_TESTNET=1 SOLANA_RPC_URL=$RPC pytest backend/tests/test_escrow_devnet.py -q"
