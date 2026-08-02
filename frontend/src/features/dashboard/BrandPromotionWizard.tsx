@@ -70,7 +70,9 @@ export function BrandPromotionWizard() {
     setBusy(true);
     setError(null);
     try {
-      const initialOffer = initialOfferForMax(draft.maxPerDealUsdc);
+      const maxPerCreator = normalizedUsdc(draft.maxPerDealUsdc, 1);
+      const totalBudget = Math.max(normalizedUsdc(draft.totalUsdc, maxPerCreator), maxPerCreator);
+      const initialOffer = initialOfferForMax(maxPerCreator);
       const promotion = await client.createBrandPromotion(
         {
           productName: draft.productName,
@@ -78,10 +80,10 @@ export function BrandPromotionWizard() {
           objective: `${draft.workBrief.trim()} · ${draft.summary || "제품 인지도와 실제 사용 콘텐츠 확보"}`,
           categories: [draft.category || "beauty"],
           targetAudience: draft.moodTags.join(", "),
-          totalBudget: draft.totalUsdc,
+          totalBudget,
           initialOffer,
-          maximumPerCreator: draft.maxPerDealUsdc,
-          autoAcceptCeiling: draft.maxPerDealUsdc,
+          maximumPerCreator: maxPerCreator,
+          autoAcceptCeiling: maxPerCreator,
           maximumRounds: 3,
           deliverables: deliverablesFromDraft(draft.deliverables),
           usageRights: "organicOnly",
@@ -223,10 +225,13 @@ export function BrandPromotionWizard() {
                   <span className="mt-2 flex items-baseline gap-2">
                     <input
                       type="number"
-                      min={100}
-                      step={100}
+                      min={1}
+                      step={1}
                       value={draft.totalUsdc}
-                      onChange={(event) => setDraft({ ...draft, totalUsdc: Math.max(0, Number(event.target.value)) })}
+                      onChange={(event) => {
+                        const totalUsdc = normalizedUsdc(Number(event.target.value), draft.maxPerDealUsdc);
+                        setDraft({ ...draft, totalUsdc });
+                      }}
                       className="sketch-alt ink w-36 border border-border-subtle bg-surface-raised px-3 py-2 font-mono text-xl outline-none"
                     />
                     <span className="font-mono">USDC</span>
@@ -237,10 +242,17 @@ export function BrandPromotionWizard() {
                   <span className="mt-2 flex items-baseline gap-2">
                     <input
                       type="number"
-                      min={50}
-                      step={50}
+                      min={1}
+                      step={1}
                       value={draft.maxPerDealUsdc}
-                      onChange={(event) => setDraft({ ...draft, maxPerDealUsdc: Math.max(0, Number(event.target.value)) })}
+                      onChange={(event) => {
+                        const maxPerDealUsdc = normalizedUsdc(Number(event.target.value), 1);
+                        setDraft({
+                          ...draft,
+                          maxPerDealUsdc,
+                          totalUsdc: Math.max(draft.totalUsdc, maxPerDealUsdc),
+                        });
+                      }}
                       className="sketch-alt ink w-36 border border-border-subtle bg-surface-raised px-3 py-2 font-mono text-xl outline-none"
                     />
                     <span className="font-mono">USDC</span>
@@ -262,7 +274,9 @@ export function BrandPromotionWizard() {
                   !draft.productName.trim() ||
                   !draft.workBrief.trim() ||
                   draft.moodTags.length === 0 ||
-                  deliverablesFromDraft(draft.deliverables).length === 0
+                  deliverablesFromDraft(draft.deliverables).length === 0 ||
+                  normalizedUsdc(draft.maxPerDealUsdc, 0) < 1 ||
+                  normalizedUsdc(draft.totalUsdc, 0) < normalizedUsdc(draft.maxPerDealUsdc, 1)
                 }
                 className="sketch-pill bg-accent px-6 py-3 text-background disabled:opacity-50"
               >
@@ -316,7 +330,15 @@ function deadlineAfterDays(days: number) {
 }
 
 function initialOfferForMax(maxPerDealUsdc: number) {
-  return Math.max(50, Math.round((maxPerDealUsdc * 0.4) / 50) * 50);
+  const max = normalizedUsdc(maxPerDealUsdc, 1);
+  if (max <= 5) return Math.max(1, Math.floor(max * 0.6));
+  if (max < 50) return Math.max(1, Math.round(max * 0.5));
+  return Math.min(max, Math.max(1, Math.round((max * 0.4) / 50) * 50));
+}
+
+function normalizedUsdc(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
 }
 
 function deliverablesFromDraft(deliverables: DeliverableCounts) {
