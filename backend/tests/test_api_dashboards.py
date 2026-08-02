@@ -79,7 +79,7 @@ def complete_creator(client: TestClient, uid: str) -> dict[str, str]:
             "minimumUsdc": 500,
             "blockedDomains": ["담배"],
             "preferredContent": ["Instagram Reels"],
-            "walletAddress": "creator-wallet",
+            "walletAddress": "63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ",
         },
     )
     data = response.json()["data"]

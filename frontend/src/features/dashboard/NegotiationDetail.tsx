@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { AgentCharacter } from "@/components/AgentCharacter";
+import { useAuth } from "@/auth/AuthProvider";
 import { Money } from "@/features/chat/Money";
 import {
   type ApiAgreement,
@@ -40,6 +41,7 @@ export function NegotiationDetail({
   role: Role;
   negotiationId: string;
 }) {
+  const { context: currentUser, refresh: refreshAuth } = useAuth();
   const client = useMemo(() => new ProductApiClient(), []);
   const [state, setState] = useState<LoadState>({ loading: true, error: null, detail: null });
   const [actionError, setActionError] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export function NegotiationDetail({
       const wallet = await connectPhantomWallet();
       setWalletAddress(wallet.address);
       await client.saveWalletAddress(wallet.address, "devnet");
+      await refreshAuth();
       const idempotencySeed = `${state.detail.agreement.agreementId}-${wallet.address}`;
       const prepared = await client.prepareEscrowFunding(
         state.detail.agreement.agreementId,
@@ -143,6 +146,7 @@ export function NegotiationDetail({
       const wallet = await connectPhantomWallet();
       setWalletAddress(wallet.address);
       await client.saveWalletAddress(wallet.address, "devnet");
+      await refreshAuth();
       await refresh();
       setFundingState("idle");
       return wallet.address;
@@ -159,7 +163,7 @@ export function NegotiationDetail({
 
   async function ensureCreatorSettlementWallet(escrowDestination?: string | null) {
     setSettlementState("connecting");
-    const address = walletAddress ?? (await connectAndSaveWalletAddress());
+    const address = effectiveWalletAddress ?? (await connectAndSaveWalletAddress());
     if (escrowDestination && escrowDestination !== address) {
       throw new Error("연결된 Phantom 지갑과 이 escrow의 Creator 수령 지갑이 다릅니다.");
     }
@@ -175,6 +179,7 @@ export function NegotiationDetail({
   }
 
   const { negotiation, messages, agreement, escrowBundle, title } = state.detail;
+  const effectiveWalletAddress = walletAddress ?? currentUser?.account.walletAddress ?? null;
 
   return (
     <div className="flex flex-col gap-6 py-8">
@@ -212,7 +217,7 @@ export function NegotiationDetail({
               role={role}
               agreement={agreement}
               escrowBundle={escrowBundle}
-              walletAddress={walletAddress}
+              walletAddress={effectiveWalletAddress}
               fundingState={fundingState}
               onFund={role === "brand" ? fundEscrowWithPhantom : undefined}
               onConnectWallet={connectAndSaveWallet}
@@ -221,7 +226,7 @@ export function NegotiationDetail({
               role={role}
               agreement={agreement}
               escrowBundle={escrowBundle}
-              walletAddress={walletAddress}
+              walletAddress={effectiveWalletAddress}
               settlementState={settlementState}
               onEnsureCreatorWallet={ensureCreatorSettlementWallet}
               onSettlementState={setSettlementState}

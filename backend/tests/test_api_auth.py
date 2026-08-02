@@ -120,6 +120,75 @@ def test_brand_profile_uses_verified_uid_as_owner() -> None:
     assert stored_brand["ownerUid"] == "brand-owner"
 
 
+def test_wallet_save_is_returned_in_current_user_context() -> None:
+    client, repository = client_and_repository()
+    headers = auth_headers(uid="brand-wallet-owner", email="brand-wallet@example.com")
+    wallet_address = "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "wallet-role-key"},
+        json={"role": "BRAND"},
+    )
+    profile = client.post(
+        "/api/v1/me/brand-profile",
+        headers={**headers, "Idempotency-Key": "wallet-profile-key"},
+        json={
+            "brandName": "Wallet Brand",
+            "websiteUrl": "https://wallet.example",
+            "categories": ["beauty"],
+            "targetAudience": "skincare shoppers",
+            "restrictedClaims": [],
+        },
+    ).json()["data"]
+
+    response = client.post(
+        "/api/v1/me/wallet",
+        headers=headers,
+        json={"walletAddress": wallet_address, "network": "devnet"},
+    )
+    current = client.get("/api/v1/me", headers=headers).json()["data"]
+
+    assert response.status_code == 200
+    assert response.json()["data"]["account"]["walletAddress"] == wallet_address
+    assert current["account"]["walletAddress"] == wallet_address
+    assert current["profileSummary"]["walletAddress"] == wallet_address
+    stored_brand = repository.get_raw_document(FirestorePaths.brand(profile["brand"]["brandId"]))
+    assert stored_brand is not None
+    assert stored_brand["walletAddress"] == wallet_address
+
+
+def test_wallet_save_rejects_non_base58_demo_value() -> None:
+    client, _ = client_and_repository()
+    headers = auth_headers(uid="creator-wallet-owner", email="creator-wallet@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-wallet-role-key"},
+        json={"role": "CREATOR"},
+    )
+    client.post(
+        "/api/v1/me/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-wallet-profile-key"},
+        json={
+            "creatorName": "Creator One",
+            "snsUrl": "https://instagram.com/creator.one",
+            "categories": ["beauty"],
+            "minimumUsdc": 300,
+            "blockedDomains": [],
+            "preferredContent": ["Instagram Reels"],
+        },
+    )
+
+    response = client.post(
+        "/api/v1/me/wallet",
+        headers=headers,
+        json={"walletAddress": "DemoWallet111111111111111111111111111111111", "network": "devnet"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_creator_profile_rejects_wrong_role() -> None:
     client, _ = client_and_repository()
     headers = auth_headers(uid="brand-owner", email="brand@example.com")

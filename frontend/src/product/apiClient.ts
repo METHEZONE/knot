@@ -69,6 +69,9 @@ export type CurrentAccount = {
   brandId?: string | null;
   creatorId?: string | null;
   agentId?: string | null;
+  walletAddress?: string | null;
+  walletNetwork?: string | null;
+  walletUpdatedAt?: string | null;
   schemaVersion: number;
 };
 
@@ -868,7 +871,7 @@ export class ProductApiClient {
   }
 
   async saveWalletAddress(walletAddress: string, network = "devnet") {
-    return this.request<{ wallet: { walletAddress: string; walletNetwork: string } }>(
+    return this.request<{ wallet: { walletAddress: string; walletNetwork: string } } & CurrentUserContext>(
       "/api/v1/me/wallet",
       {
         method: "POST",

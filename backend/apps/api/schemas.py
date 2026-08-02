@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from pydantic import Field, field_validator
+from solders.pubkey import Pubkey
 
 from libs.domain.models import (
     Deliverable,
@@ -12,6 +13,15 @@ from libs.domain.models import (
     PromotionConstraints,
     UsageRights,
 )
+
+
+def validate_solana_pubkey(value: str) -> str:
+    normalized = value.strip()
+    try:
+        Pubkey.from_string(normalized)
+    except ValueError as exc:
+        raise ValueError("walletAddress must be a valid Solana public key") from exc
+    return normalized
 
 
 class UserBootstrapRequest(DomainModel):
@@ -96,6 +106,13 @@ class CurrentUserCreatorProfileRequest(DomainModel):
             raise ValueError("at least one category is required")
         return categories
 
+    @field_validator("wallet_address")
+    @classmethod
+    def validate_wallet_address(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return validate_solana_pubkey(value)
+
 
 class CurrentWalletRequest(DomainModel):
     wallet_address: str = Field(alias="walletAddress", min_length=32, max_length=64)
@@ -104,10 +121,7 @@ class CurrentWalletRequest(DomainModel):
     @field_validator("wallet_address")
     @classmethod
     def validate_wallet_address(cls, value: str) -> str:
-        normalized = value.strip()
-        if any(char.isspace() for char in normalized):
-            raise ValueError("walletAddress must not contain whitespace")
-        return normalized
+        return validate_solana_pubkey(value)
 
     @field_validator("network")
     @classmethod

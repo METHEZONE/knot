@@ -21,6 +21,10 @@ Updated: 2026-08-02
   - `release_milestone`
   - `refund_remaining`
 - Existing server-keypair `/escrow:lock` path remains for legacy/local fixture compatibility.
+- Phantom wallet handling now waits for the injected provider, stores only valid Solana
+  public keys, and restores the saved wallet from `/api/v1/me` on Agreement detail pages.
+- Creator onboarding no longer writes a fake settlement wallet. Existing invalid wallet
+  values are hidden from current-user ViewModels and rejected before Web3 Gateway calls.
 
 ### Current Money Flow
 
@@ -50,9 +54,14 @@ Updated: 2026-08-02
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
-- `./.venv/bin/pytest backend/tests/test_api_escrow.py backend/tests/test_api_promotions.py backend/tests/test_paysh_sandbox.py backend/tests/test_api_auth.py -q`: passed, 1 skipped.
-- `./.venv/bin/pytest backend/tests -q`: 120 passed, 5 skipped, 1 failed in sandbox because localhost bind was denied.
+- `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 26 passed.
+- `./.venv/bin/pytest backend/tests -q`: 125 passed, 5 skipped.
 - `./.venv/bin/pytest backend/tests/test_api_a2a_http_integration.py::test_product_api_runs_real_http_a2a_counter_accept_golden_path -q` outside sandbox: passed.
+- Local current-branch stack health checked:
+  - Product API `http://127.0.0.1:18090/readyz`: ready.
+  - Creator Agent `http://127.0.0.1:18091/readyz`: ready.
+  - Web3 Gateway `http://127.0.0.1:18082/readyz`: ready.
+  - Frontend `http://localhost:3000/login`: 200.
 
 ### Not Yet Verified On Devnet
 

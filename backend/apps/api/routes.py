@@ -29,6 +29,7 @@ from apps.api.schemas import (
     ProductAnalysisRequest,
     PromotionCreateRequest,
     UserBootstrapRequest,
+    validate_solana_pubkey,
 )
 from libs.a2a.client import CreatorA2AClient, CreatorA2AClientError, first_part_data
 from libs.a2a.models import (
@@ -4113,25 +4114,38 @@ def _current_user_payload(
 ) -> dict[str, object]:
     role = user.get("role")
     profile_summary: dict[str, object] | None = None
+    wallet_address = user.get("walletAddress")
+    wallet_network = user.get("walletNetwork")
+    wallet_updated_at = user.get("walletUpdatedAt")
     if role == "BRAND" and isinstance(user.get("brandId"), str):
         brand = repository.get_raw_document(FirestorePaths.brand(str(user["brandId"])))
         if brand is not None:
+            wallet_address = brand.get("walletAddress") or wallet_address
+            wallet_network = brand.get("walletNetwork") or wallet_network
+            wallet_updated_at = brand.get("walletUpdatedAt") or wallet_updated_at
             profile_summary = {
                 "type": "BRAND",
                 "id": brand.get("brandId"),
                 "displayName": brand.get("displayName"),
                 "agentId": user.get("agentId") or user.get("brandAgentId"),
+                "walletAddress": _valid_wallet_or_none(wallet_address),
+                "walletNetwork": wallet_network,
             }
     elif role == "CREATOR" and isinstance(user.get("creatorId"), str):
         creator = repository.get_raw_document(
             FirestorePaths.creator_profile(str(user["creatorId"]))
         )
         if creator is not None:
+            wallet_address = creator.get("walletAddress") or wallet_address
+            wallet_network = creator.get("walletNetwork") or wallet_network
+            wallet_updated_at = creator.get("walletUpdatedAt") or wallet_updated_at
             profile_summary = {
                 "type": "CREATOR",
                 "id": creator.get("creatorId"),
                 "displayName": creator.get("displayName"),
                 "agentId": user.get("agentId") or user.get("creatorAgentId"),
+                "walletAddress": _valid_wallet_or_none(wallet_address),
+                "walletNetwork": wallet_network,
             }
     account = {
         "uid": user.get("uid") or user.get("userId"),
@@ -4145,6 +4159,9 @@ def _current_user_payload(
         "brandId": user.get("brandId"),
         "creatorId": user.get("creatorId"),
         "agentId": user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId"),
+        "walletAddress": _valid_wallet_or_none(wallet_address),
+        "walletNetwork": wallet_network if isinstance(wallet_network, str) and wallet_network else None,
+        "walletUpdatedAt": wallet_updated_at if isinstance(wallet_updated_at, str) else None,
         "schemaVersion": user.get("schemaVersion") or 2,
     }
     return {
@@ -4152,6 +4169,15 @@ def _current_user_payload(
         "profileSummary": profile_summary,
         "dashboardTarget": _dashboard_target(account),
     }
+
+
+def _valid_wallet_or_none(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return validate_solana_pubkey(value)
+    except ValueError:
+        return None
 
 
 def _derive_onboarding_status(user: dict[str, object]) -> str:
@@ -5498,7 +5524,14 @@ def _brand_wallet_address(repository: KnotRepository, user: dict[str, object]) -
             "BRAND_WALLET_REQUIRED",
             "Connect the Brand Phantom wallet before funding escrow.",
         )
-    return wallet
+    try:
+        return validate_solana_pubkey(wallet)
+    except ValueError:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "BRAND_WALLET_REQUIRED",
+            "Reconnect a valid Brand Phantom wallet before funding escrow.",
+        ) from None
 
 
 def _creator_wallet_address_for_agreement(
@@ -5523,7 +5556,14 @@ def _creator_wallet_address_for_agreement(
             "CREATOR_WALLET_REQUIRED",
             "Creator must connect a settlement Phantom wallet before escrow can be funded.",
         )
-    return wallet
+    try:
+        return validate_solana_pubkey(wallet)
+    except ValueError:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "CREATOR_WALLET_REQUIRED",
+            "Creator must reconnect a valid settlement Phantom wallet before escrow can be funded.",
+        ) from None
 
 
 def _require_settlement_authority(settings: Settings) -> str:
