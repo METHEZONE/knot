@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AgentCharacter } from "@/components/AgentCharacter";
-import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import { useAuth } from "@/auth/AuthProvider";
+import { postLoginPath, safeRedirectPath } from "@/auth/authState";
 import {
   authConfigurationError,
   createFirebaseAccount,
@@ -32,7 +32,6 @@ import {
   type CurrentUserContext,
 } from "./apiClient";
 import { A2ANegotiationVisualizer } from "./A2AVisualizer";
-import { usePhantomWallet } from "@/features/wallet/usePhantomWallet";
 import { brandWorkspaceRoutes, creatorWorkspaceRoutes } from "./flow";
 import {
   agreementMilestones,
@@ -1439,6 +1438,19 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                 <InfoBox label="Deliverables" value={detail.agreement.terms.deliverables.map((item) => `${item.count} ${item.format}`).join(", ")} />
                 <InfoBox label="Usage rights" value={detail.agreement.terms.usageRights} />
               </div>
+              {detail.agreement.negotiationId ? (
+                <div className="mt-5">
+                  <PrimaryLink
+                    href={
+                      role === "brand"
+                        ? `/brand/negotiations/${detail.agreement.negotiationId}`
+                        : `/creator/offers/${detail.agreement.negotiationId}`
+                    }
+                  >
+                    Phantom 에스크로/정산 화면 열기
+                  </PrimaryLink>
+                </div>
+              ) : null}
             </Panel>
             <Panel>
               <SectionTitle eyebrow="Escrow" title="Escrow state" />
@@ -1462,14 +1474,7 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                   <InfoBox label="Signature" value={detail.escrow.lockSignature ?? "pending"} />
                 </div>
               ) : (
-                <EmptyState text="아직 escrow가 없습니다. 정산 페이지에서 lock/release를 실행할 수 있습니다." />
-              )}
-              {role === "brand" && (
-                <div className="mt-5">
-                  <PrimaryLink href={`/brand/settlement?agreementId=${String(detail.agreement.agreementId)}`}>
-                    정산 페이지로 이동
-                  </PrimaryLink>
-                </div>
+                <EmptyState text="아직 escrow가 없습니다. Phase 5에서 실제 devnet lock/release가 연결됩니다." />
               )}
             </Panel>
             <Panel>
@@ -1499,15 +1504,11 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
 export function RoleSignupScreen({ role, session }: { role: Role; session?: RoleSession }) {
   const roleSession = session ?? fallbackRoleSession(role);
   const router = useRouter();
+  const { refresh } = useAuth();
   const nextHref = role === "brand" ? "/brand/product" : "/creator/connect";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();
-  // 구글 등으로 이미 Firebase 로그인된 상태면(예: /login에서 "Continue with Google" 후 역할선택으로 유입)
-  // 계정을 다시 만들지 않고(=email-already-in-use 방지) 이메일만 채워 역할 연결로 넘어간다.
-  const { status: authStatus, context: authContext, refresh } = useAuth();
-  const authedEmail = authStatus === "authenticated" ? authContext?.account.email ?? null : null;
-  const alreadyAuthed = Boolean(authedEmail);
 
   async function submit(formData: FormData) {
     setStatus("saving");
@@ -1515,17 +1516,13 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
     try {
       if (!configured) throw new Error(authConfigurationError());
       const displayName = String(formData.get("name") ?? roleSession.userLabel);
-      const email = alreadyAuthed ? authedEmail! : String(formData.get("email") ?? "");
-      if (!alreadyAuthed) {
-        const password = String(formData.get("password") ?? "");
-        await createFirebaseAccount(email, password, displayName);
-      }
+      const email = String(formData.get("email") ?? "");
+      const password = String(formData.get("password") ?? "");
+      await createFirebaseAccount(email, password, displayName);
       const api = new ProductApiClient();
       await api.getMe();
       const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
       saveCurrentAccount(account);
-      // 역할 선택 결과를 AuthProvider context에 반영. 안 하면 다음 페이지 AuthGate가
-      // 여전히 role=null로 보고 /signup(역할선택)으로 되돌려 보냄.
       await refresh();
       router.replace(nextHref);
     } catch (caught) {
@@ -1552,10 +1549,8 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
             <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
-            <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required defaultValue={authedEmail ?? undefined} readOnly={alreadyAuthed} />
-            {!alreadyAuthed && (
-              <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
-            )}
+            <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
+            <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
             <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
@@ -1796,7 +1791,7 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
         <Panel>
           <SectionTitle eyebrow="Next" title="정산 준비" />
           <p className="text-muted">
-            실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Testnet escrow로 진행됩니다.
+            실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Devnet escrow로 진행됩니다.
           </p>
           <div className="mt-5">
             {view.agreementId ? (
@@ -1815,12 +1810,10 @@ export function BrandSettlementScreen({
   settlement,
   milestones,
   agreementId,
-  creatorAgentId,
 }: {
   settlement: Settlement;
   milestones: Milestone[];
   agreementId: string;
-  creatorAgentId: string;
 }) {
   return (
     <WorkspaceShell role="brand" active="settlement" title="정산" session={null}>
@@ -1830,7 +1823,6 @@ export function BrandSettlementScreen({
           <MilestonePanel milestones={milestones} mode="brand" />
           <SettlementActionPanel
             agreementId={agreementId}
-            creatorAgentId={creatorAgentId}
             milestoneId={milestones.find((milestone) => milestone.id === "content")?.id ?? milestones[0]?.id}
             alreadyReleased={Boolean(settlement.releaseTx) || settlement.escrowStatus === "RELEASED"}
           />
@@ -2080,9 +2072,7 @@ export function CreatorBrandDetailScreen({ deal }: { deal: CreatorDeal }) {
 }
 
 export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const serverSession = useServerRoleSession(role);
-  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
-  const balance = useWalletBalance(roleSession.walletAddress);
+  const roleSession = session ?? fallbackRoleSession(role);
   return (
     <WorkspaceShell role={role} active="me" title="마이페이지" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
@@ -2101,8 +2091,6 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <InfoBox label="User" value={roleSession.userLabel} />
             <InfoBox label="Wallet" value={roleSession.walletAddress} />
-            <InfoBox label="USDC 잔고" value={balance.usdcLabel} />
-            <InfoBox label="SOL 잔고" value={balance.solLabel} />
           </div>
         </Panel>
       </div>
@@ -2111,9 +2099,7 @@ export function RoleMeScreen({ role, session }: { role: Role; session?: RoleSess
 }
 
 export function RoleSettingsScreen({ role, session }: { role: Role; session?: RoleSession }) {
-  const serverSession = useServerRoleSession(role);
-  const roleSession = session ?? serverSession ?? fallbackRoleSession(role);
-  const wallet = usePhantomWallet();
+  const roleSession = session ?? fallbackRoleSession(role);
   return (
     <WorkspaceShell role={role} active="settings" title="설정" session={roleSession}>
       <div className="grid gap-5 lg:grid-cols-3">
@@ -2130,25 +2116,8 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
-          <Input label="Wallet address" placeholder={wallet.address ?? roleSession.walletAddress} />
-          <InfoBox label="Network" value="Solana Testnet" />
-          <button
-            type="button"
-            onClick={() => {
-              void wallet.connect();
-            }}
-            disabled={wallet.status === "connecting" || wallet.status === "saving"}
-            className="mt-4 inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
-          >
-            {wallet.status === "connecting"
-              ? "연결 중..."
-              : wallet.status === "saving"
-                ? "저장 중..."
-                : (wallet.address ?? (roleSession.walletAddress !== "not-connected" ? roleSession.walletAddress : null))
-                  ? "Phantom 재연결"
-                  : "Phantom 연결"}
-          </button>
-          {wallet.error && <p className="mt-2 text-sm text-muted">{wallet.error}</p>}
+          <Input label="Wallet address" placeholder={roleSession.walletAddress} />
+          <InfoBox label="Network" value="Solana Devnet" />
         </Panel>
       </div>
     </WorkspaceShell>
@@ -2566,52 +2535,26 @@ function CreatorDealCard({ deal }: { deal: CreatorDeal }) {
 
 function SettlementActionPanel({
   agreementId,
-  creatorAgentId,
   milestoneId,
   alreadyReleased,
 }: {
   agreementId: string;
-  creatorAgentId: string;
   milestoneId?: string;
   alreadyReleased: boolean;
 }) {
-  const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "running">("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  async function runSettlement() {
-    if (!milestoneId) return;
-    setStatus("running");
-    setError(null);
-    try {
-      const client = new ProductApiClient();
-      const locked = await client.lockEscrow(agreementId);
-      const evidence = await client.submitEvidence({ agreementId, creatorAgentId }, milestoneId);
-      await client.verifyEvidence(evidence.evidenceId);
-      await client.releaseMilestone(locked.escrow.escrowId, milestoneId);
-      router.refresh();
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setStatus("idle");
-    }
-  }
-
   return (
     <Panel>
-      <SectionTitle eyebrow="Action" title="Escrow 실행" />
+      <SectionTitle eyebrow="Action" title="Phantom 정산 화면으로 이동" />
       <p className="text-sm text-muted">
-        Escrow 성공 처리는 Web3 Gateway가 확인한 Solana Testnet signature가 있을 때만 가능합니다. 페이지
-        진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
+        Creator 보상 escrow는 legacy Agent 지갑으로 실행하지 않습니다. Brand Phantom으로 전체 금액을
+        예치하고, Creator가 URL을 제출하면 Agent 검토 뒤 Creator Phantom으로 정산됩니다.
       </p>
-      {error && <FormError message={error} />}
-      <button
-        type="button"
-        onClick={runSettlement}
-        disabled={status === "running" || alreadyReleased || !milestoneId}
-        className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
-      >
-        {alreadyReleased ? "Release 완료" : status === "running" ? "Escrow 처리 중..." : "Fund + verify + release"}
-      </button>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <PrimaryLink href={`/brand/agreements/${agreementId}`}>
+          {alreadyReleased ? "정산 내역 보기" : "Agreement 상세로 이동"}
+        </PrimaryLink>
+        {!milestoneId ? <p className="text-sm text-muted">정산 가능한 milestone이 아직 없습니다.</p> : null}
+      </div>
     </Panel>
   );
 }
@@ -2946,7 +2889,6 @@ function Input({
   required = false,
   defaultValue,
   minLength,
-  readOnly = false,
 }: {
   label: string;
   name?: string;
@@ -2955,7 +2897,6 @@ function Input({
   required?: boolean;
   defaultValue?: string | number;
   minLength?: number;
-  readOnly?: boolean;
 }) {
   return (
     <label className="mt-4 block">
@@ -2966,8 +2907,7 @@ function Input({
         required={required}
         defaultValue={defaultValue}
         minLength={minLength}
-        readOnly={readOnly}
-        className={`mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent${readOnly ? " opacity-70" : ""}`}
+        className="mt-2 w-full rounded border border-border-subtle bg-background p-3 text-sm outline-none focus:border-accent"
         placeholder={placeholder}
       />
     </label>
@@ -3013,7 +2953,7 @@ function TxBox({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded border border-border-subtle bg-background p-3">
       <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
-      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live testnet transaction"}</div>
+      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live devnet transaction"}</div>
     </div>
   );
 }
@@ -3126,81 +3066,6 @@ function fallbackForNegotiation(negotiation: ApiNegotiation) {
     brandAgentId: negotiation.brandAgentId,
     creatorAgentId: negotiation.creatorAgentId,
     status: negotiation.status,
-  };
-}
-
-/**
- * 화면들이 받는 RoleSession 을 서버(/me)와 로컬 세션 저장소에서 만든다.
- * /brand/settings · /creator/me 처럼 session 을 넘기지 않는 페이지가 fallback mock(`creator-signup-agent`,
- * `not-connected`) 대신 실제 계정·지갑 값으로 뜨게 하기 위한 것. 화면 마크업은 건드리지 않는다.
- */
-function useServerRoleSession(role: Role): RoleSession | null {
-  const [state, setState] = useDashboardState<RoleSession>();
-  const load = useCallback(
-    () =>
-      loadDashboard(async () => {
-        const local = readLocalSession();
-        const { account } = await new ProductApiClient().getMe();
-        const brand = role === "brand";
-        const session: RoleSession = {
-          role,
-          userLabel: account.displayName ?? account.email ?? (brand ? "Brand operator" : "Creator"),
-          organizationLabel:
-            (brand ? account.brandId : account.creatorId) ??
-            (brand ? "Brand workspace" : "Creator workspace"),
-          agentId:
-            account.agentId ??
-            (brand ? local.brandAgentId : local.creatorAgentId) ??
-            `${role}-signup-agent`,
-          agentLabel: brand ? "Brand Agent" : "Creator Agent",
-          profileSummary: account.agentWalletPubkey
-            ? `에이전트 지갑(수탁): ${account.agentWalletPubkey}`
-            : "온보딩이 완료되어 Agent가 활성화되어 있습니다.",
-          walletAddress: account.walletAddress ?? "not-connected",
-        };
-        return session;
-      }, setState),
-    [role, setState],
-  );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return state.type === "ready" ? state.data : null;
-}
-
-/**
- * 연결된 지갑의 온체인 잔고(USDC/SOL). 주소가 없으면 호출하지 않는다.
- * 게이트웨이가 죽어 있어도 화면이 깨지지 않도록 실패는 문구로만 표시한다.
- */
-function useWalletBalance(walletAddress: string) {
-  const [state, setState] = useDashboardState<{ usdc: number | null; sol: number | null }>();
-  const connected = Boolean(walletAddress) && walletAddress !== "not-connected";
-  const load = useCallback(
-    () =>
-      loadDashboard(async () => {
-        const data = await new ProductApiClient().getMyWalletBalance();
-        return {
-          usdc: typeof data.usdc === "number" ? data.usdc : null,
-          sol: typeof data.sol === "number" ? data.sol : null,
-        };
-      }, setState),
-    [setState],
-  );
-
-  useEffect(() => {
-    if (connected) void load();
-  }, [connected, load]);
-
-  const format = (value: number | null, unit: string) =>
-    value === null ? "조회 실패" : `${value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })} ${unit}`;
-
-  if (!connected) return { usdcLabel: "지갑 미연결", solLabel: "지갑 미연결" };
-  if (state.type !== "ready") return { usdcLabel: "조회 중...", solLabel: "조회 중..." };
-  return {
-    usdcLabel: format(state.data.usdc, "USDC"),
-    solLabel: format(state.data.sol, "SOL"),
   };
 }
 

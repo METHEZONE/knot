@@ -19,7 +19,6 @@ export default async function Page({
       settlement={deal.settlement}
       milestones={deal.milestones}
       agreementId={deal.agreementId ?? agreementId ?? ""}
-      creatorAgentId={deal.creatorAgentId}
     />
   );
 }

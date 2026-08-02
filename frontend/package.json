@@ -11,6 +11,8 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "buffer": "^6.0.3",
     "firebase": "^12.16.0",
     "framer-motion": "^12.42.2",
     "next": "16.2.11",

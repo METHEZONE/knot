@@ -21,9 +21,10 @@ def _load_dotenv() -> None:
                 os.environ[key] = val
 
 
-# Last known knot-escrow program id and SPL mint defaults. Live shared
-# deployments must override both values for the selected Solana cluster.
-DEFAULT_ESCROW_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
+# Real devnet knot-escrow program id and USDC-SPL mint (see programs/knot-escrow
+# and backend/.env.example). Used to stamp escrow/receipt records so they stay
+# consistent when on-chain signing is wired.
+DEFAULT_ESCROW_PROGRAM_ID = "9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn"
 DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 
@@ -57,12 +58,13 @@ class Settings(BaseModel):
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
-    agent_wallet_provision: bool = False
-    agent_auto_settlement: bool = False
-    # 로컬 밸리데이터 전용: Phantom 연결 시 그 주소에 채워줄 SOL / 테스트 USDC. 0 이면 비활성(기본).
-    # 유저 지갑이 딜 서명 시 에스크로에 직접 예치하는 흐름을 로컬에서 돌리기 위한 것.
-    local_faucet_sol: int = 0
-    local_faucet_usdc: int = 0
+    settlement_authority: str | None = None
+    # 역할 선택 시 유저 임베디드 지갑(플랫폼 커스터디)을 자동 생성한다.
+    # → 구글 로그인만으로 Solana 주소를 갖는다. Phantom 연결은 선택 사항이 된다.
+    user_wallet_provision: bool = False
+    # evidence 검증 통과 즉시 마일스톤 정산을 서버 서명으로 실행한다(사람 클릭 없음).
+    # 실패해도 수동 Phantom 릴리즈 경로가 fallback으로 남는다.
+    auto_settlement_on_evidence: bool = True
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -105,17 +107,14 @@ def get_settings(service_name: str | None = None) -> Settings:
             os.getenv("PAYSH_ALLOWED_RESOURCE_PREFIXES", "https://debugger.pay.sh/mpp/quote/")
         ),
         paysh_failure_policy=os.getenv("PAYSH_FAILURE_POLICY", "continue"),
-        escrow_network=os.getenv(
-            "KNOT_ESCROW_NETWORK",
-            _solana_network_label(os.getenv("SOLANA_CLUSTER", "devnet")),
-        ),
+        escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
-        agent_wallet_provision=os.getenv("KNOT_AGENT_WALLET_PROVISION", "").lower()
-        in ("1", "true", "yes"),
-        agent_auto_settlement=_truthy(os.getenv("KNOT_AGENT_AUTO_SETTLEMENT")),
-        local_faucet_sol=int(os.getenv("KNOT_LOCAL_FAUCET_SOL", "0") or 0),
-        local_faucet_usdc=int(os.getenv("KNOT_LOCAL_FAUCET_USDC", "0") or 0),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
+        settlement_authority=os.getenv("KNOT_SETTLEMENT_AUTHORITY"),
+        user_wallet_provision=_truthy(os.getenv("KNOT_USER_WALLET_PROVISION")),
+        auto_settlement_on_evidence=_truthy_default_true(
+            os.getenv("KNOT_AUTO_SETTLEMENT_ON_EVIDENCE")
+        ),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
     )
@@ -125,16 +124,14 @@ def _truthy(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
 
 
+def _truthy_default_true(value: str | None) -> bool:
+    """미설정이면 켜진 값. 끄려면 명시적으로 0/false/no/off 를 준다."""
+    if value is None or not value.strip():
+        return True
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def _solana_network_label(cluster: str) -> str:
-    normalized = cluster.strip().lower()
-    if normalized == "testnet":
-        return "solanaTestnet"
-    if normalized == "localnet":
-        return "solanaLocalnet"
-    return "solanaDevnet"

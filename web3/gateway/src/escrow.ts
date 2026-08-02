@@ -5,6 +5,10 @@ import {
   submitEscrowLock,
   submitMilestoneRelease
 } from "./solana.js";
+import {
+  type AgreementEscrowLiveContext,
+  submitAgreementMilestoneRelease
+} from "./funding.js";
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -13,18 +17,31 @@ const liveLockContextSchema = z.object({
   campaignId: z.string().regex(/^[0-9]+$/),
   campaign: z.string().min(1),
   creator: z.string().min(1),
-  creatorDestination: z.string().min(1).optional(),
   creatorToken: z.string().min(1),
   agentAuthority: z.string().min(1),
-  agentId: z.string().min(1).optional(),
   treasuryToken: z.string().min(1),
   mint: z.string().min(1),
   milestoneIds: z.array(z.string().min(1)).min(1).max(8),
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
 });
 
-const networkSchema = z.enum(["solanaDevnet", "solanaTestnet", "solanaLocalnet"]);
-type SolanaEscrowNetwork = z.infer<typeof networkSchema>;
+const agreementEscrowLiveContextSchema = z.object({
+  agreementEscrowVersion: z.literal("v1"),
+  escrowId: z.string().min(1),
+  escrowPda: z.string().min(1),
+  vaultTokenAccount: z.string().min(1),
+  brandTokenAccount: z.string().min(1),
+  creatorDestination: z.string().min(1),
+  settlementAuthority: z.string().min(1),
+  mint: z.string().min(1),
+  milestoneIds: z.array(z.string().min(1)).min(1).max(8),
+  milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
+});
+
+const releaseLiveContextSchema = z.union([
+  liveLockContextSchema,
+  agreementEscrowLiveContextSchema
+]);
 
 export const lockRequestSchema = z.object({
   agreementId: z.string().min(1),
@@ -35,10 +52,9 @@ export const lockRequestSchema = z.object({
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8).optional(),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: networkSchema,
+  network: z.literal("solanaDevnet"),
   brandAuthority: z.string().min(1),
-  creatorDestination: z.string().min(1),
-  agentId: z.string().min(1).optional()
+  creatorDestination: z.string().min(1)
 });
 
 export const releaseRequestSchema = z.object({
@@ -49,9 +65,9 @@ export const releaseRequestSchema = z.object({
   expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: networkSchema,
+  network: z.literal("solanaDevnet"),
   creatorDestination: z.string().min(1),
-  lockContext: liveLockContextSchema.optional()
+  lockContext: releaseLiveContextSchema.optional()
 });
 
 export type GatewayReceipt = {
@@ -64,7 +80,7 @@ export type GatewayReceipt = {
   releasedAmountBaseUnits?: string;
   mint: string;
   programId: string;
-  network: SolanaEscrowNetwork;
+  network: "solanaDevnet";
   idempotencyKey: string;
   signature: string | null;
   explorerUrl: string | null;
@@ -150,7 +166,7 @@ export class EscrowLockService {
       };
     }
 
-    if (config.signingMode === "live") {
+    if (config.signingMode === "devnet") {
       try {
         const live = await submitEscrowLock(config, {
           agreementId: result.data.agreementId,
@@ -159,8 +175,7 @@ export class EscrowLockService {
           expectedAmountBaseUnits: result.data.expectedAmountBaseUnits,
           creatorDestination: result.data.creatorDestination,
           milestoneIds,
-          milestoneAmountsBaseUnits: milestoneAmounts,
-          agentId: result.data.agentId
+          milestoneAmountsBaseUnits: milestoneAmounts
         });
         const receipt: GatewayReceipt = {
           status: live.receipt.status,
@@ -185,7 +200,7 @@ export class EscrowLockService {
           statusCode: 202,
           body: {
             data: receipt,
-            detail: `Escrow lock submitted and confirmed on Solana ${config.solanaCluster}`
+            detail: "Escrow lock submitted and confirmed on Solana devnet"
           }
         };
       } catch (error) {
@@ -275,10 +290,57 @@ export class EscrowLockService {
       };
     }
 
-    if (config.signingMode === "live") {
+    if (config.signingMode === "devnet") {
       const context = this.liveLocks.get(escrowId) ?? (
-        result.data.lockContext ? parseLiveContext(result.data.lockContext) : undefined
+        result.data.lockContext && !isAgreementEscrowContext(result.data.lockContext)
+          ? parseLiveContext(result.data.lockContext)
+          : undefined
       );
+      const agreementContext = result.data.lockContext && isAgreementEscrowContext(result.data.lockContext)
+        ? result.data.lockContext
+        : undefined;
+      if (agreementContext) {
+        try {
+          const live = await submitAgreementMilestoneRelease(config, agreementContext, {
+            escrowId,
+            milestoneId,
+            expectedAmountBaseUnits: result.data.expectedAmountBaseUnits
+          });
+          const receipt: GatewayReceipt = {
+            status: live.status,
+            agreementId: result.data.agreementId,
+            escrowId: result.data.escrowId,
+            milestoneId: result.data.milestoneId,
+            termsHash: result.data.termsHash,
+            releasedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+            mint: result.data.mint,
+            programId: result.data.programId,
+            network: result.data.network,
+            idempotencyKey,
+            signature: live.signature,
+            explorerUrl: live.explorerUrl,
+            slot: live.slot,
+            campaignId: undefined,
+            campaignPda: agreementContext.escrowPda
+          };
+          this.receipts.set(idempotencyKey, receipt);
+          return {
+            statusCode: 202,
+            body: {
+              data: receipt,
+              detail: "Milestone release submitted and confirmed on Solana devnet"
+            }
+          };
+        } catch (error) {
+          return {
+            statusCode: 409,
+            body: {
+              code: "POLICY_VIOLATION",
+              detail: `Live milestone release failed: ${error instanceof Error ? error.message : String(error)}`
+            }
+          };
+        }
+      }
       if (!context) {
         return {
           statusCode: 409,
@@ -291,8 +353,7 @@ export class EscrowLockService {
       try {
         const live = await submitMilestoneRelease(config, context, {
           escrowId,
-          milestoneId,
-          creatorDestination: result.data.creatorDestination
+          milestoneId
         });
         const receipt: GatewayReceipt = {
           status: live.status,
@@ -316,7 +377,7 @@ export class EscrowLockService {
           statusCode: 202,
           body: {
             data: receipt,
-            detail: `Milestone release submitted and confirmed on Solana ${config.solanaCluster}`
+            detail: "Milestone release submitted and confirmed on Solana devnet"
           }
         };
       } catch (error) {
@@ -356,23 +417,18 @@ export class EscrowLockService {
 }
 
 function serializeLiveContext(context: LiveLockContext): Record<string, JsonValue> {
-  const serialized: Record<string, JsonValue> = {
+  return {
     escrowId: context.escrowId,
     campaignId: context.campaignId.toString(),
     campaign: context.campaign,
     creator: context.creator,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
-    ...(context.agentId ? { agentId: context.agentId } : {}),
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,
     milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
   };
-  if (context.creatorDestination) {
-    serialized.creatorDestination = context.creatorDestination;
-  }
-  return serialized;
 }
 
 function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveLockContext {
@@ -381,13 +437,17 @@ function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveL
     campaignId: BigInt(context.campaignId),
     campaign: context.campaign,
     creator: context.creator,
-    creatorDestination: context.creatorDestination,
     creatorToken: context.creatorToken,
     agentAuthority: context.agentAuthority,
-    agentId: context.agentId,
     treasuryToken: context.treasuryToken,
     mint: context.mint,
     milestoneIds: context.milestoneIds,
     milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
   };
+}
+
+function isAgreementEscrowContext(
+  context: z.infer<typeof releaseLiveContextSchema>
+): context is AgreementEscrowLiveContext {
+  return "agreementEscrowVersion" in context && context.agreementEscrowVersion === "v1";
 }

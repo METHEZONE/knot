@@ -72,7 +72,6 @@ function CreatorRulesForm({
           preferredContent: ["reel"],
           blockedDomains: blocked.map((item) => BLOCKED_CATEGORY_LABEL[item]),
           minimumUsdc: min,
-          walletAddress: "DemoWallet111111111111111111111111111111111",
         },
         stableKey("creator-profile", creator.handle),
       );

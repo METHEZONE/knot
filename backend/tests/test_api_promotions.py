@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -332,6 +334,40 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     assert receipts[0]["status"] == "CONFIRMED"
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    shutil.which("pay") is None,
+    reason="pay CLI 미설치 (npm i -g @solana/pay)",
+)
+def test_run_match_pays_a_real_paysh_sandbox_call() -> None:
+    """monkeypatch 없이 실제 pay CLI 로 x402 결제를 수행한다.
+
+    해커톤 가산점의 근거가 되는 유일한 증거이므로 mock 을 쓰지 않는다.
+    pay CLI 가 없는 환경에서는 skip 된다.
+    """
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+            paysh_timeout_seconds=90,
+        )
+    )
+
+    run_response = client.post("/api/v1/promotions/promotion-001/matches:run")
+    assert run_response.status_code == 201, run_response.text
+    paid = run_response.json()["data"]["matchRun"]["paidVerification"]
+    assert paid["status"] == "SETTLED", paid
+
+    receipts = repository.list_raw_documents(COLLECTIONS.transaction_receipts)
+    assert len(receipts) == 1
+    assert receipts[0]["paymentType"] == "PAYSH_X402"
+    assert receipts[0]["network"] == "pay.sh:sandbox"
+    assert receipts[0]["status"] == "CONFIRMED"
+
+    operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
+    assert operations[0]["paidVerification"]["resultDigest"].startswith("sha256:")
+
+
 def test_run_match_blocks_paysh_when_quote_exceeds_cap(monkeypatch) -> None:
     def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
         raise AssertionError("pay.sh must not be called when quote exceeds cap")
@@ -490,7 +526,7 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert negotiation["matchRunId"] == match_run["matchRunId"]
     assert negotiation["matchCandidateId"] == "creator-001"
     assert negotiation["creatorAgentId"] == "creator-agent-001"
-    assert agreement["status"] == "AGREED"
+    assert agreement["status"] == "FUNDING_REQUIRED"
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
     assert agreement["canonicalTermsJson"].startswith("{")

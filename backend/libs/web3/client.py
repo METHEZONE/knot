@@ -38,45 +38,57 @@ class Web3GatewayClient:
             payload=payload,
         )
 
-    def wallet_balance(self, *, address: str) -> dict[str, object]:
-        """지갑의 SOL/USDC 잔고 조회(읽기 전용). 에스크로 경로와 달리 응답 봉투(data)가 없다."""
-        try:
-            with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds) as client:
-                response = client.get(f"/internal/v1/wallets/{address}/balance")
-                response.raise_for_status()
-                body = response.json()
-        except httpx.HTTPStatusError as exc:
-            raise Web3GatewayError(
-                f"{exc.response.status_code}: {exc.response.text[:200]}"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise Web3GatewayError(str(exc)) from exc
-        if not isinstance(body, dict):
-            raise Web3GatewayError("Balance response is not an object")
-        return cast(dict[str, object], body)
+    def prepare_milestone_release(
+        self,
+        *,
+        escrow_id: str,
+        milestone_id: str,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            f"/internal/v1/escrows/{escrow_id}/milestones/{milestone_id}:prepare-release",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
 
-    def airdrop_local(self, *, address: str, sol: int, usdc: int = 0) -> dict[str, object]:
-        """로컬 밸리데이터 전용 faucet. 게이트웨이가 루프백 RPC 가 아니면 403 으로 막는다.
+    def confirm_milestone_release(
+        self,
+        *,
+        escrow_id: str,
+        milestone_id: str,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            f"/internal/v1/escrows/{escrow_id}/milestones/{milestone_id}:confirm-release",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
 
-        지갑 연결 편의 기능이라 에스크로 경로와 달리 응답 봉투(data)가 없다.
-        """
-        try:
-            with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds) as client:
-                response = client.post(
-                    "/internal/v1/faucet:airdrop",
-                    json={"address": address, "sol": sol, "usdc": usdc},
-                )
-                response.raise_for_status()
-                body = response.json()
-        except httpx.HTTPStatusError as exc:
-            raise Web3GatewayError(
-                f"{exc.response.status_code}: {exc.response.text[:200]}"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise Web3GatewayError(str(exc)) from exc
-        if not isinstance(body, dict):
-            raise Web3GatewayError("Faucet response is not an object")
-        return cast(dict[str, object], body)
+    def prepare_funding(
+        self,
+        *,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            "/internal/v1/escrows:prepare-funding",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+
+    def confirm_funding(
+        self,
+        *,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            "/internal/v1/escrows:confirm-funding",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
 
     def _post(
         self,

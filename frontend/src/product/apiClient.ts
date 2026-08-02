@@ -69,18 +69,10 @@ export type CurrentAccount = {
   brandId?: string | null;
   creatorId?: string | null;
   agentId?: string | null;
-  /** 유저 지갑(Phantom, 비수탁) — POST /me/wallet 으로 저장된 주소 */
   walletAddress?: string | null;
-  /** 에이전트 지갑(수탁, Secret Manager) 공개키 — read-only 표시용 */
-  agentWalletPubkey?: string | null;
+  walletNetwork?: string | null;
+  walletUpdatedAt?: string | null;
   schemaVersion: number;
-};
-
-export type ApiUserNotification = {
-  notificationId: string;
-  type: string;
-  createdAt?: string;
-  data?: Record<string, unknown>;
 };
 
 export type CurrentUserContext = {
@@ -171,9 +163,6 @@ export type BrandPromotionCreateInput = {
   usageRights: string;
   deadline: string;
   prohibitedClaims: string[];
-  /** cap(autoAcceptCeiling) 이내에서 에이전트가 사람 승인 없이 에스크로 락/릴리즈 */
-  autoEscrow?: boolean;
-  autoRelease?: boolean;
 };
 
 export type BrandSourceAnalysisInput = {
@@ -305,15 +294,12 @@ export type ApiNegotiation = {
   promotionId: string;
   promotionTitle?: string;
   productName?: string;
+  brandDisplayName?: string;
   brandId?: string;
   brandAgentId: string;
-  brandDisplayName?: string;
-  brandSnapshot?: Record<string, unknown> | null;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
-  creatorSnapshot?: Record<string, unknown> | null;
-  promotionSnapshot?: Record<string, unknown> | null;
   contextId: string;
   taskId: string;
   status:
@@ -332,6 +318,9 @@ export type ApiNegotiation = {
   currentAmountUsdc?: number;
   deliverableSummary?: string;
   workItems?: Array<Record<string, unknown>>;
+  brandSnapshot?: Record<string, unknown> | null;
+  promotionSnapshot?: Record<string, unknown> | null;
+  creatorSnapshot?: Record<string, unknown> | null;
 };
 
 export type ApiAgreement = {
@@ -342,9 +331,9 @@ export type ApiAgreement = {
   promotionId: string;
   promotionTitle?: string;
   productName?: string;
+  brandDisplayName?: string;
   brandId?: string;
   brandAgentId: string;
-  brandDisplayName?: string;
   creatorId?: string;
   creatorAgentId: string;
   creatorDisplayName?: string;
@@ -356,7 +345,7 @@ export type ApiAgreement = {
   creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
   termsHash: string;
-  status: "AGREED" | "REJECTED";
+  status: "AGREED" | "FUNDING_REQUIRED" | "FUNDED" | "REJECTED";
 };
 
 export type ApiTimelineEvent = {
@@ -377,8 +366,6 @@ export type ApiNegotiationMessage = {
   sequence?: number;
   payload?: Record<string, unknown>;
   a2aMessage?: Record<string, unknown>;
-  transport?: "HTTP_A2A" | "IN_PROCESS_A2A" | string;
-  a2aEndpoint?: string;
   createdAt: string;
 };
 
@@ -395,12 +382,22 @@ export type ApiEscrow = {
   agreementId: string;
   promotionId: string;
   lockedAmountBaseUnits: string;
+  fundedAmountBaseUnits?: string;
+  fundedAmountUsdc?: string;
+  totalAmountUsdc?: string;
   releasedAmountBaseUnits: string;
-  creatorDestinationWallet?: string | null;
+  releasedAmountUsdc?: string;
+  refundedAmountUsdc?: string;
   milestoneAmounts?: Record<string, string>;
-  status: "LOCKED" | "COMPLETED" | string;
+  status: "CREATED" | "FUNDED" | "PARTIALLY_RELEASED" | "RELEASED" | "LOCKED" | "COMPLETED" | string;
+  brandAuthority?: string;
+  creatorDestination?: string;
+  escrowPda?: string;
+  vaultTokenAccount?: string;
+  brandTokenAccount?: string;
+  fundingTransactionSignature?: string | null;
   lockSignature: string | null;
-  lockReceiptId: string;
+  lockReceiptId?: string;
 };
 
 export type ApiSettlement = {
@@ -409,7 +406,6 @@ export type ApiSettlement = {
   agreementId: string;
   milestoneId: string;
   amountBaseUnits: string;
-  creatorDestinationWallet?: string | null;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   signature: string | null;
 };
@@ -422,16 +418,6 @@ export type ApiReceipt = {
   explorerUrl: string | null;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   detail?: string;
-};
-
-export type ApiAgentActionResult = {
-  action: "ESCROW_LOCK" | "MILESTONE_RELEASE" | string;
-  status: "LOCKED" | "RELEASED" | "FAILED" | "SKIPPED" | string;
-  escrow?: ApiEscrow;
-  settlement?: ApiSettlement;
-  receipt?: ApiReceipt;
-  reason?: string;
-  error?: Record<string, unknown>;
 };
 
 export type BrandDashboard = {
@@ -472,6 +458,47 @@ export type ApiNegotiationBundle = {
 export type ApiAgreementEscrowBundle = {
   escrow: ApiEscrow | null;
   settlements: ApiSettlement[];
+};
+
+export type EscrowFundingPrepare = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  brandAuthority: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  totalAmountBaseUnits: string;
+  brandTokenAccount: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  brandUsdcBalanceBaseUnits: string;
+  estimatedNetworkFeeLamports: string;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
+};
+
+export type EscrowReleasePrepare = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  milestoneId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  expectedAmountBaseUnits: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  creatorTokenAccount: string;
+  estimatedNetworkFeeLamports: string;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
 };
 
 export type ApiDevAdminOverview = {
@@ -538,32 +565,6 @@ export class ProductApiClient {
 
   async getMe() {
     return this.request<CurrentUserContext>("/api/v1/me");
-  }
-
-  async saveWalletAddress(walletAddress: string) {
-    return this.request<CurrentUserContext>("/api/v1/me/wallet", {
-      method: "POST",
-      body: JSON.stringify({ walletAddress }),
-    });
-  }
-
-  async getMyWalletBalance() {
-    return this.request<{
-      connected: boolean;
-      address?: string;
-      sol?: number;
-      usdc?: number;
-      mint?: string;
-      cluster?: string;
-      error?: string;
-    }>("/api/v1/me/wallet/balance");
-  }
-
-  async listMyNotifications() {
-    const response = await this.request<{ notifications: ApiUserNotification[] }>(
-      "/api/v1/me/notifications",
-    );
-    return response.notifications;
   }
 
   async selectMyRole(role: "BRAND" | "CREATOR", idempotencyKey: string) {
@@ -895,6 +896,41 @@ export class ProductApiClient {
     return this.request<ApiAgreementEscrowBundle>(`/api/v1/agreements/${agreementId}/escrow`);
   }
 
+  async saveWalletAddress(walletAddress: string, network = "devnet") {
+    return this.request<{ wallet: { walletAddress: string; walletNetwork: string } } & CurrentUserContext>(
+      "/api/v1/me/wallet",
+      {
+        method: "POST",
+        body: JSON.stringify({ walletAddress, network }),
+      },
+    );
+  }
+
+  async prepareEscrowFunding(agreementId: string, idempotencyKey: string) {
+    return this.request<{ escrow: ApiEscrow; funding: EscrowFundingPrepare | null }>(
+      `/api/v1/agreements/${agreementId}/escrow/prepare`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
+  }
+
+  async confirmEscrowFunding(
+    agreementId: string,
+    transactionSignature: string,
+    idempotencyKey: string,
+  ) {
+    return this.request<{ escrow: ApiEscrow; receipt: ApiReceipt }>(
+      `/api/v1/agreements/${agreementId}/escrow/confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ transactionSignature }),
+      },
+    );
+  }
+
   async runAgentForPromotion(promotionId: string) {
     const promotion = await this.getPromotion(promotionId);
     const matchRun = await this.runMatches(promotionId);
@@ -946,15 +982,11 @@ export class ProductApiClient {
   }
 
   async verifyEvidence(evidenceId: string) {
-    const response = await this.verifyEvidenceWithAgentActions(evidenceId);
-    return response.evidence;
-  }
-
-  async verifyEvidenceWithAgentActions(evidenceId: string) {
-    return this.request<{ evidence: ApiEvidence; autoRelease?: ApiAgentActionResult | null }>(
+    const response = await this.request<{ evidence: ApiEvidence }>(
       `/api/v1/evidence/${evidenceId}:verify`,
       { method: "POST" },
     );
+    return response.evidence;
   }
 
   async lockEscrow(agreementId: string) {
@@ -973,6 +1005,33 @@ export class ProductApiClient {
       {
         method: "POST",
         headers: { "Idempotency-Key": `frontend-release-${escrowId}-${milestoneId}` },
+      },
+    );
+  }
+
+  async prepareMilestoneRelease(escrowId: string, milestoneId: string, idempotencyKey: string) {
+    return this.request<{ escrow: ApiEscrow; release: EscrowReleasePrepare }>(
+      `/api/v1/escrows/${escrowId}/milestones/${milestoneId}/release/prepare`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
+  }
+
+  async confirmMilestoneRelease(
+    escrowId: string,
+    milestoneId: string,
+    transactionSignature: string,
+    creatorTokenAccount: string,
+    idempotencyKey: string,
+  ) {
+    return this.request<{ settlement: ApiSettlement; escrow: ApiEscrow; receipt: ApiReceipt }>(
+      `/api/v1/escrows/${escrowId}/milestones/${milestoneId}/release/confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ transactionSignature, creatorTokenAccount }),
       },
     );
   }
