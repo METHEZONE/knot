@@ -28,6 +28,8 @@ Updated: 2026-08-02
 - Firebase login now links a completed seeded account by verified email when Firebase UID
   differs from the seeded user document, preventing `t1@knot.com` / `c1@knot.com` from
   being treated as new signup-required users.
+- Devnet demo seed now updates an existing Firebase Auth account by email when the
+  requested seeded UID is unavailable, keeping `000000` as the demo password.
 
 ### Current Money Flow
 
@@ -59,6 +61,11 @@ Updated: 2026-08-02
 - `npm --prefix frontend run build`: passed.
 - `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 27 passed.
 - `./.venv/bin/pytest backend/tests -q`: 126 passed, 5 skipped.
+- `./.venv/bin/python -m py_compile scripts/seed_devnet_phantom_demo.py`: passed.
+- Firestore/Firebase devnet demo seed executed for `t1@knot.com` and `c1@knot.com`.
+- Real Firebase password sign-in checked against local Firestore-backed API:
+  - `t1@knot.com / 000000`: `BRAND`, `COMPLETED`, `/brand`.
+  - `c1@knot.com / 000000`: `CREATOR`, `COMPLETED`, `/creator`.
 - `./.venv/bin/pytest backend/tests/test_api_a2a_http_integration.py::test_product_api_runs_real_http_a2a_counter_accept_golden_path -q` outside sandbox: passed.
 - Local current-branch stack health checked:
   - Product API `http://127.0.0.1:18090/readyz`: ready.

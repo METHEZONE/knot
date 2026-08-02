@@ -588,15 +588,29 @@ def _create_or_update_auth_users(project: str | None, password: str) -> None:
             )
             print(f"Updated Firebase Auth user {user['email']}.")
         except auth.UserNotFoundError:
-            auth.create_user(
-                uid=user["uid"],
-                email=user["email"],
-                password=password,
-                display_name=user["display_name"],
-                email_verified=True,
-                disabled=False,
-            )
-            print(f"Created Firebase Auth user {user['email']}.")
+            try:
+                auth.create_user(
+                    uid=user["uid"],
+                    email=user["email"],
+                    password=password,
+                    display_name=user["display_name"],
+                    email_verified=True,
+                    disabled=False,
+                )
+                print(f"Created Firebase Auth user {user['email']}.")
+            except auth.EmailAlreadyExistsError:
+                existing = auth.get_user_by_email(user["email"])
+                auth.update_user(
+                    existing.uid,
+                    password=password,
+                    display_name=user["display_name"],
+                    email_verified=True,
+                    disabled=False,
+                )
+                print(
+                    f"Updated existing Firebase Auth user {user['email']} "
+                    f"with uid {existing.uid}."
+                )
 
 
 def _assert_safe_firestore_seed(project: str | None, confirm: str) -> None:
