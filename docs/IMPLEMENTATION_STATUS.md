@@ -43,6 +43,8 @@ Updated: 2026-08-02
   `FUNDING_CONFIRM_FAILED` conflicts instead of generic 502 Bad Gateway responses.
 - Web3 Gateway AIP-136 custom-method routes now use exact regex routes, preventing
   `/escrows:prepare-funding` from being captured by the legacy `/escrows:lock` handler.
+- Root landing page was restored to the existing `/knot/index.html` iframe landing
+  instead of the temporary React `LandingScreen`.
 
 ### Current Money Flow
 
@@ -64,6 +66,12 @@ Updated: 2026-08-02
 ### Verification
 
 - `anchor build`: passed with existing Anchor cfg warnings.
+- `scripts/deploy_devnet.sh`: deployed canonical escrow program
+  `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn` to devnet.
+  - Deploy signature: `2NuhkFTeehyJpH588zSwvCpQ5s8AeComoTYdsUJUtrUbyqLVsY5Z7iqezDwjfzj5aMLm6dcDVw1LmNQzAGC3meb5`
+  - ProgramData: `9ynq6BPG4uLdZ2xpVRn7yzono8oim6kpzpBdpyQt7qzS`
+  - Upgrade authority / deploy payer: `GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B`
+  - Deploy payer remaining balance: `0.22430384 SOL`
 - `anchor test`: build phase passed, devnet deploy phase failed because the configured upgrade authority has no credited SOL account.
 - `anchor test --skip-deploy`: build phase passed, then Anchor.toml test script failed because `/opt/homebrew/opt/python@3.14/bin/python3.14` has no `pytest` module; the repository `.venv` pytest command below passed.
 - `npm --prefix web3/gateway run build`: passed.
@@ -90,5 +98,6 @@ Updated: 2026-08-02
 
 ### Not Yet Verified On Devnet
 
-- No devnet program deployment or on-chain funding/release transaction was executed in this phase.
-- Devnet smoke still requires funded deployment/settlement signer SOL and Brand Phantom devnet USDC/SOL.
+- Full Phantom-signed funding and milestone release smoke still needs to be rerun
+  after the canonical program deployment.
+- Release smoke still requires funded settlement signer SOL and Brand Phantom devnet USDC/SOL.
