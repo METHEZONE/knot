@@ -34,6 +34,8 @@
 - 2026-08-02: `anchor build` passed with the new program ID.
 - 2026-08-02: Devnet program deployment attempted after approval, but failed before deployment because the fee payer wallet had `0 SOL` and the public faucet/PoW bootstrap also hit rate limits.
 - 2026-08-02: Fresh program preflight now points at `HeviXng9...3z4v` and Circle devnet USDC, but correctly reports missing executable program/config until deployment succeeds.
+- 2026-08-02: Updated live escrow authority mapping so `brandAuthority` and `creatorDestination` come from user-connected Phantom wallet addresses instead of internal Agent IDs or server creator keypairs.
+- 2026-08-02: Updated on-chain release path so a backend-verified evidence result lets the Brand Agent release a pending/submitted milestone to the Creator's Phantom token account without storing the Creator private key server-side.
 - 2026-08-02: `npm --prefix web3/gateway run build`, `npm --prefix web3/gateway run lint`, `npm --prefix web3/gateway test`, API/PDA pytest subset, and frontend lint/typecheck/build passed on the branch.
 
 ## Current Blockers
@@ -42,3 +44,4 @@
 - Devnet Secret Manager signer entries, Circle USDC escrow program/config readiness, wallet funding, deployment, and live on-chain smoke still require explicit approval before execution.
 - The current deployed devnet program config is already initialized against a custom test mint. Circle devnet USDC requires deploying/configuring a fresh program ID or intentionally switching the demo to that custom test mint with truthful labeling.
 - Fresh Circle USDC program deployment is blocked until deploy wallet `GX1q...gv6B` receives at least 2.2 devnet SOL. Official CLI airdrop and `devnet-pow` bootstrap both returned faucet rate-limit errors in this environment.
+- pay.sh/x402 is wired as candidate-verification spend during match runs. It is not the creator payout escrow. If `PAYSH_RESOURCE_ID=replace-me` or caps/allowlist block the call, KNOT records a skipped/failed pay.sh operation instead of fabricating a paid receipt.

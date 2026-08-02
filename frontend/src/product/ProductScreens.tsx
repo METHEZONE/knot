@@ -2131,7 +2131,7 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
           <Input label="Wallet address" placeholder={wallet.address ?? roleSession.walletAddress} />
-          <InfoBox label="Network" value="Solana Testnet" />
+          <InfoBox label="Network" value="Solana Devnet" />
           <button
             type="button"
             onClick={() => {

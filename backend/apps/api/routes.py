@@ -333,6 +333,18 @@ def build_api_router(
         user = _bootstrap_authenticated_user(repository, auth_user)
         updated = {**user, "walletAddress": payload.wallet_address, "updatedAt": _now()}
         repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
+        if updated.get("role") == "BRAND" and isinstance(updated.get("brandId"), str):
+            brand_path = FirestorePaths.brand(str(updated["brandId"]))
+            brand = repository.get_raw_document(brand_path)
+            if brand is not None:
+                repository.save_raw_document(
+                    brand_path,
+                    {
+                        **brand,
+                        "walletAddress": payload.wallet_address,
+                        "updatedAt": updated["updatedAt"],
+                    },
+                )
         if updated.get("role") == "CREATOR" and isinstance(updated.get("creatorId"), str):
             creator_path = FirestorePaths.creator_profile(str(updated["creatorId"]))
             creator = repository.get_raw_document(creator_path)
@@ -2635,6 +2647,7 @@ def build_api_router(
             )
 
         milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        brand_authority_wallet = _brand_authority_wallet(repository, agreement)
         creator_destination_wallet = _creator_settlement_wallet(repository, agreement)
 
         _claim_idempotency(
@@ -2646,6 +2659,7 @@ def build_api_router(
                 "amount": locked_amount,
                 "programId": settings.escrow_program_id,
                 "mint": settings.usdc_mint,
+                "brandAuthorityWallet": brand_authority_wallet,
                 "creatorDestinationWallet": creator_destination_wallet,
             },
             owner_path=f"lock:{agreement_id}",
@@ -2664,6 +2678,7 @@ def build_api_router(
                     escrow_id=escrow_id,
                     locked_amount=locked_amount,
                     milestone_amounts=milestone_amounts,
+                    brand_authority_wallet=brand_authority_wallet,
                     creator_destination_wallet=creator_destination_wallet,
                 ),
                 expected={
@@ -4241,6 +4256,38 @@ def _creator_settlement_wallet(
     )
 
 
+def _brand_authority_wallet(
+    repository: KnotRepository,
+    document: dict[str, object],
+) -> str:
+    brand_id = document.get("brandId")
+    brand_agent_id = document.get("brandAgentId")
+    for user in repository.list_raw_documents(COLLECTIONS.users):
+        if (
+            isinstance(brand_id, str)
+            and user.get("brandId") == brand_id
+            or isinstance(brand_agent_id, str)
+            and (
+                user.get("agentId") == brand_agent_id
+                or user.get("brandAgentId") == brand_agent_id
+            )
+        ):
+            wallet = user.get("walletAddress")
+            if isinstance(wallet, str) and wallet:
+                return wallet
+    if isinstance(brand_id, str):
+        brand = repository.get_raw_document(FirestorePaths.brand(brand_id))
+        if brand is not None:
+            wallet = brand.get("walletAddress")
+            if isinstance(wallet, str) and wallet:
+                return wallet
+    raise _problem(
+        status.HTTP_409_CONFLICT,
+        "BRAND_WALLET_REQUIRED",
+        "Brand must connect a wallet before Agent escrow can be locked.",
+    )
+
+
 def _append_unique_str(value: object, item: str) -> list[str]:
     items = [entry for entry in value if isinstance(entry, str)] if isinstance(value, list) else []
     if item not in items:
@@ -5290,6 +5337,7 @@ def _lock_with_web3_gateway(
     escrow_id: str,
     locked_amount: int,
     milestone_amounts: dict[str, int],
+    brand_authority_wallet: str,
     creator_destination_wallet: str,
 ) -> dict[str, object]:
     if settings.web3_mode != "gateway":
@@ -5313,7 +5361,7 @@ def _lock_with_web3_gateway(
                 "mint": settings.usdc_mint,
                 "programId": settings.escrow_program_id,
                 "network": settings.escrow_network,
-                "brandAuthority": agreement["brandAgentId"],
+                "brandAuthority": brand_authority_wallet,
                 "creatorDestination": creator_destination_wallet,
                 "agentId": agreement["brandAgentId"],
             },

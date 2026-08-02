@@ -148,7 +148,10 @@ pub mod knot_escrow {
                 .milestones
                 .get(index as usize)
                 .ok_or(EscrowError::BadIndex)?;
-            require!(m.status == MilestoneStatus::Submitted, EscrowError::BadState);
+            require!(
+                m.status == MilestoneStatus::Pending || m.status == MilestoneStatus::Submitted,
+                EscrowError::BadState
+            );
 
             let is_brand = signer == campaign.brand;
             let is_agent = signer == campaign.agent_authority;

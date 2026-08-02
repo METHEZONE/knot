@@ -12,6 +12,25 @@ def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository
     store = InMemoryDocumentStore()
     repository = KnotRepository(store)
     seed_demo_repository(repository)
+    brand_user = repository.get_raw_document("users/user-brand-1")
+    if brand_user is not None:
+        repository.save_raw_document(
+            "users/user-brand-1",
+            {**brand_user, "walletAddress": "brand-wallet"},
+        )
+    for brand_id in ("brand-001", "brand-1"):
+        brand_1 = repository.get_raw_document(f"brands/{brand_id}")
+        if brand_1 is not None:
+            repository.save_raw_document(
+                f"brands/{brand_id}",
+                {**brand_1, "walletAddress": "brand-wallet"},
+            )
+    brand_1 = repository.get_raw_document("brandProfiles/brand-1")
+    if brand_1 is not None:
+        repository.save_raw_document(
+            "brandProfiles/brand-1",
+            {**brand_1, "walletAddress": "brand-wallet"},
+        )
     creator_001 = repository.get_raw_document("creatorProfiles/creator-001")
     if creator_001 is not None:
         repository.save_raw_document(
@@ -57,6 +76,7 @@ def install_confirmed_gateway(monkeypatch, *, status: str = "CONFIRMED") -> None
                     "escrowId": payload["escrowId"],
                     "campaignId": "123",
                     "campaign": "campaign-pda",
+                    "brand": payload["brandAuthority"],
                     "creator": "creator-wallet",
                     "creatorDestination": payload["creatorDestination"],
                     "creatorToken": "creator-token",
@@ -428,7 +448,9 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
                     "escrowId": payload["escrowId"],
                     "campaignId": "123",
                     "campaign": "campaign-pda",
+                    "brand": payload["brandAuthority"],
                     "creator": "creator-wallet",
+                    "creatorDestination": payload["creatorDestination"],
                     "creatorToken": "creator-token",
                     "agentAuthority": "agent-wallet",
                     "treasuryToken": "treasury-token",
@@ -477,6 +499,8 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
     pass_evidence(client, agreement, "content")
     assert lock_receipt["gatewayReceipt"]["idempotencyKey"] == "gateway-lock"
     assert FakeGatewayClient.lock_payload["escrowId"] == escrow["escrowId"]
+    assert FakeGatewayClient.lock_payload["brandAuthority"] == "brand-wallet"
+    assert FakeGatewayClient.lock_payload["creatorDestination"] == "creator-wallet"
     assert FakeGatewayClient.lock_payload["expectedAmountBaseUnits"] == escrow[
         "lockedAmountBaseUnits"
     ]

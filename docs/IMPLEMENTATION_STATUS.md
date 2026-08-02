@@ -319,6 +319,8 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Devnet settlement preflight | BLOCKED | working tree | 2026-08-02 | Read-only preflight confirmed executable program `Aj63B5hL...B6jysj`, but signer keypairs were not configured locally and the existing config treasury mint is custom `7Hrvv...eK3p`, not Circle devnet USDC `4zMMC9...ncDU` |
 | Circle USDC program branch prep | VERIFIED | `fix/devnet-onchain-settlement` | 2026-08-02 | Fresh devnet program ID `HeviXng9...3z4v`, Circle USDC config initializer, devnet defaults, and UI copy updates are implemented; Anchor/Web3/API/frontend checks passed |
 | Circle USDC devnet deploy | BLOCKED | `fix/devnet-onchain-settlement` | 2026-08-02 | Approved deployment attempted, but deploy wallet `GX1q...gv6B` has `0 SOL`; Solana CLI airdrop and `devnet-pow` bootstrap both hit faucet rate limits |
+| Phantom wallet authority mapping | VERIFIED | `fix/devnet-onchain-settlement` | 2026-08-02 | `/me/wallet` saves connected Phantom addresses for Brand and Creator; escrow lock payload uses Brand wallet as `brandAuthority` and Creator wallet as `creatorDestination`; Gateway stores both in live context |
+| Agent release to Creator Phantom wallet | VERIFIED | `fix/devnet-onchain-settlement` | 2026-08-02 | Program release accepts pending/submitted milestones after Product API evidence verification, so Creator private keys are not stored server-side and settlement pays the connected Creator token account |
 
 ## 16. Latest Verified E2E
 
@@ -362,6 +364,8 @@ Creator localnet token balance: 2300
 Live devnet pay.sh purchase and live devnet escrow remain blocked until a Circle devnet USDC escrow program/config, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain devnet transactions exist.
 
 Branch `fix/devnet-onchain-settlement` prepares the fresh Circle devnet USDC path with program ID `HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v`, but the program is not deployed yet because the deploy fee payer needs devnet SOL.
+
+Phantom wallet connection is the expected user path. The browser reads the connected Phantom public key and persists it through `POST /api/v1/me/wallet`; the API then uses those stored wallet addresses for escrow authority and Creator payout routing.
 
 ## 17. Known Blockers
 

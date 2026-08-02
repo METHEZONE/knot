@@ -23,6 +23,7 @@ type LockInput = {
   escrowId: string;
   termsHash: string;
   expectedAmountBaseUnits: string;
+  brandAuthority: string;
   creatorDestination: string;
   agentId?: string;
   milestoneIds: string[];
@@ -39,6 +40,7 @@ export type LiveLockContext = {
   escrowId: string;
   campaignId: bigint;
   campaign: string;
+  brand?: string;
   creator: string;
   creatorDestination?: string;
   creatorToken: string;
@@ -65,8 +67,11 @@ export async function submitEscrowLock(
   input: LockInput
 ): Promise<{ receipt: LiveTransactionReceipt; context: LiveLockContext }> {
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
-  const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
-  const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
+  const brand =
+    config.autoMintOnLock || config.autoSolTopupOnLock
+      ? loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand")
+      : undefined;
+  const brandAuthority = new PublicKey(input.brandAuthority);
   const creatorDestination = new PublicKey(input.creatorDestination);
   const agent = await loadAgentKeypair(config, input.agentId);
   const programId = new PublicKey(config.allowedProgramId);
@@ -100,9 +105,12 @@ export async function submitEscrowLock(
   // 에이전트 지갑은 딜마다 재사용되므로 반드시 멱등하게 확보해야 한다 —
   // createAccount 는 이미 존재하면 "Provided owner is not allowed" 로 실패해서 두 번째 락이 깨졌다.
   const agentToken = (
-    await getOrCreateAssociatedTokenAccount(connection, brand, mint, agent.publicKey)
+    await getOrCreateAssociatedTokenAccount(connection, agent, mint, agent.publicKey)
   ).address;
   if (config.autoMintOnLock) {
+    if (!brand) {
+      throw new Error("brand keypair is required for localnet auto mint");
+    }
     await mintTo(connection, brand, mint, agentToken, brand, deposit);
   } else {
     const account = await getAccount(connection, agentToken, "confirmed", TOKEN_PROGRAM_ID);
@@ -113,6 +121,9 @@ export async function submitEscrowLock(
     }
   }
   if (config.autoSolTopupOnLock) {
+    if (!brand) {
+      throw new Error("brand keypair is required for localnet SOL top-up");
+    }
     await sendIx(
       connection,
       SystemProgram.transfer({
@@ -132,15 +143,15 @@ export async function submitEscrowLock(
   }
 
   const campaignId = campaignIdFromEscrowId(input.escrowId);
-  const campaign = pda(["campaign", brand.publicKey.toBuffer(), u64(campaignId)], programId);
+  const campaign = pda(["campaign", brandAuthority.toBuffer(), u64(campaignId)], programId);
   const vaultAuthority = pda(["vault-auth", campaign.toBuffer()], programId);
   const vault = pda(["vault", campaign.toBuffer()], programId);
   const signature = await sendIx(
     connection,
     initializeCampaignIx({
       programId,
-      brand: brand.publicKey,
-      creator: creator.publicKey,
+      brand: brandAuthority,
+      creator: creatorDestination,
       agentAuthority: agent.publicKey,
       funder: agent.publicKey,
       mint,
@@ -163,10 +174,11 @@ export async function submitEscrowLock(
       escrowId: input.escrowId,
       campaignId,
       campaign: campaign.toBase58(),
-      creator: creator.publicKey.toBase58(),
+      brand: brandAuthority.toBase58(),
+      creator: creatorDestination.toBase58(),
       creatorDestination: creatorDestination.toBase58(),
       creatorToken: (
-        await getOrCreateAssociatedTokenAccount(connection, brand, mint, creatorDestination)
+        await getOrCreateAssociatedTokenAccount(connection, agent, mint, creatorDestination)
       ).address.toBase58(),
       agentAuthority: agent.publicKey.toBase58(),
       treasuryToken: treasuryToken.toBase58(),
@@ -188,8 +200,6 @@ export async function submitMilestoneRelease(
     throw new Error(`Unknown milestoneId for live escrow: ${input.milestoneId}`);
   }
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
-  const brand = loadKeypair(config.brandKeypairJson, config.brandKeypairPath, "brand");
-  const creator = loadKeypair(config.creatorKeypairJson, config.creatorKeypairPath, "creator");
   const agent = await loadAgentKeypair(config, context.agentId);
   if (
     input.creatorDestination &&
@@ -200,22 +210,10 @@ export async function submitMilestoneRelease(
   }
   const programId = new PublicKey(config.allowedProgramId);
   const campaign = new PublicKey(context.campaign);
-  await sendIx(
-    connection,
-    new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: creator.publicKey, isSigner: true, isWritable: false },
-        { pubkey: campaign, isSigner: false, isWritable: true }
-      ],
-      data: Buffer.concat([disc("submit_milestone"), Buffer.from([index])])
-    }),
-    [brand, creator]
-  );
-
   const vaultAuthority = pda(["vault-auth", campaign.toBuffer()], programId);
   const vault = pda(["vault", campaign.toBuffer()], programId);
-  const reputation = pda(["rep", creator.publicKey.toBuffer()], programId);
+  const creator = new PublicKey(context.creator);
+  const reputation = pda(["rep", creator.toBuffer()], programId);
   const signature = await sendIx(
     connection,
     new TransactionInstruction({
@@ -233,7 +231,7 @@ export async function submitMilestoneRelease(
       ],
       data: Buffer.concat([disc("approve_and_release"), Buffer.from([index])])
     }),
-    [brand, agent]
+    [agent]
   );
   return liveReceipt(config, signature);
 }
