@@ -294,6 +294,7 @@ export type ApiNegotiation = {
   promotionId: string;
   promotionTitle?: string;
   productName?: string;
+  brandDisplayName?: string;
   brandId?: string;
   brandAgentId: string;
   creatorId?: string;
@@ -317,6 +318,9 @@ export type ApiNegotiation = {
   currentAmountUsdc?: number;
   deliverableSummary?: string;
   workItems?: Array<Record<string, unknown>>;
+  brandSnapshot?: Record<string, unknown> | null;
+  promotionSnapshot?: Record<string, unknown> | null;
+  creatorSnapshot?: Record<string, unknown> | null;
 };
 
 export type ApiAgreement = {
@@ -327,6 +331,7 @@ export type ApiAgreement = {
   promotionId: string;
   promotionTitle?: string;
   productName?: string;
+  brandDisplayName?: string;
   brandId?: string;
   brandAgentId: string;
   creatorId?: string;
@@ -335,6 +340,7 @@ export type ApiAgreement = {
   terms: ApiAgreementTerms;
   deliverableSummary?: string;
   workItems?: Array<Record<string, unknown>>;
+  brandSnapshot?: Record<string, unknown> | null;
   promotionSnapshot?: Record<string, unknown> | null;
   creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;

@@ -113,7 +113,7 @@ export function NegotiationDetail({
       const idempotencySeed = `${state.detail.agreement.agreementId}-${wallet.address}`;
       const prepared = await client.prepareEscrowFunding(
         state.detail.agreement.agreementId,
-        `frontend-prepare-${idempotencySeed}`,
+        `frontend-prepare-v2-${idempotencySeed}`,
       );
       if (!prepared.funding) {
         await refresh();
@@ -200,40 +200,34 @@ export function NegotiationDetail({
         />
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <CounterpartyProfilePanel role={role} negotiation={negotiation} agreement={agreement} />
         <WorkSummaryPanel role={role} negotiation={negotiation} agreement={agreement} />
-
-        <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
-          <MessageThread role={role} messages={messages} />
-        </section>
+        <SettlementSummaryPanel
+          role={role}
+          agreement={agreement}
+          escrowBundle={escrowBundle}
+          walletAddress={effectiveWalletAddress}
+          fundingState={fundingState}
+          onFund={role === "brand" && agreement ? fundEscrowWithPhantom : undefined}
+          onConnectWallet={connectAndSaveWallet}
+        />
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
         <SectionHeader eyebrow="계약과 escrow" title="마일스톤 정산" />
         {agreement ? (
-          <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-            <EscrowPanel
-              role={role}
-              agreement={agreement}
-              escrowBundle={escrowBundle}
-              walletAddress={effectiveWalletAddress}
-              fundingState={fundingState}
-              onFund={role === "brand" ? fundEscrowWithPhantom : undefined}
-              onConnectWallet={connectAndSaveWallet}
-            />
-            <MilestonePanel
-              role={role}
-              agreement={agreement}
-              escrowBundle={escrowBundle}
-              walletAddress={effectiveWalletAddress}
-              settlementState={settlementState}
-              onEnsureCreatorWallet={ensureCreatorSettlementWallet}
-              onSettlementState={setSettlementState}
-              onRefresh={refresh}
-              onError={setActionError}
-            />
-          </div>
+          <MilestonePanel
+            role={role}
+            agreement={agreement}
+            escrowBundle={escrowBundle}
+            walletAddress={effectiveWalletAddress}
+            settlementState={settlementState}
+            onEnsureCreatorWallet={ensureCreatorSettlementWallet}
+            onSettlementState={setSettlementState}
+            onRefresh={refresh}
+            onError={setActionError}
+          />
         ) : (
           <PanelMessage
             title="아직 계약이 생성되지 않았습니다"
@@ -242,7 +236,67 @@ export function NegotiationDetail({
         )}
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
       </section>
+
+      <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
+        <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
+        <MessageThread role={role} messages={messages} />
+      </section>
     </div>
+  );
+}
+
+function CounterpartyProfilePanel({
+  role,
+  negotiation,
+  agreement,
+}: {
+  role: Role;
+  negotiation: ApiNegotiation;
+  agreement: ApiAgreement | null;
+}) {
+  const brand = agreement?.brandSnapshot ?? negotiation.brandSnapshot ?? null;
+  const creator = agreement?.creatorSnapshot ?? negotiation.creatorSnapshot ?? null;
+  const promotion = agreement?.promotionSnapshot ?? negotiation.promotionSnapshot ?? null;
+  const counterparty = role === "brand" ? creator : brand;
+  const counterpartyTitle =
+    role === "brand"
+      ? textValue(counterparty, "displayName", agreement?.creatorDisplayName ?? negotiation.creatorDisplayName ?? negotiation.creatorAgentId)
+      : textValue(counterparty, "displayName", agreement?.brandDisplayName ?? negotiation.brandDisplayName ?? negotiation.brandAgentId);
+  const counterpartyAgent =
+    role === "brand"
+      ? textValue(counterparty, "creatorAgentId", negotiation.creatorAgentId)
+      : negotiation.brandAgentId;
+
+  return (
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <SectionHeader
+        eyebrow={role === "brand" ? "Creator profile" : "Brand profile"}
+        title={counterpartyTitle}
+      />
+      <div className="grid gap-3">
+        <Metric label={role === "brand" ? "Creator Agent" : "Brand Agent"} value={counterpartyAgent} />
+        {role === "brand" ? (
+          <>
+            <Metric label="카테고리" value={listValue(counterparty, "categories")} />
+            <Metric label="완료된 거래" value={textValue(counterparty, "completedDealCount", "0")} />
+          </>
+        ) : (
+          <>
+            <Metric label="브랜드" value={textValue(counterparty, "displayName", "미등록")} />
+            <Metric label="웹사이트" value={textValue(counterparty, "websiteUrl", "미등록")} />
+          </>
+        )}
+        <Metric
+          label="프로모션"
+          value={textValue(promotion, "productName", negotiation.productName ?? negotiation.promotionTitle ?? "프로모션")}
+        />
+      </div>
+      <p className="mt-3 text-sm text-muted">
+        {role === "brand"
+          ? "이 협상은 위 Creator Agent와 체결된 기록입니다."
+          : "이 협상은 위 Brand Agent가 보낸 제안에서 체결된 기록입니다."}
+      </p>
+    </section>
   );
 }
 
@@ -293,7 +347,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   }
 
   return (
-    <div className="flex max-h-[620px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
+    <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
       {visible.map((message, index) => {
         const side = messageSide(message, index);
         const mine = side === role;
@@ -312,7 +366,18 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
               <p className="font-mono text-[10px] uppercase opacity-70">
                 {side === "brand" ? "Brand Agent" : "Creator Agent"} · #{message.sequence ?? index + 1}
               </p>
+              <p className="mt-1 font-mono text-[10px] opacity-70">
+                {String(message.payload?.type ?? "A2A")} · {message.taskId}
+              </p>
               <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
+              <details className="mt-3">
+                <summary className="cursor-pointer font-mono text-[10px] uppercase opacity-70">
+                  A2A payload
+                </summary>
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[10px] text-foreground">
+                  {formatA2aPayload(message)}
+                </pre>
+              </details>
               <p className="mt-2 font-mono text-[10px] opacity-60">{formatTime(message.createdAt)}</p>
             </div>
           </motion.div>
@@ -327,7 +392,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   );
 }
 
-function EscrowPanel({
+function SettlementSummaryPanel({
   role,
   agreement,
   escrowBundle,
@@ -337,7 +402,7 @@ function EscrowPanel({
   onConnectWallet,
 }: {
   role: Role;
-  agreement: ApiAgreement;
+  agreement: ApiAgreement | null;
   escrowBundle: ApiAgreementEscrowBundle | null;
   walletAddress: string | null;
   fundingState: "idle" | "connecting" | "signing" | "confirming" | "done";
@@ -347,42 +412,18 @@ function EscrowPanel({
   const escrow = escrowBundle?.escrow ?? null;
   const signature = escrow?.fundingTransactionSignature ?? escrow?.lockSignature ?? null;
   const funded = escrow?.status === "FUNDED" || escrow?.status === "PARTIALLY_RELEASED" || escrow?.status === "RELEASED";
+  const latestSettlement = escrowBundle?.settlements?.[escrowBundle.settlements.length - 1] ?? null;
+
   return (
-    <div className="sketch-alt ink border border-border-subtle bg-background p-4">
-      <p className="text-sm text-muted">Agreement</p>
-      <p className="mt-1 break-all font-mono text-xs">{agreement.agreementId}</p>
-      <div className="mt-4 flex flex-wrap items-baseline gap-3">
-        <Money usdc={agreement.terms.compensation.baseAmountUsdc} size="lg" />
-        <span className="sketch-pill ink border border-border-subtle px-3 py-1 font-mono text-xs">
-          {escrow ? escrow.status : "ESCROW_PENDING"}
-        </span>
+    <section className="sketch ink border border-border-subtle bg-surface p-5">
+      <SectionHeader eyebrow="Wallet & settlement" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
+      <div className="grid gap-3">
+        <Metric label={role === "brand" ? "Brand Phantom" : "Creator Phantom"} value={walletAddress ?? "연결 필요"} />
+        <Metric label="Agreement 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
+        <Metric label="Escrow" value={escrow ? `${escrow.status} · ${baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)}` : "아직 잠김 없음"} />
+        <Metric label="Escrow Vault" value={escrow?.vaultTokenAccount ?? "prepare 전"} />
+        <Metric label={role === "brand" ? "예치 tx" : "정산 tx"} value={role === "brand" ? signature ?? "예치 전" : latestSettlement?.signature ?? "정산 전"} />
       </div>
-      <p className="mt-3 break-all font-mono text-xs text-muted">termsHash {agreement.termsHash}</p>
-      {escrow ? (
-        <div className="mt-4 grid gap-2 text-sm">
-          <Metric label="Brand Phantom" value={walletAddress ?? escrow.brandAuthority ?? "연결 필요"} />
-          <Metric label="Creator 수령 지갑" value={escrow.creatorDestination ?? "정산 지갑 연결 필요"} />
-          <Metric label="Escrow Vault" value={escrow.vaultTokenAccount ?? "prepare 전"} />
-          <Metric label="예치 금액" value={baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)} />
-          <Metric label="지급 완료" value={baseUnitsToUsdcLabel(escrow.releasedAmountBaseUnits)} />
-          <Metric label="Escrow 잔액" value={baseUnitsToUsdcLabel(escrowBalanceBaseUnits(escrow))} />
-          <Metric label="funding signature" value={signature ?? "pending"} />
-          {signature ? (
-            <a
-              href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
-              target="_blank"
-              rel="noreferrer"
-              className="font-mono text-xs underline decoration-[1px] underline-offset-4"
-            >
-              Solana Explorer
-            </a>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mt-4">
-          <p className="text-sm text-muted">아직 실제 escrow lock 기록이 없습니다.</p>
-        </div>
-      )}
       {role === "brand" && onFund && !funded ? (
         <button
           type="button"
@@ -403,7 +444,17 @@ function EscrowPanel({
           {walletAddress ? "수령 지갑 다시 연결" : "Phantom 수령 지갑 연결"}
         </button>
       ) : null}
-    </div>
+      {signature ? (
+        <a
+          href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
+        >
+          Solana Explorer
+        </a>
+      ) : null}
+    </section>
   );
 }
 
@@ -662,6 +713,19 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
   return rationale ?? type;
 }
 
+function formatA2aPayload(message: ApiNegotiationMessage) {
+  const a2aData = firstA2aPartData(message.a2aMessage);
+  return JSON.stringify(a2aData ?? message.payload ?? {}, null, 2);
+}
+
+function firstA2aPartData(a2aMessage: Record<string, unknown> | undefined) {
+  const parts = a2aMessage?.parts;
+  if (!Array.isArray(parts)) return null;
+  const first = parts[0];
+  if (!isRecord(first)) return null;
+  return first.data ?? null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -670,6 +734,19 @@ function numberFromUnknown(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
   return null;
+}
+
+function textValue(source: Record<string, unknown> | null | undefined, key: string, fallback: string) {
+  const value = source?.[key];
+  if (typeof value === "string" && value) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString();
+  return fallback;
+}
+
+function listValue(source: Record<string, unknown> | null | undefined, key: string) {
+  const value = source?.[key];
+  if (Array.isArray(value)) return value.map(String).join(", ") || "미등록";
+  return typeof value === "string" && value ? value : "미등록";
 }
 
 function formatDeliverable(format: string) {
@@ -723,13 +800,6 @@ function baseUnitsToUsdcLabel(value: string | undefined) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return value;
   return `${(raw / 1_000_000).toLocaleString()} USDC`;
-}
-
-function escrowBalanceBaseUnits(escrow: { lockedAmountBaseUnits?: string; releasedAmountBaseUnits?: string }) {
-  const locked = Number(escrow.lockedAmountBaseUnits ?? "0");
-  const released = Number(escrow.releasedAmountBaseUnits ?? "0");
-  if (!Number.isFinite(locked) || !Number.isFinite(released)) return undefined;
-  return String(Math.max(locked - released, 0));
 }
 
 function readableError(caught: unknown) {

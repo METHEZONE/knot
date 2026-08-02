@@ -2,6 +2,7 @@ import ipaddress
 import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from hashlib import sha256
 from subprocess import TimeoutExpired
 from typing import cast
 from urllib.parse import urlparse
@@ -2377,7 +2378,7 @@ def build_api_router(
         escrow_id = (
             _require_document_str(existing, "escrowId")
             if existing is not None
-            else f"escrow-{uuid4()}"
+            else _agreement_escrow_id(agreement_id)
         )
         payload = {
             "agreementId": agreement_id,
@@ -2833,7 +2834,7 @@ def build_api_router(
         )
 
         now = _now()
-        escrow_id = f"escrow-{uuid4()}"
+        escrow_id = _agreement_escrow_id(agreement_id)
         receipt_id = f"receipt-{uuid4()}"
         operation_id = f"op-{uuid4()}"
         milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
@@ -5495,6 +5496,22 @@ def _find_escrow_by_agreement(
         if document.get("agreementId") == agreement_id:
             return document
     return None
+
+
+def _agreement_escrow_id(agreement_id: str) -> str:
+    # Keep the derived id stable for idempotency and base58-safe for gateway/on-chain contexts.
+    return f"esc{_base58_encode(sha256(agreement_id.encode('utf-8')).digest())[:32]}"
+
+
+def _base58_encode(raw: bytes) -> str:
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    value = int.from_bytes(raw, "big")
+    encoded = ""
+    while value:
+        value, remainder = divmod(value, 58)
+        encoded = alphabet[remainder] + encoded
+    leading_zeroes = len(raw) - len(raw.lstrip(b"\0"))
+    return "1" * leading_zeroes + (encoded or "1")
 
 
 def _require_funded_escrow_for_agreement(

@@ -13,6 +13,7 @@ CLEAN_EVIDENCE_URL = "https://social.example/post/with-brand-and-ad"
 BRAND_WALLET = "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
 CREATOR_WALLET = "63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ"
 SETTLEMENT_AUTHORITY = "11111111111111111111111111111111"
+BASE58_ALPHABET = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
 
 def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository]:
@@ -240,6 +241,11 @@ def timeline_types(client: TestClient) -> list[str]:
     return [event["type"] for event in events]
 
 
+def assert_base58_safe(value: str) -> None:
+    assert value
+    assert all(character in BASE58_ALPHABET for character in value)
+
+
 def test_prepare_funding_uses_brand_and_creator_phantom_wallets(monkeypatch) -> None:
     gateway = install_funding_gateway(monkeypatch)
     client, repository = seeded(
@@ -266,11 +272,35 @@ def test_prepare_funding_uses_brand_and_creator_phantom_wallets(monkeypatch) -> 
     assert data["funding"]["status"] == "PREPARED"
     assert gateway.prepare_payload["brandAuthority"] == BRAND_WALLET
     assert gateway.prepare_payload["creatorDestination"] == CREATOR_WALLET
+    assert_base58_safe(str(gateway.prepare_payload["escrowId"]))
     stored_agreement = repository.get_raw_document(
         FirestorePaths.agreement(agreement["agreementId"])
     )
     assert stored_agreement is not None
     assert stored_agreement["status"] == "FUNDING_REQUIRED"
+
+
+def test_prepare_funding_replays_same_idempotency_key(monkeypatch) -> None:
+    install_funding_gateway(monkeypatch)
+    client, repository = seeded(
+        Settings(
+            auth_mode="emulator",
+            firebase_project_id="knot-dev-503505",
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            settlement_authority=SETTLEMENT_AUTHORITY,
+        )
+    )
+    agreement = brand_owned_agreement_with_wallets(client, repository)
+    path = f"/api/v1/agreements/{agreement['agreementId']}/escrow/prepare"
+    headers = {**auth_headers(), "Idempotency-Key": "prepare-retry"}
+
+    first = client.post(path, headers=headers)
+    second = client.post(path, headers=headers)
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["data"]["escrow"]["escrowId"] == second.json()["data"]["escrow"]["escrowId"]
 
 
 def test_confirm_funding_marks_escrow_funded_only_after_gateway_validation(monkeypatch) -> None:
@@ -688,6 +718,7 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
     pass_evidence(client, agreement, "content")
     assert lock_receipt["gatewayReceipt"]["idempotencyKey"] == "gateway-lock"
     assert FakeGatewayClient.lock_payload["escrowId"] == escrow["escrowId"]
+    assert_base58_safe(str(FakeGatewayClient.lock_payload["escrowId"]))
     assert FakeGatewayClient.lock_payload["expectedAmountBaseUnits"] == escrow[
         "lockedAmountBaseUnits"
     ]
