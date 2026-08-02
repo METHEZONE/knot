@@ -42,6 +42,8 @@ Updated: 2026-08-02
 ### Verification
 
 - `anchor build`: passed with existing Anchor cfg warnings.
+- `anchor test`: build phase passed, devnet deploy phase failed because the configured upgrade authority has no credited SOL account.
+- `anchor test --skip-deploy`: build phase passed, then Anchor.toml test script failed because `/opt/homebrew/opt/python@3.14/bin/python3.14` has no `pytest` module; the repository `.venv` pytest command below passed.
 - `npm --prefix web3/gateway run build`: passed.
 - `npm --prefix web3/gateway run lint`: passed.
 - `npm --prefix web3/gateway test`: passed.
