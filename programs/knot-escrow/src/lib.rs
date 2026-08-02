@@ -6,9 +6,10 @@
 //! 브랜드 에이전트(agent_authority)는 `auto_approve_cap` 이내면 사람 개입 없이 릴리스 가능.
 //! 합의된 텀시트 지문(terms_hash)을 온체인 기록, 환불은 타임락 경과 후 가능.
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, TransferChecked};
 
-declare_id!("Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj");
+declare_id!("9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn");
 
 pub const MAX_MILESTONES: usize = 8;
 pub const BPS_DENOM: u64 = 10_000;
@@ -264,6 +265,253 @@ pub mod knot_escrow {
         ctx.accounts.campaign.status = CampaignStatus::Cancelled;
         Ok(())
     }
+
+    /// Agreement별 escrow PDA를 만들고 Brand/Creator/Settlement authority 및 마일스톤 금액을 고정한다.
+    /// 이 instruction은 자금을 이동하지 않는다.
+    pub fn initialize_escrow(
+        ctx: Context<InitializeEscrow>,
+        agreement_hash: [u8; 32],
+        milestone_amounts: Vec<u64>,
+        total_amount: u64,
+        terms_hash: [u8; 32],
+    ) -> Result<()> {
+        require!(!milestone_amounts.is_empty(), EscrowError::NoMilestones);
+        require!(
+            milestone_amounts.len() <= MAX_MILESTONES,
+            EscrowError::TooManyMilestones
+        );
+        let sum = milestone_amounts.iter().try_fold(0u64, |acc, amount| {
+            acc.checked_add(*amount).ok_or(EscrowError::Overflow)
+        })?;
+        require!(sum == total_amount, EscrowError::AmountMismatch);
+
+        let escrow = &mut ctx.accounts.escrow;
+        escrow.agreement_hash = agreement_hash;
+        escrow.brand_authority = ctx.accounts.brand_authority.key();
+        escrow.creator_destination = ctx.accounts.creator_destination.key();
+        escrow.settlement_authority = ctx.accounts.settlement_authority.key();
+        escrow.usdc_mint = ctx.accounts.mint.key();
+        escrow.vault_token_account = ctx.accounts.vault.key();
+        escrow.total_amount = total_amount;
+        escrow.funded_amount = 0;
+        escrow.released_amount = 0;
+        escrow.refunded_amount = 0;
+        escrow.terms_hash = terms_hash;
+        escrow.status = AgreementEscrowStatus::Created;
+        escrow.bump = ctx.bumps.escrow;
+        escrow.milestones = milestone_amounts
+            .iter()
+            .map(|amount| AgreementEscrowMilestone {
+                amount: *amount,
+                status: AgreementMilestoneStatus::Pending,
+            })
+            .collect();
+
+        emit!(AgreementEscrowInitialized {
+            escrow: escrow.key(),
+            brand_authority: escrow.brand_authority,
+            creator_destination: escrow.creator_destination,
+            total_amount,
+        });
+        Ok(())
+    }
+
+    /// Brand Phantom signer의 USDC ATA에서 Agreement vault ATA로 전체 보상금을 예치한다.
+    pub fn fund_escrow(ctx: Context<FundEscrow>, amount: u64) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow;
+        require!(
+            ctx.accounts.brand_authority.key() == escrow.brand_authority,
+            EscrowError::Unauthorized
+        );
+        require!(
+            ctx.accounts.brand_token.owner == ctx.accounts.brand_authority.key(),
+            EscrowError::Unauthorized
+        );
+        require!(ctx.accounts.brand_token.mint == escrow.usdc_mint, EscrowError::MintMismatch);
+        require!(ctx.accounts.vault.mint == escrow.usdc_mint, EscrowError::MintMismatch);
+        require!(ctx.accounts.vault.owner == escrow.key(), EscrowError::BadVault);
+        require!(amount == escrow.total_amount, EscrowError::AmountMismatch);
+        require!(escrow.funded_amount == 0, EscrowError::BadState);
+        require!(
+            escrow.status == AgreementEscrowStatus::Created,
+            EscrowError::BadState
+        );
+
+        token::transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.key(),
+                TransferChecked {
+                    from: ctx.accounts.brand_token.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.brand_authority.to_account_info(),
+                },
+            ),
+            amount,
+            ctx.accounts.mint.decimals,
+        )?;
+
+        escrow.funded_amount = amount;
+        escrow.status = AgreementEscrowStatus::Funded;
+
+        emit!(AgreementEscrowFunded {
+            escrow: escrow.key(),
+            brand_authority: escrow.brand_authority,
+            amount,
+        });
+        Ok(())
+    }
+
+    /// 검증 정책을 통과한 마일스톤만 Settlement authority가 release 가능하도록 표시한다.
+    pub fn verify_milestone(ctx: Context<UpdateAgreementEscrowMilestone>, index: u8) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow;
+        require!(
+            ctx.accounts.settlement_authority.key() == escrow.settlement_authority,
+            EscrowError::Unauthorized
+        );
+        let milestone = escrow
+            .milestones
+            .get_mut(index as usize)
+            .ok_or(EscrowError::BadIndex)?;
+        require!(
+            milestone.status == AgreementMilestoneStatus::Pending
+                || milestone.status == AgreementMilestoneStatus::Submitted,
+            EscrowError::BadState
+        );
+        milestone.status = AgreementMilestoneStatus::Verified;
+        Ok(())
+    }
+
+    /// 검증 완료 마일스톤 금액만 Creator Phantom 수령 ATA로 정산한다.
+    pub fn release_milestone(ctx: Context<ReleaseAgreementMilestone>, index: u8) -> Result<()> {
+        let escrow_key = ctx.accounts.escrow.key();
+        let escrow_info = ctx.accounts.escrow.to_account_info();
+        let escrow = &mut ctx.accounts.escrow;
+        require!(
+            ctx.accounts.settlement_authority.key() == escrow.settlement_authority,
+            EscrowError::Unauthorized
+        );
+        require!(
+            escrow.status == AgreementEscrowStatus::Funded
+                || escrow.status == AgreementEscrowStatus::PartiallyReleased,
+            EscrowError::BadState
+        );
+        require!(ctx.accounts.vault.mint == escrow.usdc_mint, EscrowError::MintMismatch);
+        require!(ctx.accounts.vault.owner == escrow_key, EscrowError::BadVault);
+        require!(
+            ctx.accounts.creator_token.owner == escrow.creator_destination,
+            EscrowError::Unauthorized
+        );
+        require!(
+            ctx.accounts.creator_destination.key() == escrow.creator_destination,
+            EscrowError::Unauthorized
+        );
+        require!(
+            ctx.accounts.creator_token.mint == escrow.usdc_mint,
+            EscrowError::MintMismatch
+        );
+
+        let amount = {
+            let milestone = escrow
+                .milestones
+                .get(index as usize)
+                .ok_or(EscrowError::BadIndex)?;
+            require!(
+                milestone.status == AgreementMilestoneStatus::Verified,
+                EscrowError::BadState
+            );
+            milestone.amount
+        };
+        let agreement_hash = escrow.agreement_hash;
+        let escrow_bump = escrow.bump;
+        let creator_destination = escrow.creator_destination;
+
+        let seeds: &[&[u8]] = &[b"escrow", agreement_hash.as_ref(), &[escrow_bump]];
+        let signer_seeds = &[seeds];
+        token::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.creator_token.to_account_info(),
+                    authority: escrow_info,
+                },
+                signer_seeds,
+            ),
+            amount,
+            ctx.accounts.mint.decimals,
+        )?;
+
+        escrow.milestones[index as usize].status = AgreementMilestoneStatus::Released;
+        escrow.released_amount = escrow
+            .released_amount
+            .checked_add(amount)
+            .ok_or(EscrowError::Overflow)?;
+        escrow.status = if escrow.released_amount >= escrow.funded_amount {
+            AgreementEscrowStatus::Released
+        } else {
+            AgreementEscrowStatus::PartiallyReleased
+        };
+
+        emit!(AgreementEscrowMilestoneReleased {
+            escrow: escrow_key,
+            index,
+            creator_destination,
+            amount,
+        });
+        Ok(())
+    }
+
+    /// 취소 정책이 통과한 경우 미지급 잔액만 Brand에게 환불한다.
+    pub fn refund_remaining(ctx: Context<RefundAgreementEscrowRemaining>) -> Result<()> {
+        let escrow_key = ctx.accounts.escrow.key();
+        let escrow_info = ctx.accounts.escrow.to_account_info();
+        let escrow = &mut ctx.accounts.escrow;
+        require!(
+            ctx.accounts.brand_authority.key() == escrow.brand_authority,
+            EscrowError::Unauthorized
+        );
+        require!(ctx.accounts.vault.mint == escrow.usdc_mint, EscrowError::MintMismatch);
+        require!(ctx.accounts.vault.owner == escrow_key, EscrowError::BadVault);
+        require!(
+            ctx.accounts.brand_token.owner == escrow.brand_authority,
+            EscrowError::Unauthorized
+        );
+        require!(ctx.accounts.brand_token.mint == escrow.usdc_mint, EscrowError::MintMismatch);
+        let remaining = escrow
+            .funded_amount
+            .checked_sub(escrow.released_amount)
+            .ok_or(EscrowError::Overflow)?
+            .checked_sub(escrow.refunded_amount)
+            .ok_or(EscrowError::Overflow)?;
+        require!(remaining > 0, EscrowError::NothingToRefund);
+
+        let agreement_hash = escrow.agreement_hash;
+        let escrow_bump = escrow.bump;
+        let seeds: &[&[u8]] = &[b"escrow", agreement_hash.as_ref(), &[escrow_bump]];
+        let signer_seeds = &[seeds];
+        token::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.brand_token.to_account_info(),
+                    authority: escrow_info,
+                },
+                signer_seeds,
+            ),
+            remaining,
+            ctx.accounts.mint.decimals,
+        )?;
+        escrow.refunded_amount = escrow
+            .refunded_amount
+            .checked_add(remaining)
+            .ok_or(EscrowError::Overflow)?;
+        escrow.status = AgreementEscrowStatus::Refunded;
+        Ok(())
+    }
 }
 
 // ===================== Accounts =====================
@@ -411,6 +659,139 @@ pub struct Refund<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[derive(Accounts)]
+#[instruction(agreement_hash: [u8; 32])]
+pub struct InitializeEscrow<'info> {
+    #[account(mut)]
+    pub brand_authority: Signer<'info>,
+
+    /// CHECK: Creator destination wallet address is stored and later constrained by token owner.
+    pub creator_destination: UncheckedAccount<'info>,
+
+    /// CHECK: Backend/settlement signer authorized by the Agreement verification policy.
+    pub settlement_authority: UncheckedAccount<'info>,
+
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = brand_authority,
+        space = 8 + AgreementEscrow::MAX_SIZE,
+        seeds = [b"escrow", agreement_hash.as_ref()],
+        bump,
+    )]
+    pub escrow: Account<'info, AgreementEscrow>,
+
+    #[account(
+        init_if_needed,
+        payer = brand_authority,
+        associated_token::mint = mint,
+        associated_token::authority = escrow,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FundEscrow<'info> {
+    #[account(mut)]
+    pub brand_authority: Signer<'info>,
+
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        constraint = brand_token.owner == brand_authority.key() @ EscrowError::Unauthorized,
+        constraint = brand_token.mint == mint.key() @ EscrowError::MintMismatch,
+    )]
+    pub brand_token: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub escrow: Account<'info, AgreementEscrow>,
+
+    #[account(
+        mut,
+        constraint = vault.key() == escrow.vault_token_account @ EscrowError::BadVault,
+        constraint = vault.owner == escrow.key() @ EscrowError::BadVault,
+        constraint = vault.mint == mint.key() @ EscrowError::MintMismatch,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAgreementEscrowMilestone<'info> {
+    pub settlement_authority: Signer<'info>,
+    #[account(mut)]
+    pub escrow: Account<'info, AgreementEscrow>,
+}
+
+#[derive(Accounts)]
+pub struct ReleaseAgreementMilestone<'info> {
+    #[account(mut)]
+    pub settlement_authority: Signer<'info>,
+
+    pub mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub escrow: Account<'info, AgreementEscrow>,
+
+    #[account(
+        mut,
+        constraint = vault.key() == escrow.vault_token_account @ EscrowError::BadVault,
+        constraint = vault.owner == escrow.key() @ EscrowError::BadVault,
+        constraint = vault.mint == mint.key() @ EscrowError::MintMismatch,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    /// CHECK: Stored creator wallet authority.
+    pub creator_destination: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = settlement_authority,
+        associated_token::mint = mint,
+        associated_token::authority = creator_destination,
+    )]
+    pub creator_token: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RefundAgreementEscrowRemaining<'info> {
+    #[account(mut)]
+    pub brand_authority: Signer<'info>,
+
+    pub mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub escrow: Account<'info, AgreementEscrow>,
+
+    #[account(
+        mut,
+        constraint = vault.key() == escrow.vault_token_account @ EscrowError::BadVault,
+        constraint = vault.owner == escrow.key() @ EscrowError::BadVault,
+        constraint = vault.mint == mint.key() @ EscrowError::MintMismatch,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = brand_token.owner == brand_authority.key() @ EscrowError::Unauthorized,
+        constraint = brand_token.mint == mint.key() @ EscrowError::MintMismatch,
+    )]
+    pub brand_token: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
 // ===================== State =====================
 
 #[account]
@@ -488,6 +869,57 @@ impl Reputation {
     pub const MAX_SIZE: usize = 32 + 8 + 8 + 2 + 1;
 }
 
+#[account]
+pub struct AgreementEscrow {
+    pub agreement_hash: [u8; 32],
+    pub brand_authority: Pubkey,
+    pub creator_destination: Pubkey,
+    pub settlement_authority: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub vault_token_account: Pubkey,
+    pub total_amount: u64,
+    pub funded_amount: u64,
+    pub released_amount: u64,
+    pub refunded_amount: u64,
+    pub terms_hash: [u8; 32],
+    pub status: AgreementEscrowStatus,
+    pub bump: u8,
+    pub milestones: Vec<AgreementEscrowMilestone>,
+}
+
+impl AgreementEscrow {
+    pub const MAX_SIZE: usize =
+        32 + 32 * 5 + 8 * 4 + 32 + 1 + 1 + 4 + MAX_MILESTONES * AgreementEscrowMilestone::SIZE;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub struct AgreementEscrowMilestone {
+    pub amount: u64,
+    pub status: AgreementMilestoneStatus,
+}
+
+impl AgreementEscrowMilestone {
+    pub const SIZE: usize = 8 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum AgreementMilestoneStatus {
+    Pending,
+    Submitted,
+    Verified,
+    Released,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum AgreementEscrowStatus {
+    Created,
+    Funded,
+    PartiallyReleased,
+    Released,
+    Refunded,
+    Cancelled,
+}
+
 // ===================== Events =====================
 
 #[event]
@@ -506,6 +938,29 @@ pub struct MilestoneReleased {
     pub creator_net: u64,
     pub platform_cut: u64,
     pub by_agent: bool,
+}
+
+#[event]
+pub struct AgreementEscrowInitialized {
+    pub escrow: Pubkey,
+    pub brand_authority: Pubkey,
+    pub creator_destination: Pubkey,
+    pub total_amount: u64,
+}
+
+#[event]
+pub struct AgreementEscrowFunded {
+    pub escrow: Pubkey,
+    pub brand_authority: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct AgreementEscrowMilestoneReleased {
+    pub escrow: Pubkey,
+    pub index: u8,
+    pub creator_destination: Pubkey,
+    pub amount: u64,
 }
 
 // ===================== Errors =====================
@@ -538,4 +993,6 @@ pub enum EscrowError {
     TimelockActive,
     #[msg("환불할 잔액 없음")]
     NothingToRefund,
+    #[msg("금액 불일치")]
+    AmountMismatch,
 }

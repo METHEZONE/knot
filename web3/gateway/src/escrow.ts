@@ -5,6 +5,10 @@ import {
   submitEscrowLock,
   submitMilestoneRelease
 } from "./solana.js";
+import {
+  type AgreementEscrowLiveContext,
+  submitAgreementMilestoneRelease
+} from "./funding.js";
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -20,6 +24,24 @@ const liveLockContextSchema = z.object({
   milestoneIds: z.array(z.string().min(1)).min(1).max(8),
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
 });
+
+const agreementEscrowLiveContextSchema = z.object({
+  agreementEscrowVersion: z.literal("v1"),
+  escrowId: z.string().min(1),
+  escrowPda: z.string().min(1),
+  vaultTokenAccount: z.string().min(1),
+  brandTokenAccount: z.string().min(1),
+  creatorDestination: z.string().min(1),
+  settlementAuthority: z.string().min(1),
+  mint: z.string().min(1),
+  milestoneIds: z.array(z.string().min(1)).min(1).max(8),
+  milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8)
+});
+
+const releaseLiveContextSchema = z.union([
+  liveLockContextSchema,
+  agreementEscrowLiveContextSchema
+]);
 
 export const lockRequestSchema = z.object({
   agreementId: z.string().min(1),
@@ -45,7 +67,7 @@ export const releaseRequestSchema = z.object({
   programId: z.string().min(1),
   network: z.literal("solanaDevnet"),
   creatorDestination: z.string().min(1),
-  lockContext: liveLockContextSchema.optional()
+  lockContext: releaseLiveContextSchema.optional()
 });
 
 export type GatewayReceipt = {
@@ -269,8 +291,55 @@ export class EscrowLockService {
 
     if (config.signingMode === "devnet") {
       const context = this.liveLocks.get(escrowId) ?? (
-        result.data.lockContext ? parseLiveContext(result.data.lockContext) : undefined
+        result.data.lockContext && !isAgreementEscrowContext(result.data.lockContext)
+          ? parseLiveContext(result.data.lockContext)
+          : undefined
       );
+      const agreementContext = result.data.lockContext && isAgreementEscrowContext(result.data.lockContext)
+        ? result.data.lockContext
+        : undefined;
+      if (agreementContext) {
+        try {
+          const live = await submitAgreementMilestoneRelease(config, agreementContext, {
+            escrowId,
+            milestoneId,
+            expectedAmountBaseUnits: result.data.expectedAmountBaseUnits
+          });
+          const receipt: GatewayReceipt = {
+            status: live.status,
+            agreementId: result.data.agreementId,
+            escrowId: result.data.escrowId,
+            milestoneId: result.data.milestoneId,
+            termsHash: result.data.termsHash,
+            releasedAmountBaseUnits: result.data.expectedAmountBaseUnits,
+            mint: result.data.mint,
+            programId: result.data.programId,
+            network: result.data.network,
+            idempotencyKey,
+            signature: live.signature,
+            explorerUrl: live.explorerUrl,
+            slot: live.slot,
+            campaignId: undefined,
+            campaignPda: agreementContext.escrowPda
+          };
+          this.receipts.set(idempotencyKey, receipt);
+          return {
+            statusCode: 202,
+            body: {
+              data: receipt,
+              detail: "Milestone release submitted and confirmed on Solana devnet"
+            }
+          };
+        } catch (error) {
+          return {
+            statusCode: 409,
+            body: {
+              code: "POLICY_VIOLATION",
+              detail: `Live milestone release failed: ${error instanceof Error ? error.message : String(error)}`
+            }
+          };
+        }
+      }
       if (!context) {
         return {
           statusCode: 409,
@@ -374,4 +443,10 @@ function parseLiveContext(context: z.infer<typeof liveLockContextSchema>): LiveL
     milestoneIds: context.milestoneIds,
     milestoneAmountsBaseUnits: context.milestoneAmountsBaseUnits
   };
+}
+
+function isAgreementEscrowContext(
+  context: z.infer<typeof releaseLiveContextSchema>
+): context is AgreementEscrowLiveContext {
+  return "agreementEscrowVersion" in context && context.agreementEscrowVersion === "v1";
 }

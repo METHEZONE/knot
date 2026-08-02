@@ -490,7 +490,7 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert negotiation["matchRunId"] == match_run["matchRunId"]
     assert negotiation["matchCandidateId"] == "creator-001"
     assert negotiation["creatorAgentId"] == "creator-agent-001"
-    assert agreement["status"] == "AGREED"
+    assert agreement["status"] == "FUNDING_REQUIRED"
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
     assert agreement["canonicalTermsJson"].startswith("{")

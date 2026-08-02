@@ -58,6 +58,7 @@ class FirestoreCollection:
     onboarding_sessions: str = "onboardingSessions"
     payment_operations: str = "paymentOperations"
     transaction_receipts: str = "transactionReceipts"
+    agent_payment_events: str = "agentPaymentEvents"
     audit_events: str = "auditEvents"
     idempotency_records: str = "idempotencyRecords"
     admin_jobs: str = "adminJobs"
@@ -235,6 +236,10 @@ class FirestorePaths:
     @staticmethod
     def transaction_receipt(receipt_id: str) -> str:
         return document_path(COLLECTIONS.transaction_receipts, receipt_id)
+
+    @staticmethod
+    def agent_payment_event(event_id: str) -> str:
+        return document_path(COLLECTIONS.agent_payment_events, event_id)
 
     @staticmethod
     def audit_event(event_id: str) -> str:

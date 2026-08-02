@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from "express";
 import { loadConfig, type GatewayConfig } from "./config.js";
 import { EscrowLockService } from "./escrow.js";
+import { confirmBrandFunding, prepareBrandFunding } from "./funding.js";
 
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 
@@ -57,6 +58,36 @@ export function createApp(
       request.body
     );
     response.status(result.statusCode).json(result.body);
+  });
+
+  app.post("/internal/v1/escrows:prepare-funding", async (request: Request, response: Response) => {
+    try {
+      const result = await prepareBrandFunding(config, request.body);
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "FUNDING_PREPARE_FAILED",
+          title: "Funding prepare failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  });
+
+  app.post("/internal/v1/escrows:confirm-funding", async (request: Request, response: Response) => {
+    try {
+      const result = await confirmBrandFunding(config, request.body);
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "FUNDING_CONFIRM_FAILED",
+          title: "Funding confirm failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
   });
 
   app.post(releaseRoute, async (request: Request, response: Response) => {

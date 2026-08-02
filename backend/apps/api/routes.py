@@ -20,8 +20,10 @@ from apps.api.schemas import (
     CurrentUserBrandProfileRequest,
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
+    CurrentWalletRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
+    EscrowFundingConfirmRequest,
     EvidenceVerificationRequest,
     OnboardingPatchRequest,
     ProductAnalysisRequest,
@@ -317,6 +319,44 @@ def build_api_router(
             data={"uid": auth_user.uid, "role": role, "agentId": agent_id},
         )
         return _ok(_current_user_payload(repository, updated))
+
+    @router.post("/me/wallet")
+    def save_current_user_wallet(
+        payload: CurrentWalletRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _bootstrap_authenticated_user(repository, auth_user)
+        now = _now()
+        wallet = {
+            "walletAddress": payload.wallet_address,
+            "walletNetwork": payload.network,
+            "walletUpdatedAt": now,
+        }
+        role = user.get("role")
+        if role == "BRAND":
+            brand_id = _require_document_str(user, "brandId")
+            brand = repository.get_raw_document(FirestorePaths.brand(brand_id))
+            if brand is None:
+                raise _not_found("brandProfile", brand_id)
+            updated_brand = {**brand, **wallet, "updatedAt": now}
+            repository.save_raw_document(FirestorePaths.brand(brand_id), updated_brand)
+            repository.save_raw_document(FirestorePaths.user(auth_user.uid), {**user, **wallet})
+            return _ok({"wallet": wallet, **_current_user_payload(repository, {**user, **wallet})})
+        if role == "CREATOR":
+            creator_id = _require_document_str(user, "creatorId")
+            creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
+            if creator is None:
+                raise _not_found("creatorProfile", creator_id)
+            updated_creator = {**creator, **wallet, "updatedAt": now}
+            repository.save_raw_document(FirestorePaths.creator_profile(creator_id), updated_creator)
+            repository.save_raw_document(FirestorePaths.user(auth_user.uid), {**user, **wallet})
+            return _ok({"wallet": wallet, **_current_user_payload(repository, {**user, **wallet})})
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "ONBOARDING_REQUIRED",
+            "Select a role and complete onboarding before connecting a wallet.",
+        )
 
     @router.post("/me/brand-profile", status_code=status.HTTP_201_CREATED)
     def create_current_brand_profile(
@@ -1629,6 +1669,7 @@ def build_api_router(
             settings=settings,
             match_run_id=match_run_id,
             promotion_id=promotion_id,
+            brand_agent_id=promotion.brand_agent_id,
             selected_creator_agent_id=selected.creator_agent_id if selected else None,
         )
         match_run = {**match_run, "paidVerification": paid_verification}
@@ -2300,6 +2341,258 @@ def build_api_router(
             settlements.sort(key=lambda item: str(item.get("createdAt", "")))
         return _ok({"escrow": escrow, "settlements": settlements})
 
+    @router.post("/agreements/{agreement_id}/escrow/prepare")
+    def prepare_agreement_escrow_funding(
+        agreement_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        agreement = _require_brand_agreement_document(repository, user, agreement_id)
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        if terms_hash(terms) != agreement.get("termsHash"):
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "TERMS_HASH_MISMATCH",
+                "Recomputed terms hash does not match the Agreement.",
+            )
+        brand_authority = _brand_wallet_address(repository, user)
+        creator_destination = _creator_wallet_address_for_agreement(repository, agreement)
+        settlement_authority = _require_settlement_authority(settings)
+        locked_amount = lock_amount_base_units(terms)
+        milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        existing = _find_escrow_by_agreement(repository, agreement_id)
+        if existing is not None and existing.get("status") in {"FUNDED", "PARTIALLY_RELEASED", "RELEASED"}:
+            return _ok({"escrow": existing, "funding": None})
+        escrow_id = (
+            _require_document_str(existing, "escrowId")
+            if existing is not None
+            else f"escrow-{uuid4()}"
+        )
+        payload = {
+            "agreementId": agreement_id,
+            "escrowId": escrow_id,
+            "termsHash": agreement["termsHash"],
+            "totalAmountBaseUnits": str(locked_amount),
+            "milestoneIds": list(milestone_amounts.keys()),
+            "milestoneAmountsBaseUnits": [str(amount) for amount in milestone_amounts.values()],
+            "mint": settings.usdc_mint,
+            "programId": settings.escrow_program_id,
+            "network": settings.escrow_network,
+            "brandAuthority": brand_authority,
+            "creatorDestination": creator_destination,
+            "settlementAuthority": settlement_authority,
+        }
+        _claim_idempotency(
+            repository,
+            key,
+            payload=payload,
+            owner_path=f"prepare-funding:{agreement_id}",
+        )
+        if settings.web3_mode != "gateway":
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "WEB3_GATEWAY_REQUIRED",
+                "Escrow funding prepare requires the restricted Web3 Gateway.",
+            )
+        now = _now()
+        try:
+            prepared = Web3GatewayClient(settings.web3_gateway_base_url).prepare_funding(
+                idempotency_key=key,
+                payload=payload,
+            )
+        except Web3GatewayError as exc:
+            raise _problem(
+                status.HTTP_502_BAD_GATEWAY,
+                "WEB3_GATEWAY_UNAVAILABLE",
+                f"Web3 gateway funding prepare failed: {exc}",
+            ) from exc
+        escrow = {
+            **(existing or {}),
+            "escrowId": escrow_id,
+            "agreementId": agreement_id,
+            "promotionId": agreement["promotionId"],
+            "brandAgentId": agreement["brandAgentId"],
+            "creatorAgentId": agreement["creatorAgentId"],
+            "network": settings.escrow_network,
+            "programId": settings.escrow_program_id,
+            "mint": settings.usdc_mint,
+            "usdcMint": settings.usdc_mint,
+            "escrowPda": prepared.get("escrowPda"),
+            "vaultTokenAccount": prepared.get("vaultTokenAccount"),
+            "brandTokenAccount": prepared.get("brandTokenAccount"),
+            "brandAuthority": brand_authority,
+            "creatorDestination": creator_destination,
+            "settlementAuthority": settlement_authority,
+            "lockedAmountBaseUnits": str(locked_amount),
+            "totalAmountUsdc": _base_units_to_usdc_string(locked_amount),
+            "fundedAmountUsdc": "0",
+            "releasedAmountBaseUnits": "0",
+            "releasedAmountUsdc": "0",
+            "refundedAmountUsdc": "0",
+            "platformFeeBps": PLATFORM_FEE_BPS,
+            "termsHash": agreement["termsHash"],
+            "milestoneAmounts": {mid: str(amount) for mid, amount in milestone_amounts.items()},
+            "status": "CREATED",
+            "fundingTransactionSignature": None,
+            "lockSignature": None,
+            "fundingPreparedAt": now,
+            "updatedAt": now,
+            "createdAt": (existing or {}).get("createdAt", now),
+        }
+        repository.save_raw_document(FirestorePaths.escrow(escrow_id), escrow)
+        repository.save_raw_document(
+            FirestorePaths.agreement(agreement_id),
+            {
+                **agreement,
+                "status": "FUNDING_REQUIRED",
+                "brandAuthority": brand_authority,
+                "creatorDestination": creator_destination,
+                "escrowId": escrow_id,
+                "updatedAt": now,
+            },
+        )
+        return _ok({"escrow": escrow, "funding": prepared})
+
+    @router.post("/agreements/{agreement_id}/escrow/confirm")
+    def confirm_agreement_escrow_funding(
+        agreement_id: str,
+        payload: EscrowFundingConfirmRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        agreement = _require_brand_agreement_document(repository, user, agreement_id)
+        escrow = _find_escrow_by_agreement(repository, agreement_id)
+        if escrow is None:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "ESCROW_PREPARE_REQUIRED",
+                "Prepare escrow funding before confirming a transaction.",
+            )
+        existing_signature = escrow.get("fundingTransactionSignature") or escrow.get("lockSignature")
+        if escrow.get("status") in {"FUNDED", "PARTIALLY_RELEASED", "RELEASED"}:
+            if existing_signature == payload.transaction_signature:
+                return _ok({"escrow": escrow, "receipt": _receipt_by_id(repository, escrow.get("lockReceiptId"))})
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "ESCROW_ALREADY_FUNDED",
+                "Agreement escrow is already funded by a different transaction.",
+            )
+        if settings.web3_mode != "gateway":
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "WEB3_GATEWAY_REQUIRED",
+                "Escrow funding confirm requires the restricted Web3 Gateway.",
+            )
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        locked_amount = lock_amount_base_units(terms)
+        milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
+        expected_payload = {
+            "agreementId": agreement_id,
+            "escrowId": escrow["escrowId"],
+            "termsHash": agreement["termsHash"],
+            "totalAmountBaseUnits": str(locked_amount),
+            "milestoneIds": list(milestone_amounts.keys()),
+            "milestoneAmountsBaseUnits": [str(amount) for amount in milestone_amounts.values()],
+            "mint": settings.usdc_mint,
+            "programId": settings.escrow_program_id,
+            "network": settings.escrow_network,
+            "brandAuthority": _require_document_str(escrow, "brandAuthority"),
+            "creatorDestination": _require_document_str(escrow, "creatorDestination"),
+            "settlementAuthority": _require_document_str(escrow, "settlementAuthority"),
+            "transactionSignature": payload.transaction_signature,
+            "escrowPda": _require_document_str(escrow, "escrowPda"),
+            "vaultTokenAccount": _require_document_str(escrow, "vaultTokenAccount"),
+            "brandTokenAccount": _require_document_str(escrow, "brandTokenAccount"),
+        }
+        _claim_idempotency(
+            repository,
+            key,
+            payload=expected_payload,
+            owner_path=f"confirm-funding:{agreement_id}",
+        )
+        try:
+            confirmed = _require_confirmed_gateway_receipt(
+                Web3GatewayClient(settings.web3_gateway_base_url).confirm_funding(
+                    idempotency_key=key,
+                    payload=expected_payload,
+                ),
+                expected={
+                    "agreementId": agreement_id,
+                    "escrowId": escrow["escrowId"],
+                    "totalAmountBaseUnits": str(locked_amount),
+                    "mint": settings.usdc_mint,
+                    "programId": settings.escrow_program_id,
+                    "network": settings.escrow_network,
+                },
+            )
+        except Web3GatewayError as exc:
+            raise _problem(
+                status.HTTP_502_BAD_GATEWAY,
+                "WEB3_GATEWAY_UNAVAILABLE",
+                f"Web3 gateway funding confirm failed: {exc}",
+            ) from exc
+        now = _now()
+        receipt_id = f"receipt-{uuid4()}"
+        operation_id = f"op-{uuid4()}"
+        updated_escrow = {
+            **escrow,
+            "status": "FUNDED",
+            "fundedAmountUsdc": _base_units_to_usdc_string(locked_amount),
+            "fundedAmountBaseUnits": str(locked_amount),
+            "fundingTransactionSignature": confirmed["signature"],
+            "lockSignature": confirmed["signature"],
+            "lockReceiptId": receipt_id,
+            "paymentOperationId": operation_id,
+            "updatedAt": now,
+        }
+        updated_agreement = {
+            **agreement,
+            "status": "FUNDED",
+            "escrowId": escrow["escrowId"],
+            "fundingTransactionSignature": confirmed["signature"],
+            "brandAuthority": escrow["brandAuthority"],
+            "creatorDestination": escrow["creatorDestination"],
+            "updatedAt": now,
+        }
+        repository.save_raw_document(FirestorePaths.escrow(_require_document_str(escrow, "escrowId")), updated_escrow)
+        repository.save_raw_document(FirestorePaths.agreement(agreement_id), updated_agreement)
+        receipt = _record_operation(
+            repository,
+            operation_type="ESCROW_FUND",
+            operation_id=operation_id,
+            receipt_id=receipt_id,
+            escrow_id=_require_document_str(escrow, "escrowId"),
+            agreement_id=agreement_id,
+            idempotency_key=key,
+            now=now,
+            network=settings.escrow_network,
+            receipt=receipt_from_gateway(
+                receipt_id=receipt_id,
+                operation_id=operation_id,
+                gateway_receipt=confirmed,
+                created_at=now,
+            ),
+        )
+        _append_promotion_event(
+            repository,
+            promotion_id=str(agreement["promotionId"]),
+            event_type="ESCROW_FUNDED",
+            data={
+                "agreementId": agreement_id,
+                "escrowId": escrow["escrowId"],
+                "amountBaseUnits": str(locked_amount),
+                "receiptId": receipt_id,
+                "signature": confirmed["signature"],
+            },
+        )
+        return _ok({"escrow": updated_escrow, "receipt": receipt})
+
     @router.post("/agreements/{agreement_id}/evidence", status_code=status.HTTP_201_CREATED)
     def submit_evidence(
         agreement_id: str,
@@ -2665,7 +2958,7 @@ def build_api_router(
                 "MILESTONE_ALREADY_RELEASED",
                 f"Milestone {milestone_id} was already released.",
             )
-        if escrow.get("status") != "LOCKED":
+        if escrow.get("status") not in {"LOCKED", "FUNDED", "PARTIALLY_RELEASED"}:
             raise _problem(
                 status.HTTP_409_CONFLICT,
                 "INVALID_STATE_TRANSITION",
@@ -2797,7 +3090,8 @@ def build_api_router(
         updated_escrow = {
             **escrow,
             "releasedAmountBaseUnits": str(new_released),
-            "status": "COMPLETED" if new_released >= locked else "LOCKED",
+            "releasedAmountUsdc": _base_units_to_usdc_string(new_released),
+            "status": "RELEASED" if new_released >= locked else "PARTIALLY_RELEASED",
             "updatedAt": now,
         }
         updated_milestone = {
@@ -4140,11 +4434,11 @@ def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> di
     agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
     if agreement is None:
         raise _not_found("agreement", agreement_id)
-    if agreement.get("status") != "AGREED":
+    if agreement.get("status") not in {"AGREED", "FUNDING_REQUIRED", "FUNDED", "RELEASED"}:
         raise _problem(
             status.HTTP_409_CONFLICT,
             "INVALID_STATE_TRANSITION",
-            "Evidence requires an agreed Agreement.",
+            "Agreement is not in an active funding or settlement state.",
         )
     return agreement
 
@@ -4397,7 +4691,11 @@ def _agreement_document(
         "termsHash": computed_terms_hash,
         "hashAlgorithm": "sha256",
         "hashVersion": "knot.agreement-terms.v1",
-        "status": "AGREED",
+        "status": "FUNDING_REQUIRED",
+        "brandAuthority": None,
+        "creatorDestination": None,
+        "escrowId": None,
+        "fundingTransactionSignature": None,
         "createdAt": created_at,
     }
 
@@ -4490,15 +4788,25 @@ def _write_agreement_milestones(
 ) -> None:
     agreement_id = _require_document_str(agreement, "agreementId")
     terms = AgreementTerms.model_validate(agreement["terms"])
+    locked_amount = lock_amount_base_units(terms)
+    milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
     for milestone in terms.milestones:
+        amount_base_units = milestone_amounts.get(milestone.id, 0)
         repository.save_raw_document(
             FirestorePaths.milestone(agreement_id, milestone.id),
             {
                 "milestoneId": milestone.id,
                 "agreementId": agreement_id,
+                "title": milestone.trigger,
                 "trigger": milestone.trigger,
                 "releasePct": milestone.release_pct,
+                "amountBaseUnits": str(amount_base_units),
+                "amountUsdc": str(amount_base_units // 1_000_000),
                 "status": "PENDING",
+                "evidence": {},
+                "verificationResult": {},
+                "releaseTransactionSignature": None,
+                "releasedAt": None,
                 "createdAt": agreement["createdAt"],
             },
         )
@@ -4672,6 +4980,7 @@ def _run_paid_verification(
     settings: Settings,
     match_run_id: str,
     promotion_id: str,
+    brand_agent_id: str,
     selected_creator_agent_id: str | None,
 ) -> dict[str, object]:
     mode = settings.paysh_mode.lower()
@@ -4692,6 +5001,7 @@ def _run_paid_verification(
         "resourceId": resource_id,
         "promotionId": promotion_id,
         "matchRunId": match_run_id,
+        "brandAgentId": brand_agent_id,
         "selectedCreatorAgentId": selected_creator_agent_id,
         "operationId": operation_id,
         "receiptId": None,
@@ -4943,6 +5253,28 @@ def _record_paysh_operation(
         "createdAt": now,
     }
     repository.save_raw_document(FirestorePaths.payment_operation(operation_id), operation)
+    event_id = f"agent-payment-{operation_id}"
+    event_status = _agent_payment_event_status(str(result["status"]))
+    repository.save_raw_document(
+        FirestorePaths.agent_payment_event(event_id),
+        {
+            "eventId": event_id,
+            "agentId": result["brandAgentId"],
+            "promotionId": result["promotionId"],
+            "matchRunId": result["matchRunId"],
+            "candidateId": result["selectedCreatorAgentId"],
+            "purpose": "CREATOR_VERIFICATION",
+            "provider": "PAYSH",
+            "protocol": "X402_OR_MPP",
+            "resourceId": result["resourceId"],
+            "quotedAmountUsdc": str(amount_usdc) if amount_usdc is not None else None,
+            "paidAmountUsdc": str(amount_usdc) if event_status == "PAID" else None,
+            "status": event_status,
+            "paymentReceipt": result.get("receipt") or {},
+            "responseSummary": result.get("responseSummary") or result.get("providerResponse") or {},
+            "createdAt": now,
+        },
+    )
     if receipt_id is not None:
         receipt = {
             "receiptId": receipt_id,
@@ -4963,6 +5295,15 @@ def _record_paysh_operation(
         }
         repository.save_raw_document(FirestorePaths.transaction_receipt(receipt_id), receipt)
     return result
+
+
+def _agent_payment_event_status(status_value: str) -> str:
+    normalized = status_value.strip().upper()
+    if normalized in {"SETTLED", "CONFIRMED", "PAID"}:
+        return "PAID"
+    if normalized in {"SKIPPED", "DISABLED"}:
+        return "SKIPPED"
+    return "FAILED"
 
 
 def _extract_paysh_receipt_id(body: str) -> str | None:
@@ -5008,7 +5349,13 @@ def _require_funded_escrow_for_agreement(
     agreement_id: str,
 ) -> dict[str, object]:
     escrow = _find_escrow_by_agreement(repository, agreement_id)
-    if escrow is None or escrow.get("status") != "LOCKED" or not escrow.get("lockSignature"):
+    if escrow is None or escrow.get("status") not in {"LOCKED", "FUNDED", "PARTIALLY_RELEASED"}:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "ESCROW_REQUIRED",
+            "Evidence can be submitted only after escrow is funded.",
+        )
+    if not (escrow.get("lockSignature") or escrow.get("fundingTransactionSignature")):
         raise _problem(
             status.HTTP_409_CONFLICT,
             "ESCROW_REQUIRED",
@@ -5074,6 +5421,56 @@ def _receipt_by_id(repository: KnotRepository, receipt_id: object) -> dict[str, 
     return repository.get_raw_document(FirestorePaths.transaction_receipt(receipt_id))
 
 
+def _brand_wallet_address(repository: KnotRepository, user: dict[str, object]) -> str:
+    brand_id = _require_document_str(user, "brandId")
+    brand = repository.get_raw_document(FirestorePaths.brand(brand_id))
+    if brand is None:
+        raise _not_found("brandProfile", brand_id)
+    wallet = brand.get("walletAddress") or user.get("walletAddress")
+    if not isinstance(wallet, str) or not wallet:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "BRAND_WALLET_REQUIRED",
+            "Connect the Brand Phantom wallet before funding escrow.",
+        )
+    return wallet
+
+
+def _creator_wallet_address_for_agreement(
+    repository: KnotRepository,
+    agreement: dict[str, object],
+) -> str:
+    creator_id = agreement.get("creatorId")
+    creator: dict[str, object] | None = None
+    if isinstance(creator_id, str) and creator_id:
+        creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
+    if creator is None:
+        creator_agent_id = agreement.get("creatorAgentId")
+        if isinstance(creator_agent_id, str):
+            for candidate in repository.list_raw_documents(COLLECTIONS.creator_profiles):
+                if candidate.get("creatorAgentId") == creator_agent_id:
+                    creator = candidate
+                    break
+    wallet = creator.get("walletAddress") if creator else None
+    if not isinstance(wallet, str) or not wallet:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "CREATOR_WALLET_REQUIRED",
+            "Creator must connect a settlement Phantom wallet before escrow can be funded.",
+        )
+    return wallet
+
+
+def _require_settlement_authority(settings: Settings) -> str:
+    if not settings.settlement_authority:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "SETTLEMENT_AUTHORITY_REQUIRED",
+            "KNOT_SETTLEMENT_AUTHORITY must be configured before escrow funding.",
+        )
+    return settings.settlement_authority
+
+
 def _lock_with_web3_gateway(
     *,
     settings: Settings,
@@ -5132,7 +5529,7 @@ def _release_with_web3_gateway(
             "WEB3_GATEWAY_REQUIRED",
             "Milestone release requires the restricted Web3 Gateway.",
         )
-    lock_context = _lock_context_from_receipt(repository, escrow)
+    lock_context = _lock_context_from_receipt(repository, escrow) or _agreement_escrow_context(escrow)
     try:
         payload: dict[str, object] = {
             "agreementId": agreement_id,
@@ -5143,7 +5540,7 @@ def _release_with_web3_gateway(
             "mint": settings.usdc_mint,
             "programId": settings.escrow_program_id,
             "network": settings.escrow_network,
-            "creatorDestination": escrow["creatorAgentId"],
+            "creatorDestination": escrow.get("creatorDestination") or escrow["creatorAgentId"],
         }
         if lock_context:
             payload["lockContext"] = lock_context
@@ -5201,6 +5598,36 @@ def _lock_context_from_receipt(
     return cast(dict[str, object], lock_context)
 
 
+def _agreement_escrow_context(escrow: dict[str, object]) -> dict[str, object] | None:
+    required = [
+        "escrowId",
+        "escrowPda",
+        "vaultTokenAccount",
+        "brandTokenAccount",
+        "creatorDestination",
+        "settlementAuthority",
+        "mint",
+        "milestoneAmounts",
+    ]
+    if any(not escrow.get(key) for key in required):
+        return None
+    milestone_amounts = escrow.get("milestoneAmounts")
+    if not isinstance(milestone_amounts, dict):
+        return None
+    return {
+        "agreementEscrowVersion": "v1",
+        "escrowId": escrow["escrowId"],
+        "escrowPda": escrow["escrowPda"],
+        "vaultTokenAccount": escrow["vaultTokenAccount"],
+        "brandTokenAccount": escrow["brandTokenAccount"],
+        "creatorDestination": escrow["creatorDestination"],
+        "settlementAuthority": escrow["settlementAuthority"],
+        "mint": escrow["mint"],
+        "milestoneIds": list(milestone_amounts.keys()),
+        "milestoneAmountsBaseUnits": [str(amount) for amount in milestone_amounts.values()],
+    }
+
+
 def _failed_receipt(
     receipt_id: str,
     operation_id: str,
@@ -5222,6 +5649,13 @@ def _failed_receipt(
 
 def _payload_hash(payload: dict[str, object]) -> str:
     return sha256_prefixed(canonical_json(payload))
+
+
+def _base_units_to_usdc_string(value: int) -> str:
+    whole, fraction = divmod(value, 1_000_000)
+    if fraction == 0:
+        return str(whole)
+    return f"{whole}.{fraction:06d}".rstrip("0")
 
 
 def _append_audit(

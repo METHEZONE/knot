@@ -38,6 +38,30 @@ class Web3GatewayClient:
             payload=payload,
         )
 
+    def prepare_funding(
+        self,
+        *,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            "/internal/v1/escrows:prepare-funding",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+
+    def confirm_funding(
+        self,
+        *,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            "/internal/v1/escrows:confirm-funding",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+
     def _post(
         self,
         path: str,

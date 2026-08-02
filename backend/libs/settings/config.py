@@ -24,7 +24,7 @@ def _load_dotenv() -> None:
 # Real devnet knot-escrow program id and USDC-SPL mint (see programs/knot-escrow
 # and backend/.env.example). Used to stamp escrow/receipt records so they stay
 # consistent when on-chain signing is wired.
-DEFAULT_ESCROW_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
+DEFAULT_ESCROW_PROGRAM_ID = "9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn"
 DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 
@@ -58,6 +58,7 @@ class Settings(BaseModel):
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
+    settlement_authority: str | None = None
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -103,6 +104,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
+        settlement_authority=os.getenv("KNOT_SETTLEMENT_AUTHORITY"),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
     )

@@ -97,6 +97,31 @@ class CurrentUserCreatorProfileRequest(DomainModel):
         return categories
 
 
+class CurrentWalletRequest(DomainModel):
+    wallet_address: str = Field(alias="walletAddress", min_length=32, max_length=64)
+    network: str = "devnet"
+
+    @field_validator("wallet_address")
+    @classmethod
+    def validate_wallet_address(cls, value: str) -> str:
+        normalized = value.strip()
+        if any(char.isspace() for char in normalized):
+            raise ValueError("walletAddress must not contain whitespace")
+        return normalized
+
+    @field_validator("network")
+    @classmethod
+    def validate_network(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"devnet", "solanadevnet"}:
+            raise ValueError("network must be devnet")
+        return "devnet"
+
+
+class EscrowFundingConfirmRequest(DomainModel):
+    transaction_signature: str = Field(alias="transactionSignature", min_length=1)
+
+
 class BrandOnboardingRequest(DomainModel):
     user_id: str | None = Field(default=None, alias="userId")
     brand_name: str = Field(alias="brandName")

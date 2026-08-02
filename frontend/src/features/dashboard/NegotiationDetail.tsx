@@ -15,6 +15,7 @@ import {
   ProductApiClient,
   ProductApiError,
 } from "@/product/apiClient";
+import { connectPhantomWallet, sendPreparedSolanaTransaction } from "@/features/wallet/phantom";
 
 type Role = "brand" | "creator";
 
@@ -42,6 +43,8 @@ export function NegotiationDetail({
   const client = useMemo(() => new ProductApiClient(), []);
   const [state, setState] = useState<LoadState>({ loading: true, error: null, detail: null });
   const [actionError, setActionError] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [fundingState, setFundingState] = useState<"idle" | "connecting" | "signing" | "confirming" | "done">("idle");
 
   const loadDetail = useCallback(async () => {
     const offerDetailPromise = role === "creator" ? client.getCreatorOfferDetail(negotiationId) : null;
@@ -93,14 +96,55 @@ export function NegotiationDetail({
     }
   }
 
-  async function lockEscrow() {
+  async function fundEscrowWithPhantom() {
     if (!state.detail?.agreement) return;
     setActionError(null);
+    setFundingState("connecting");
     try {
-      await client.lockEscrow(state.detail.agreement.agreementId);
+      const wallet = await connectPhantomWallet();
+      setWalletAddress(wallet.address);
+      await client.saveWalletAddress(wallet.address, "devnet");
+      const idempotencySeed = `${state.detail.agreement.agreementId}-${wallet.address}`;
+      const prepared = await client.prepareEscrowFunding(
+        state.detail.agreement.agreementId,
+        `frontend-prepare-${idempotencySeed}`,
+      );
+      if (!prepared.funding) {
+        await refresh();
+        setFundingState("done");
+        return;
+      }
+      if (prepared.funding.brandAuthority !== wallet.address) {
+        throw new Error("연결된 Phantom 지갑과 Agreement Brand 지갑이 다릅니다.");
+      }
+      setFundingState("signing");
+      const signature = await sendPreparedSolanaTransaction(prepared.funding);
+      setFundingState("confirming");
+      await client.confirmEscrowFunding(
+        state.detail.agreement.agreementId,
+        signature,
+        `frontend-confirm-${state.detail.agreement.agreementId}-${signature}`,
+      );
       await refresh();
+      setFundingState("done");
     } catch (caught) {
       setActionError(readableError(caught));
+      setFundingState("idle");
+    }
+  }
+
+  async function connectAndSaveWallet() {
+    setActionError(null);
+    setFundingState("connecting");
+    try {
+      const wallet = await connectPhantomWallet();
+      setWalletAddress(wallet.address);
+      await client.saveWalletAddress(wallet.address, "devnet");
+      await refresh();
+      setFundingState("idle");
+    } catch (caught) {
+      setActionError(readableError(caught));
+      setFundingState("idle");
     }
   }
 
@@ -150,7 +194,10 @@ export function NegotiationDetail({
               role={role}
               agreement={agreement}
               escrowBundle={escrowBundle}
-              onLock={role === "brand" ? lockEscrow : undefined}
+              walletAddress={walletAddress}
+              fundingState={fundingState}
+              onFund={role === "brand" ? fundEscrowWithPhantom : undefined}
+              onConnectWallet={connectAndSaveWallet}
             />
             <MilestonePanel
               role={role}
@@ -257,14 +304,22 @@ function EscrowPanel({
   role,
   agreement,
   escrowBundle,
-  onLock,
+  walletAddress,
+  fundingState,
+  onFund,
+  onConnectWallet,
 }: {
   role: Role;
   agreement: ApiAgreement;
   escrowBundle: ApiAgreementEscrowBundle | null;
-  onLock?: () => Promise<void>;
+  walletAddress: string | null;
+  fundingState: "idle" | "connecting" | "signing" | "confirming" | "done";
+  onFund?: () => Promise<void>;
+  onConnectWallet: () => Promise<void>;
 }) {
   const escrow = escrowBundle?.escrow ?? null;
+  const signature = escrow?.fundingTransactionSignature ?? escrow?.lockSignature ?? null;
+  const funded = escrow?.status === "FUNDED" || escrow?.status === "PARTIALLY_RELEASED" || escrow?.status === "RELEASED";
   return (
     <div className="sketch-alt ink border border-border-subtle bg-background p-4">
       <p className="text-sm text-muted">Agreement</p>
@@ -278,20 +333,49 @@ function EscrowPanel({
       <p className="mt-3 break-all font-mono text-xs text-muted">termsHash {agreement.termsHash}</p>
       {escrow ? (
         <div className="mt-4 grid gap-2 text-sm">
-          <Metric label="잠긴 금액" value={baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)} />
+          <Metric label="Brand Phantom" value={walletAddress ?? escrow.brandAuthority ?? "연결 필요"} />
+          <Metric label="Creator 수령 지갑" value={escrow.creatorDestination ?? "정산 지갑 연결 필요"} />
+          <Metric label="Escrow Vault" value={escrow.vaultTokenAccount ?? "prepare 전"} />
+          <Metric label="예치 금액" value={baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)} />
           <Metric label="지급 완료" value={baseUnitsToUsdcLabel(escrow.releasedAmountBaseUnits)} />
-          <Metric label="lock signature" value={escrow.lockSignature ?? "pending"} />
+          <Metric label="Escrow 잔액" value={baseUnitsToUsdcLabel(escrowBalanceBaseUnits(escrow))} />
+          <Metric label="funding signature" value={signature ?? "pending"} />
+          {signature ? (
+            <a
+              href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-xs underline decoration-[1px] underline-offset-4"
+            >
+              Solana Explorer
+            </a>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4">
           <p className="text-sm text-muted">아직 실제 escrow lock 기록이 없습니다.</p>
-          {role === "brand" && onLock ? (
-            <button type="button" onClick={onLock} className="sketch-pill mt-3 bg-accent px-4 py-2 text-background">
-              에스크로 잠그기
-            </button>
-          ) : null}
         </div>
       )}
+      {role === "brand" && onFund && !funded ? (
+        <button
+          type="button"
+          onClick={onFund}
+          disabled={fundingState !== "idle"}
+          className="sketch-pill mt-4 bg-accent px-4 py-2 text-background disabled:opacity-50"
+        >
+          {fundingButtonLabel(fundingState, walletAddress)}
+        </button>
+      ) : null}
+      {role === "creator" ? (
+        <button
+          type="button"
+          onClick={onConnectWallet}
+          disabled={fundingState !== "idle"}
+          className="sketch-pill mt-4 border border-border-subtle px-4 py-2 disabled:opacity-50"
+        >
+          {walletAddress ? "수령 지갑 다시 연결" : "Phantom 수령 지갑 연결"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -517,6 +601,17 @@ function deliverableRequirement(terms: ApiAgreementTerms) {
   return parts.length ? parts.join(", ") : "합의 작업";
 }
 
+function fundingButtonLabel(
+  state: "idle" | "connecting" | "signing" | "confirming" | "done",
+  walletAddress: string | null,
+) {
+  if (state === "connecting") return "Phantom 연결 중";
+  if (state === "signing") return "Phantom에서 승인해 주세요";
+  if (state === "confirming") return "에스크로 예치 중";
+  if (state === "done") return "에스크로 예치 완료";
+  return walletAddress ? "Phantom으로 에스크로 예치하기" : "Phantom 연결";
+}
+
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -531,6 +626,13 @@ function baseUnitsToUsdcLabel(value: string | undefined) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return value;
   return `${(raw / 1_000_000).toLocaleString()} USDC`;
+}
+
+function escrowBalanceBaseUnits(escrow: { lockedAmountBaseUnits?: string; releasedAmountBaseUnits?: string }) {
+  const locked = Number(escrow.lockedAmountBaseUnits ?? "0");
+  const released = Number(escrow.releasedAmountBaseUnits ?? "0");
+  if (!Number.isFinite(locked) || !Number.isFinite(released)) return undefined;
+  return String(Math.max(locked - released, 0));
 }
 
 function readableError(caught: unknown) {

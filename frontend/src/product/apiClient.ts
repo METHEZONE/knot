@@ -336,7 +336,7 @@ export type ApiAgreement = {
   creatorSnapshot?: Record<string, unknown> | null;
   canonicalTermsJson: string;
   termsHash: string;
-  status: "AGREED" | "REJECTED";
+  status: "AGREED" | "FUNDING_REQUIRED" | "FUNDED" | "REJECTED";
 };
 
 export type ApiTimelineEvent = {
@@ -373,11 +373,22 @@ export type ApiEscrow = {
   agreementId: string;
   promotionId: string;
   lockedAmountBaseUnits: string;
+  fundedAmountBaseUnits?: string;
+  fundedAmountUsdc?: string;
+  totalAmountUsdc?: string;
   releasedAmountBaseUnits: string;
+  releasedAmountUsdc?: string;
+  refundedAmountUsdc?: string;
   milestoneAmounts?: Record<string, string>;
-  status: "LOCKED" | "COMPLETED" | string;
+  status: "CREATED" | "FUNDED" | "PARTIALLY_RELEASED" | "RELEASED" | "LOCKED" | "COMPLETED" | string;
+  brandAuthority?: string;
+  creatorDestination?: string;
+  escrowPda?: string;
+  vaultTokenAccount?: string;
+  brandTokenAccount?: string;
+  fundingTransactionSignature?: string | null;
   lockSignature: string | null;
-  lockReceiptId: string;
+  lockReceiptId?: string;
 };
 
 export type ApiSettlement = {
@@ -438,6 +449,27 @@ export type ApiNegotiationBundle = {
 export type ApiAgreementEscrowBundle = {
   escrow: ApiEscrow | null;
   settlements: ApiSettlement[];
+};
+
+export type EscrowFundingPrepare = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  brandAuthority: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  totalAmountBaseUnits: string;
+  brandTokenAccount: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  brandUsdcBalanceBaseUnits: string;
+  estimatedNetworkFeeLamports: string;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
 };
 
 export type ApiDevAdminOverview = {
@@ -833,6 +865,41 @@ export class ProductApiClient {
 
   async getAgreementEscrow(agreementId: string) {
     return this.request<ApiAgreementEscrowBundle>(`/api/v1/agreements/${agreementId}/escrow`);
+  }
+
+  async saveWalletAddress(walletAddress: string, network = "devnet") {
+    return this.request<{ wallet: { walletAddress: string; walletNetwork: string } }>(
+      "/api/v1/me/wallet",
+      {
+        method: "POST",
+        body: JSON.stringify({ walletAddress, network }),
+      },
+    );
+  }
+
+  async prepareEscrowFunding(agreementId: string, idempotencyKey: string) {
+    return this.request<{ escrow: ApiEscrow; funding: EscrowFundingPrepare | null }>(
+      `/api/v1/agreements/${agreementId}/escrow/prepare`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
+  }
+
+  async confirmEscrowFunding(
+    agreementId: string,
+    transactionSignature: string,
+    idempotencyKey: string,
+  ) {
+    return this.request<{ escrow: ApiEscrow; receipt: ApiReceipt }>(
+      `/api/v1/agreements/${agreementId}/escrow/confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ transactionSignature }),
+      },
+    );
   }
 
   async runAgentForPromotion(promotionId: string) {
