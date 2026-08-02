@@ -54,7 +54,7 @@ class Settings(BaseModel):
     paysh_daily_spend_cap_usdc: float = 1.0
     paysh_allowed_resource_prefixes: list[str] = ["https://debugger.pay.sh/mpp/quote/"]
     paysh_failure_policy: str = "continue"
-    escrow_network: str = "solanaTestnet"
+    escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
     agent_wallet_provision: bool = False
@@ -107,7 +107,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         paysh_failure_policy=os.getenv("PAYSH_FAILURE_POLICY", "continue"),
         escrow_network=os.getenv(
             "KNOT_ESCROW_NETWORK",
-            _solana_network_label(os.getenv("SOLANA_CLUSTER", "testnet")),
+            _solana_network_label(os.getenv("SOLANA_CLUSTER", "devnet")),
         ),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         agent_wallet_provision=os.getenv("KNOT_AGENT_WALLET_PROVISION", "").lower()

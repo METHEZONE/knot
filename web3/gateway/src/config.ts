@@ -15,10 +15,12 @@ export type GatewayConfig = {
   agentKeypairPath?: string;
   agentKeypairJson?: string;
   gcpProjectId?: string;
+  autoMintOnLock: boolean;
+  autoSolTopupOnLock: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
-  const cluster = env.SOLANA_CLUSTER ?? "testnet";
+  const cluster = env.SOLANA_CLUSTER ?? "devnet";
   return {
     serviceName: env.KNOT_SERVICE_NAME ?? "knot-web3",
     gitSha: env.GIT_SHA ?? "local",
@@ -37,7 +39,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     creatorKeypairJson: env.KNOT_CREATOR_KEYPAIR_JSON,
     agentKeypairPath: env.KNOT_AGENT_KEYPAIR_PATH,
     agentKeypairJson: env.KNOT_AGENT_KEYPAIR_JSON,
-    gcpProjectId: env.GOOGLE_CLOUD_PROJECT ?? env.GCP_PROJECT_ID
+    gcpProjectId: env.GOOGLE_CLOUD_PROJECT ?? env.GCP_PROJECT_ID,
+    autoMintOnLock: autoLocalnetOnly(env.KNOT_WEB3_AUTO_MINT_ON_LOCK, cluster),
+    autoSolTopupOnLock: autoLocalnetOnly(env.KNOT_WEB3_AUTO_SOL_TOPUP_ON_LOCK, cluster)
   };
 }
 
@@ -53,4 +57,11 @@ function defaultRpcUrl(cluster: string): string {
 
 function liveSigningRequested(value: string | undefined): boolean {
   return value === "live" || value === "devnet" || value === "testnet";
+}
+
+function autoLocalnetOnly(value: string | undefined, cluster: string): boolean {
+  if (value !== undefined) {
+    return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+  }
+  return cluster === "localnet";
 }

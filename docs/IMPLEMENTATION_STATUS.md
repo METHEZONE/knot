@@ -1,6 +1,6 @@
 # KNOT Final Implementation Status
 
-> Updated for Agent settlement automation follow-up on 2026-08-01. Do not mark a capability verified without evidence.
+> Updated for devnet settlement preflight follow-up on 2026-08-02. Do not mark a capability verified without evidence.
 
 ## Status Legend
 
@@ -25,7 +25,7 @@
 | Matching | IN_PROGRESS | `backend/libs/agents/discovery.py`, `backend/libs/agents/matching.py` | Phase 4 focused tests | Product API Match Run uses bounded discovery query; vector retrieval pending |
 | A2A | IN_PROGRESS | `backend/apps/creator_agent`, `backend/libs/a2a`, `backend/libs/a2a/registry.py` | Phase 6 focused tests | Registry lookup, AgentCard validation, service auth, dedupe, terminal guard, task event persistence covered |
 | Agreement | IN_PROGRESS | `backend/apps/api/routes.py`, `backend/libs/domain/hashing.py` | Audit complete | Final one-milestone shape pending |
-| Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Localnet smoke complete | Agent auto lock/release is verified on localnet; shared testnet deploy needs program/mint, signer/pay.sh secrets, and funded wallets |
+| Escrow/release | IN_PROGRESS | `web3/gateway`, `backend/libs/web3` | Localnet smoke complete | Agent auto lock/release is verified on localnet; shared devnet deploy needs program/mint, signer/pay.sh secrets, and funded wallets |
 | Cloud Run | IN_PROGRESS | `infra/cloudbuild/*.yaml` | Audit complete | No deployment in Phase 1 |
 
 ## 2. Capability Matrix
@@ -42,12 +42,12 @@
 | A2A counteroffer | IMPLEMENTED | VERIFIED | VERIFIED | VERIFIED | VERIFIED | Negotiation detail now exposes stored `HTTP_A2A` transport, endpoint, and A2A payload; local smoke confirmed Product API -> Creator Agent HTTP path |
 | Agreement Artifact/hash | IMPLEMENTED | VERIFIED | VERIFIED | IMPLEMENTED | NOT_STARTED | Phase 9 enforces canonical terms hash at Agreement creation and stores one 100% milestone |
 | pay.sh verification | IMPLEMENTED | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 8 adds allowlist, configured quote/caps, idempotent operation/receipt storage, and explicit skipped/failed continuation policy; real sandbox smoke skipped by environment |
-| Testnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can trigger lock when `KNOT_AGENT_AUTO_SETTLEMENT=1`; localnet on-chain smoke confirmed lock signature `BJb3co...Mu5x`. Web3/API now accept `solanaTestnet`; shared testnet remains blocked by missing program/mint, funded signer wallets, and pay.sh secrets |
+| Devnet escrow | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation can trigger lock when `KNOT_AGENT_AUTO_SETTLEMENT=1`; localnet on-chain smoke confirmed lock signature `BJb3co...Mu5x`. Web3/API now default to `solanaDevnet`; shared devnet remains blocked by missing program/mint, funded signer wallets, and pay.sh secrets |
 | Evidence verification | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Phase 10 requires funded escrow, validates external https source URLs, stores source digest, records verification results, and blocks failed evidence |
-| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation released after passed evidence in localnet smoke: release signature `4wfyk1...MH4G`, creator token balance 650 USDC. Deploy script now wires API to Web3 Gateway; shared testnet remains blocked by missing program/mint, funded signer wallets, and pay.sh secrets |
+| Settlement release | IN_PROGRESS | VERIFIED | VERIFIED | IN_PROGRESS | NOT_STARTED | Agent automation released after passed evidence in localnet smoke: release signature `4wfyk1...MH4G`, creator token balance 650 USDC. Deploy script now wires API to Web3 Gateway; shared devnet remains blocked by missing program/mint, funded signer wallets, and pay.sh secrets |
 | Dashboard live/replay | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | VERIFIED | Detail pages read counterparty profile snapshots, agreed work, stored A2A messages, wallet balance, escrow, and settlement receipts through Product API |
 | Technical Proof | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_STARTED | Phase 7 UI shows sanitized IDs, event sequence, A2A task/context, Agreement state, and data source badge |
-| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Release script now deploys Web3 Gateway for testnet and forbids `PAYSH_RESOURCE_ID=replace-me`; Cloud Run live smoke is blocked until testnet program/mint, signer/pay.sh secrets, and funding exist |
+| Deployment | N/A | N/A | N/A | N/A | BLOCKED | Release script now deploys Web3 Gateway for devnet and forbids `PAYSH_RESOURCE_ID=replace-me`; Cloud Run live smoke is blocked until devnet program/mint, signer/pay.sh secrets, and funding exist |
 
 ## 3. Phase 1 Changes
 
@@ -186,7 +186,7 @@
 - Evidence verification persists a separate `verificationResults/{id}` document with provider, observations, policy decision, status, and source digest.
 - Settlement release now requires a passed evidence document and stores `evidenceId` plus `sourceDigest` on the settlement, released milestone, and `MILESTONE_RELEASED` timeline event.
 - Failed evidence remains persisted but does not authorize release or create a settlement.
-- No live testnet release transaction was submitted in this phase because on-chain actions require explicit approval.
+- No live devnet release transaction was submitted in this phase because on-chain actions require explicit approval.
 
 ## 13. Phase 11 Changes
 
@@ -308,12 +308,14 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Phase 11 tracked-file secret pattern scan | VERIFIED: no matches | working tree | 2026-07-31 | `git grep` over tracked files for high-risk token/key patterns |
 | Phase 11 Cloud Run deploy/live smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for deployment/IAM/Secret changes |
 | Phase 11 shared-cluster lock/release smoke | SKIPPED | working tree | 2026-07-31 | Requires explicit approval for wallet funding/on-chain transactions |
-| Testnet configuration update | VERIFIED | working tree | 2026-08-01 | Web3/API now accept `solanaTestnet`; deploy script defaults to `SOLANA_CLUSTER=testnet` and requires explicit program/mint |
+| Devnet configuration update | VERIFIED | working tree | 2026-08-02 | Web3/API now default to `solanaDevnet`; deploy script defaults to `SOLANA_CLUSTER=devnet`, disables shared-cluster auto mint/SOL top-up, and requires explicit program/mint |
 | Agent auto settlement localnet smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced lock signature `37VZrW...8JcF` and release signature `4hi1QB...HfrB` |
 | HTTP A2A detail and settlement smoke | VERIFIED | working tree | 2026-08-01 | `scripts/local/settlement_smoke.sh` produced t1/c1 negotiation `negotiation-82d63da5-24cc-41a5-a9c4-ddeb9c50cb9a`, `HTTP_A2A` stored messages `OFFER -> COUNTER -> ACCEPT -> ACCEPT`, lock signature `4vSNcS...sdW9`, and release signature `36g7WZ...AQnC` |
 | A2A/profiles regression tests | VERIFIED | working tree | 2026-08-01 | `python -m pytest backend/tests/test_api_promotions.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_escrow.py -q`: 44 passed, 2 warnings |
 | Frontend dashboard detail checks | VERIFIED | working tree | 2026-08-01 | `npm --prefix frontend run lint`, `npm --prefix frontend run typecheck`, and `npm --prefix frontend run build` passed |
 | Demo Auth emulator accounts | VERIFIED | working tree | 2026-08-01 | `t1@knot.com` and `c1@knot.com` created with password `000000` |
+| Devnet settlement funding guard | VERIFIED | working tree | 2026-08-02 | Web3 Gateway defaults to `devnet`, disables shared-cluster auto token mint and auto SOL top-up, and requires funded Agent token/SOL balances before escrow lock |
+| Devnet settlement regression checks | VERIFIED | working tree | 2026-08-02 | `npm --prefix web3/gateway test` 13 passed; Web3 build passed; API escrow/promotions/dashboards 49 passed; frontend lint/typecheck/build passed |
 
 ## 16. Latest Verified E2E
 
@@ -354,7 +356,7 @@ Settlement release signature: 4aoP1TNCprGrSy5jgxqByF5cBE9DHYqMTkJTB8WhAxuqtBNh5R
 Creator localnet token balance: 2300
 ```
 
-Live testnet pay.sh purchase and live testnet escrow remain blocked until testnet program/mint, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain testnet transactions exist.
+Live devnet pay.sh purchase and live devnet escrow remain blocked until devnet program/mint, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain devnet transactions exist.
 
 ## 17. Known Blockers
 
@@ -386,12 +388,12 @@ WORKAROUND FOR DEMO (truthfully labeled): Emulator/in-memory tests only.
 ```
 
 ```text
-BLOCKER: Live testnet escrow release signature is not verified.
-IMPACT: Settlement release is verified through localnet live signing, not a shared Solana testnet transaction.
-EVIDENCE: Localnet lock/release paid the Creator registered wallet, but no testnet transaction was submitted without approval.
+BLOCKER: Live devnet escrow release signature is not verified.
+IMPACT: Settlement release is verified through localnet live signing, not a shared Solana devnet transaction.
+EVIDENCE: Localnet lock/release paid the Creator registered wallet, but no devnet transaction was submitted without approval.
 OWNER: Web3/Payments phase.
-NEXT ACTION: Configure/deploy the testnet program + mint + signer secrets, fund testnet wallets, then run an approved testnet lock/release smoke and record the signature/Explorer URL.
-WORKAROUND FOR DEMO (truthfully labeled): Use localnet live-signing proof until testnet is funded and approved.
+NEXT ACTION: Configure/deploy the devnet program + mint + signer secrets, fund devnet wallets, then run an approved devnet lock/release smoke and record the signature/Explorer URL.
+WORKAROUND FOR DEMO (truthfully labeled): Use localnet live-signing proof until devnet is funded and approved.
 ```
 
 ## 18. Update Rule

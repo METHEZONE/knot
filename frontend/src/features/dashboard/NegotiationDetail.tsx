@@ -356,6 +356,7 @@ function WalletSettlementPanel({
       <SectionHeader eyebrow="Wallet & settlement" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
       <div className="grid gap-3">
         <Metric label="Phantom 지갑" value={wallet.address ?? textValue(balance, "address", "미연결")} />
+        <Metric label="네트워크" value={walletNetworkLabel(balance)} />
         <Metric label="잔고" value={walletBalanceLabel(balance)} />
         <Metric label="Escrow" value={escrow ? `${escrow.status} · ${baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)}` : "아직 잠김 없음"} />
         <Metric label={role === "brand" ? "크리에이터 수령 지갑" : "수령 지갑"} value={escrow?.creatorDestinationWallet ?? "정산 지갑 연결 필요"} />
@@ -687,6 +688,15 @@ function walletBalanceLabel(balance: Record<string, unknown> | null) {
   const sol = typeof balance.sol === "number" ? `${balance.sol.toLocaleString()} SOL` : "SOL -";
   const usdc = typeof balance.usdc === "number" ? `${balance.usdc.toLocaleString()} USDC` : "USDC -";
   return `${usdc} / ${sol}`;
+}
+
+function walletNetworkLabel(balance: Record<string, unknown> | null) {
+  if (!balance) return "조회 중";
+  if (balance.connected === false) return "지갑 미연결";
+  const cluster = textValue(balance, "cluster", "unknown");
+  const mint = textValue(balance, "mint", "mint unknown");
+  const label = cluster === "localnet" ? "localnet 개발 토큰" : cluster;
+  return `${label} · ${mint}`;
 }
 
 function formatDeliverable(format: string) {

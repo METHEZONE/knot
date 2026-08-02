@@ -58,6 +58,7 @@ export type LiveTransactionReceipt = {
 };
 
 const SYSTEM_PROGRAM_ID = new PublicKey("11111111111111111111111111111111");
+const MIN_AGENT_SOL_LAMPORTS = 30_000_000;
 
 export async function submitEscrowLock(
   config: GatewayConfig,
@@ -95,22 +96,40 @@ export async function submitEscrowLock(
   );
   const deposit = total + brandFeeTotal;
 
-  // funder = agent: 에이전트 토큰계정에 예산 확보(데모는 자체 민팅; 실제론 유저 top-up으로 이미 채워짐)
+  // funder = agent: 에이전트 토큰계정에 예산 확보(로컬넷은 자체 민팅; 공유망은 이미 충전된 잔고 필요)
   // 에이전트 지갑은 딜마다 재사용되므로 반드시 멱등하게 확보해야 한다 —
   // createAccount 는 이미 존재하면 "Provided owner is not allowed" 로 실패해서 두 번째 락이 깨졌다.
   const agentToken = (
     await getOrCreateAssociatedTokenAccount(connection, brand, mint, agent.publicKey)
   ).address;
-  await mintTo(connection, brand, mint, agentToken, brand, deposit);
-  await sendIx(
-    connection,
-    SystemProgram.transfer({
-      fromPubkey: brand.publicKey,
-      toPubkey: agent.publicKey,
-      lamports: 30_000_000
-    }),
-    [brand]
-  );
+  if (config.autoMintOnLock) {
+    await mintTo(connection, brand, mint, agentToken, brand, deposit);
+  } else {
+    const account = await getAccount(connection, agentToken, "confirmed", TOKEN_PROGRAM_ID);
+    if (account.amount < deposit) {
+      throw new Error(
+        `Agent wallet has insufficient token balance for escrow lock: required ${deposit}, available ${account.amount}`
+      );
+    }
+  }
+  if (config.autoSolTopupOnLock) {
+    await sendIx(
+      connection,
+      SystemProgram.transfer({
+        fromPubkey: brand.publicKey,
+        toPubkey: agent.publicKey,
+        lamports: MIN_AGENT_SOL_LAMPORTS
+      }),
+      [brand]
+    );
+  } else {
+    const agentSol = await connection.getBalance(agent.publicKey, "confirmed");
+    if (agentSol < MIN_AGENT_SOL_LAMPORTS) {
+      throw new Error(
+        `Agent wallet has insufficient SOL for escrow lock: required ${MIN_AGENT_SOL_LAMPORTS}, available ${agentSol}`
+      );
+    }
+  }
 
   const campaignId = campaignIdFromEscrowId(input.escrowId);
   const campaign = pda(["campaign", brand.publicKey.toBuffer(), u64(campaignId)], programId);
