@@ -92,6 +92,8 @@ Updated: 2026-08-02
 - `env PYTHONPATH=backend ./.venv/bin/pytest backend/tests/test_api_escrow.py`: 21 passed.
 - `cd frontend && npm run lint`: passed.
 - `cd frontend && npm run build`: passed.
+- `cd frontend && npm ci`: passed after synchronizing `frontend/package-lock.json`
+  with `frontend/package.json`.
 - `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
 - Local `POST /api/v1/agreements/agreement-bf47634b-9bbb-4a9d-99ee-b7a3d37b39a1/escrow/prepare`
   returned 200 with a prepared Phantom funding transaction after the gateway route fix.
@@ -130,3 +132,6 @@ Updated: 2026-08-02
 - Future production/devnet agreements should use a dedicated backend settlement signer
   as `settlementAuthority`; the recovered local escrow keeps the already-initialized
   creator wallet as settlement authority because that value is immutable on-chain.
+- Cloud Run deployment of `knot-creator-agent`, `knot-web3`, and `knot-api` completed
+  with image tag `97a4e76`; the first `knot-web` build failed on stale package-lock
+  metadata and was fixed by lockfile synchronization.
