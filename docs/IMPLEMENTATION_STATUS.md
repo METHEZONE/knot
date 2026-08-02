@@ -36,6 +36,11 @@ Updated: 2026-08-02
 - Escrow prepare/legacy lock now derive a stable base58-safe Agreement escrow id,
   so repeated prepare calls with the same `Idempotency-Key` no longer conflict because
   of regenerated escrow ids and gateway calls no longer receive hyphenated escrow ids.
+- Brand Agreement detail now separates Phantom connection from escrow funding: the
+  first click only connects/saves the wallet, and funding prepare runs after a wallet
+  is already connected.
+- Web3 Gateway funding policy failures now surface as `FUNDING_PREPARE_FAILED` /
+  `FUNDING_CONFIRM_FAILED` conflicts instead of generic 502 Bad Gateway responses.
 
 ### Current Money Flow
 
@@ -65,7 +70,7 @@ Updated: 2026-08-02
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
-- `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 28 passed.
+- `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 29 passed.
 - `./.venv/bin/pytest backend/tests -q`: 126 passed, 5 skipped.
 - `./.venv/bin/python -m py_compile scripts/seed_devnet_phantom_demo.py`: passed.
 - Firestore/Firebase devnet demo seed executed for `t1@knot.com` and `c1@knot.com`.

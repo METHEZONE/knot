@@ -8,6 +8,7 @@ from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
+from libs.web3.client import Web3GatewayError
 
 CLEAN_EVIDENCE_URL = "https://social.example/post/with-brand-and-ad"
 BRAND_WALLET = "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
@@ -178,6 +179,22 @@ def install_funding_gateway(monkeypatch) -> type:
     return FundingGatewayClient
 
 
+def install_failing_funding_gateway(monkeypatch, message: str) -> None:
+    class FailingFundingGatewayClient:
+        def __init__(self, base_url: str) -> None:
+            self.base_url = base_url
+
+        def prepare_funding(
+            self,
+            *,
+            idempotency_key: str,
+            payload: dict[str, object],
+        ) -> dict[str, object]:
+            raise Web3GatewayError(message)
+
+    monkeypatch.setattr("apps.api.routes.Web3GatewayClient", FailingFundingGatewayClient)
+
+
 def accepted_agreement(client: TestClient) -> dict[str, object]:
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
@@ -301,6 +318,32 @@ def test_prepare_funding_replays_same_idempotency_key(monkeypatch) -> None:
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     assert first.json()["data"]["escrow"]["escrowId"] == second.json()["data"]["escrow"]["escrowId"]
+
+
+def test_prepare_funding_gateway_policy_failure_is_not_reported_as_bad_gateway(monkeypatch) -> None:
+    install_failing_funding_gateway(
+        monkeypatch,
+        "409 Conflict: Brand USDC token account not found",
+    )
+    client, repository = seeded(
+        Settings(
+            auth_mode="emulator",
+            firebase_project_id="knot-dev-503505",
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            settlement_authority=SETTLEMENT_AUTHORITY,
+        )
+    )
+    agreement = brand_owned_agreement_with_wallets(client, repository)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/escrow/prepare",
+        headers={**auth_headers(), "Idempotency-Key": "prepare-policy-failure"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "FUNDING_PREPARE_FAILED"
+    assert "Brand USDC token account not found" in response.json()["detail"]["detail"]
 
 
 def test_confirm_funding_marks_escrow_funded_only_after_gateway_validation(monkeypatch) -> None:

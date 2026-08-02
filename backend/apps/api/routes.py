@@ -2414,8 +2414,8 @@ def build_api_router(
             )
         except Web3GatewayError as exc:
             raise _problem(
-                status.HTTP_502_BAD_GATEWAY,
-                "WEB3_GATEWAY_UNAVAILABLE",
+                _web3_gateway_http_status(exc),
+                _web3_gateway_error_code(exc, "FUNDING_PREPARE_FAILED"),
                 f"Web3 gateway funding prepare failed: {exc}",
             ) from exc
         escrow = {
@@ -2549,8 +2549,8 @@ def build_api_router(
             )
         except Web3GatewayError as exc:
             raise _problem(
-                status.HTTP_502_BAD_GATEWAY,
-                "WEB3_GATEWAY_UNAVAILABLE",
+                _web3_gateway_http_status(exc),
+                _web3_gateway_error_code(exc, "FUNDING_CONFIRM_FAILED"),
                 f"Web3 gateway funding confirm failed: {exc}",
             ) from exc
         now = _now()
@@ -5512,6 +5512,19 @@ def _base58_encode(raw: bytes) -> str:
         encoded = alphabet[remainder] + encoded
     leading_zeroes = len(raw) - len(raw.lstrip(b"\0"))
     return "1" * leading_zeroes + (encoded or "1")
+
+
+def _web3_gateway_http_status(exc: Web3GatewayError) -> int:
+    message = str(exc)
+    if message.startswith("400 "):
+        return status.HTTP_400_BAD_REQUEST
+    if message.startswith("409 "):
+        return status.HTTP_409_CONFLICT
+    return status.HTTP_502_BAD_GATEWAY
+
+
+def _web3_gateway_error_code(exc: Web3GatewayError, policy_code: str) -> str:
+    return policy_code if _web3_gateway_http_status(exc) != status.HTTP_502_BAD_GATEWAY else "WEB3_GATEWAY_UNAVAILABLE"
 
 
 def _require_funded_escrow_for_agreement(

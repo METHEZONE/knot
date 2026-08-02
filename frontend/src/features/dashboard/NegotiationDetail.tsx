@@ -427,7 +427,7 @@ function SettlementSummaryPanel({
       {role === "brand" && onFund && !funded ? (
         <button
           type="button"
-          onClick={onFund}
+          onClick={walletAddress ? onFund : onConnectWallet}
           disabled={fundingState !== "idle"}
           className="sketch-pill mt-4 bg-accent px-4 py-2 text-background disabled:opacity-50"
         >
