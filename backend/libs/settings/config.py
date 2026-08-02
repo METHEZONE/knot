@@ -23,7 +23,7 @@ def _load_dotenv() -> None:
 
 # Last known knot-escrow program id and SPL mint defaults. Live shared
 # deployments must override both values for the selected Solana cluster.
-DEFAULT_ESCROW_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
+DEFAULT_ESCROW_PROGRAM_ID = "HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v"
 DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 

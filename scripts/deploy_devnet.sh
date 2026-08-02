@@ -11,6 +11,9 @@
 # ~2.03 SOL; top up at https://faucet.solana.com if low.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+if [[ -d /opt/homebrew/opt/rustup/bin ]]; then
+  export PATH="/opt/homebrew/opt/rustup/bin:${PATH}"
+fi
 
 CLUSTER="${SOLANA_CLUSTER:-devnet}"
 RPC="${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
@@ -30,6 +33,14 @@ done
 anchor build >/dev/null
 PROG_ID="$(solana address -k "$KP")"
 BAL="$(solana balance --url "$RPC" 2>/dev/null | awk '{print $1}')"
+if [[ -z "${BAL}" ]]; then
+  echo "❌ could not read deploy wallet balance on ${CLUSTER}"; exit 1
+fi
+if ! awk -v bal="$BAL" 'BEGIN { exit !(bal >= 2.2) }'; then
+  echo "❌ deploy wallet needs at least 2.2 SOL on ${CLUSTER}; current balance: ${BAL} SOL"
+  echo "   fund it first, then rerun this script."
+  exit 1
+fi
 echo "▸ deploying $PROG_ID to ${CLUSTER} (wallet balance: ${BAL:-?} SOL)"
 solana program deploy "$SO" --program-id "$KP" --url "$RPC"
 echo "✓ deployed."

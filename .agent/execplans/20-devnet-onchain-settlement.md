@@ -29,9 +29,16 @@
 - 2026-08-02: `.venv/bin/python -m pytest backend/tests/test_api_escrow.py backend/tests/test_api_promotions.py backend/tests/test_api_dashboards.py -q` passed 49 tests, 2 warnings.
 - 2026-08-02: `npm --prefix frontend run lint`, `npm --prefix frontend run typecheck`, and `npm --prefix frontend run build` passed.
 - 2026-08-02: `npm --prefix web3/gateway run preflight:devnet` executed read-only against Solana devnet. It confirmed executable program `Aj63B5hL...B6jysj`, but failed readiness because signer keypairs were not configured locally and the program config treasury mint is `7Hrvv...eK3p`, not Circle devnet USDC `4zMMC9...ncDU`.
+- 2026-08-02: Created branch `fix/devnet-onchain-settlement` and generated a fresh devnet USDC program ID `HeviXng9...3z4v`.
+- 2026-08-02: Added `npm --prefix web3/gateway run init-config:devnet` to initialize a fresh config PDA with a Circle devnet USDC treasury token account.
+- 2026-08-02: `anchor build` passed with the new program ID.
+- 2026-08-02: Devnet program deployment attempted after approval, but failed before deployment because the fee payer wallet had `0 SOL` and the public faucet/PoW bootstrap also hit rate limits.
+- 2026-08-02: Fresh program preflight now points at `HeviXng9...3z4v` and Circle devnet USDC, but correctly reports missing executable program/config until deployment succeeds.
+- 2026-08-02: `npm --prefix web3/gateway run build`, `npm --prefix web3/gateway run lint`, `npm --prefix web3/gateway test`, API/PDA pytest subset, and frontend lint/typecheck/build passed on the branch.
 
 ## Current Blockers
 
 - No shared devnet transaction was submitted in this phase.
 - Devnet Secret Manager signer entries, Circle USDC escrow program/config readiness, wallet funding, deployment, and live on-chain smoke still require explicit approval before execution.
 - The current deployed devnet program config is already initialized against a custom test mint. Circle devnet USDC requires deploying/configuring a fresh program ID or intentionally switching the demo to that custom test mint with truthful labeling.
+- Fresh Circle USDC program deployment is blocked until deploy wallet `GX1q...gv6B` receives at least 2.2 devnet SOL. Official CLI airdrop and `devnet-pow` bootstrap both returned faucet rate-limit errors in this environment.

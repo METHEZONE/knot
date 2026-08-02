@@ -10,7 +10,7 @@ import os
 from solders.pubkey import Pubkey
 
 # `anchor keys list` 로 확인한 knot-escrow 프로그램 ID (기본값)
-_DEFAULT_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
+_DEFAULT_PROGRAM_ID = "HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v"
 PROGRAM_ID = Pubkey.from_string(os.environ.get("KNOT_ESCROW_PROGRAM_ID", _DEFAULT_PROGRAM_ID))
 
 

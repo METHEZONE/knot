@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "init-config:devnet": "tsx src/init-config.ts",
     "preflight:devnet": "tsx src/preflight.ts",
     "lint": "eslint src tests --ext .ts",
     "test": "node --import tsx --test tests/*.test.ts"

@@ -167,7 +167,7 @@ class ApiKnotDataSource implements KnotDataSource {
       { id: "api-db", type: "DB", label: "Product API repository boundary active", status: "ok" },
       { id: "api-a2a", type: "A2A", label: "Frontend consumes Product API A2A projection, not direct A2A messages", status: "ok" },
       { id: "api-policy", type: "POLICY", label: "Agreement, evidence and escrow checks are deterministic", status: "ok" },
-      { id: "api-web3", type: "WEB3", label: "Escrow receipts come from Product API; live signatures require gateway testnet signing mode", status: "warning" },
+      { id: "api-web3", type: "WEB3", label: "Escrow receipts come from Product API; live signatures require gateway devnet signing mode", status: "warning" },
     ];
 
     try {

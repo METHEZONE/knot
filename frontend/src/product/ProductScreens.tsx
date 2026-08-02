@@ -3013,7 +3013,7 @@ function TxBox({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded border border-border-subtle bg-background p-3">
       <div className="font-mono text-[11px] uppercase text-muted">{label}</div>
-      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live testnet transaction"}</div>
+      <div className="mt-1 break-all font-mono text-sm">{value ?? "pending live devnet transaction"}</div>
     </div>
   );
 }

@@ -317,6 +317,8 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Devnet settlement funding guard | VERIFIED | working tree | 2026-08-02 | Web3 Gateway defaults to `devnet`, disables shared-cluster auto token mint and auto SOL top-up, and requires funded Agent token/SOL balances before escrow lock |
 | Devnet settlement regression checks | VERIFIED | working tree | 2026-08-02 | `npm --prefix web3/gateway test` 13 passed; Web3 build passed; API escrow/promotions/dashboards 49 passed; frontend lint/typecheck/build passed |
 | Devnet settlement preflight | BLOCKED | working tree | 2026-08-02 | Read-only preflight confirmed executable program `Aj63B5hL...B6jysj`, but signer keypairs were not configured locally and the existing config treasury mint is custom `7Hrvv...eK3p`, not Circle devnet USDC `4zMMC9...ncDU` |
+| Circle USDC program branch prep | VERIFIED | `fix/devnet-onchain-settlement` | 2026-08-02 | Fresh devnet program ID `HeviXng9...3z4v`, Circle USDC config initializer, devnet defaults, and UI copy updates are implemented; Anchor/Web3/API/frontend checks passed |
+| Circle USDC devnet deploy | BLOCKED | `fix/devnet-onchain-settlement` | 2026-08-02 | Approved deployment attempted, but deploy wallet `GX1q...gv6B` has `0 SOL`; Solana CLI airdrop and `devnet-pow` bootstrap both hit faucet rate limits |
 
 ## 16. Latest Verified E2E
 
@@ -358,6 +360,8 @@ Creator localnet token balance: 2300
 ```
 
 Live devnet pay.sh purchase and live devnet escrow remain blocked until a Circle devnet USDC escrow program/config, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain devnet transactions exist.
+
+Branch `fix/devnet-onchain-settlement` prepares the fresh Circle devnet USDC path with program ID `HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v`, but the program is not deployed yet because the deploy fee payer needs devnet SOL.
 
 ## 17. Known Blockers
 
@@ -404,6 +408,15 @@ EVIDENCE: `npm --prefix web3/gateway run preflight:devnet` read config PDA `5fi9
 OWNER: Web3/Payments phase.
 NEXT ACTION: After approval, deploy/configure a fresh devnet escrow program using Circle devnet USDC treasury, or explicitly switch all env/UI copy to the existing custom test mint.
 WORKAROUND FOR DEMO (truthfully labeled): Keep localnet live-signing proof until Circle devnet USDC config is ready.
+```
+
+```text
+BLOCKER: Devnet deploy wallet has no SOL and faucets are rate-limited.
+IMPACT: Fresh Circle USDC escrow program `HeviXng9...3z4v` cannot be deployed yet, so no live devnet lock/release signatures can be produced.
+EVIDENCE: `scripts/deploy_devnet.sh` stopped at `0 SOL`; `solana airdrop 3`, `solana airdrop 1`, explicit address airdrop, and `devnet-pow` mining bootstrap all returned faucet rate-limit errors.
+OWNER: Web3/Payments phase.
+NEXT ACTION: Fund deploy wallet `GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B` with at least 2.2 devnet SOL via faucet.solana.com, another approved faucet, or a teammate wallet, then rerun `scripts/deploy_devnet.sh` and `npm --prefix web3/gateway run init-config:devnet`.
+WORKAROUND FOR DEMO (truthfully labeled): Use localnet live-signing until devnet SOL is available.
 ```
 
 ## 18. Update Rule

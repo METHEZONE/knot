@@ -31,7 +31,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     // Live shared deployments must override both values for the selected
     // cluster. These defaults only keep local/unit test configuration stable.
     allowedMint: env.KNOT_USDC_MINT ?? "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-    allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj",
+    allowedProgramId: env.KNOT_ESCROW_PROGRAM_ID ?? "HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v",
     signingMode: liveSigningRequested(env.KNOT_WEB3_SIGNING_MODE) ? "live" : "simulated",
     brandKeypairPath: env.KNOT_BRAND_KEYPAIR_PATH || env.ANCHOR_WALLET,
     brandKeypairJson: env.KNOT_BRAND_KEYPAIR_JSON,

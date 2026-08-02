@@ -8,7 +8,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj");
+declare_id!("HeviXng9rwLz5sNDY6tixkYiW4kwxXRv5iFDo5xf3z4v");
 
 pub const MAX_MILESTONES: usize = 8;
 pub const BPS_DENOM: u64 = 10_000;

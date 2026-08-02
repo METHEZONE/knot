@@ -5,7 +5,7 @@
 인터페이스 계약: docs/architecture.md.
 
 주의:
-  - 실제 호출은 배포된 프로그램 + 펀딩된 testnet 지갑 + SPL 토큰계정이 필요.
+  - 실제 호출은 배포된 프로그램 + 펀딩된 devnet 지갑 + SPL 토큰계정이 필요.
   - PDA 유도만 필요하면 ``knot.escrow.pdas`` 를 검증기 없이 사용.
   - anchorpy/solana 는 지연 import (미설치 환경에서도 pdas 단독 사용 가능하도록).
 """
@@ -18,7 +18,7 @@ from solders.pubkey import Pubkey
 
 from . import pdas
 
-TESTNET_RPC = "https://api.testnet.solana.com"
+DEVNET_RPC = "https://api.devnet.solana.com"
 
 # 표준 프로그램 주소 (fragile import 회피용 상수)
 SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
@@ -29,7 +29,7 @@ RENT_SYSVAR = Pubkey.from_string("SysvarRent111111111111111111111111111111111")
 IDL_PATH = Path(__file__).resolve().parents[3] / "target" / "idl" / "knot_escrow.json"
 
 
-async def load_program(payer: Keypair, rpc_url: str = TESTNET_RPC):
+async def load_program(payer: Keypair, rpc_url: str = DEVNET_RPC):
     """IDL을 로드해 anchorpy Program 인스턴스를 만든다."""
     from anchorpy import Idl, Program, Provider, Wallet
     from solana.rpc.async_api import AsyncClient
