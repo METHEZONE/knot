@@ -156,6 +156,51 @@ def test_wallet_save_is_returned_in_current_user_context() -> None:
     stored_brand = repository.get_raw_document(FirestorePaths.brand(profile["brand"]["brandId"]))
     assert stored_brand is not None
     assert stored_brand["walletAddress"] == wallet_address
+    # 직접 연결한 외부 지갑은 자기수탁으로 표시된다.
+    assert current["account"]["walletCustody"] == "SELF"
+
+
+def test_role_selection_provisions_an_embedded_wallet_when_enabled() -> None:
+    """구글 로그인 → 역할 선택만으로 Solana 주소가 생긴다(Phantom 불필요)."""
+    repository = KnotRepository(InMemoryDocumentStore())
+    settings = Settings(
+        auth_mode="emulator",
+        firebase_project_id="knot-dev-503505",
+        user_wallet_provision=True,
+    )
+    client = TestClient(create_app(repository=repository, settings=settings))
+    headers = auth_headers(uid="embedded-wallet-user", email="embedded@example.com")
+    client.get("/api/v1/me", headers=headers)
+
+    created = client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "embedded-role-key"},
+        json={"role": "CREATOR"},
+    )
+
+    assert created.status_code == 200, created.text
+    account = created.json()["data"]["account"]
+    assert account["walletCustody"] == "PLATFORM"
+    assert isinstance(account["walletAddress"], str) and account["walletAddress"]
+    stored_user = repository.get_raw_document(FirestorePaths.user("embedded-wallet-user"))
+    assert stored_user is not None
+    assert stored_user["walletAddress"] == account["walletAddress"]
+
+
+def test_role_selection_does_not_provision_a_wallet_by_default() -> None:
+    client, _ = client_and_repository()
+    headers = auth_headers(uid="no-wallet-user", email="no-wallet@example.com")
+    client.get("/api/v1/me", headers=headers)
+
+    created = client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "no-wallet-role-key"},
+        json={"role": "CREATOR"},
+    )
+
+    account = created.json()["data"]["account"]
+    assert account["walletAddress"] is None
+    assert account["walletCustody"] is None
 
 
 def test_wallet_save_rejects_non_base58_demo_value() -> None:

@@ -16,6 +16,10 @@ export type GatewayConfig = {
   agentKeypairJson?: string;
   settlementKeypairPath?: string;
   settlementKeypairJson?: string;
+  // 가스 대납 릴레이어. 설정되면 유저가 서명하는 tx의 feePayer 를 이 지갑으로 바꾸고
+  // 게이트웨이가 미리 부분 서명한다 → 유저는 SOL 을 보유할 필요가 없다.
+  relayerKeypairPath?: string;
+  relayerKeypairJson?: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -38,6 +42,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     agentKeypairPath: env.KNOT_AGENT_KEYPAIR_PATH,
     agentKeypairJson: env.KNOT_AGENT_KEYPAIR_JSON,
     settlementKeypairPath: env.KNOT_SETTLEMENT_KEYPAIR_PATH || env.KNOT_AGENT_KEYPAIR_PATH,
-    settlementKeypairJson: env.KNOT_SETTLEMENT_KEYPAIR_JSON || env.KNOT_AGENT_KEYPAIR_JSON
+    settlementKeypairJson: env.KNOT_SETTLEMENT_KEYPAIR_JSON || env.KNOT_AGENT_KEYPAIR_JSON,
+    relayerKeypairPath: env.KNOT_RELAYER_KEYPAIR_PATH,
+    relayerKeypairJson: env.KNOT_RELAYER_KEYPAIR_JSON
   };
 }

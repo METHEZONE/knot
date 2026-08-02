@@ -1,5 +1,6 @@
 import ipaddress
 import json
+import logging
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from hashlib import sha256
@@ -85,6 +86,9 @@ from libs.repositories.serialization import model_to_document
 from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictError, KnotRepository
 from libs.settings.config import Settings, get_settings
 from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
+from libs.web3.user_wallet import CUSTODY_SELF
+
+logger = logging.getLogger(__name__)
 
 
 def build_api_router(
@@ -314,6 +318,35 @@ def build_api_router(
             "agentId": agent_id,
             "updatedAt": now,
         }
+        # 구글 로그인만으로 Solana 주소를 갖게 한다.
+        # 이미 외부 지갑을 연결해둔 계정은 건드리지 않는다.
+        #
+        # CREATOR 한정인 이유: 크리에이터는 정산을 "받기만" 하므로 서명할 일이 없어 커스터디
+        # 주소로 충분하다. 반면 BRAND 는 예치 tx 를 Phantom 으로 직접 서명해야 하는데
+        # (funding.ts prepareBrandFunding + NegotiationDetail 의 brandAuthority 일치 검사),
+        # 커스터디 키는 브라우저에서 서명할 수 없어 예치가 막힌다.
+        if (
+            settings.user_wallet_provision
+            and role == "CREATOR"
+            and not user.get("walletAddress")
+        ):
+            from libs.web3.user_wallet import CUSTODY_PLATFORM, provision_user_wallet
+
+            provisioned = provision_user_wallet(
+                auth_user.uid, project_id=settings.firestore_project_id
+            )
+            # Secret Manager 를 쓰기로 했는데 저장에 실패했다면 주소를 등록하지 않는다.
+            # 비밀키 없는 주소를 정산 수령처로 삼으면 지급된 USDC 를 영구히 회수할 수 없다.
+            if provisioned.stored or not settings.firestore_project_id:
+                updated["walletAddress"] = provisioned.pubkey
+                updated["walletCustody"] = CUSTODY_PLATFORM
+                updated["walletNetwork"] = settings.escrow_network
+                updated["walletUpdatedAt"] = now
+            else:
+                logger.error(
+                    "user wallet 미등록: 비밀키 저장 실패로 주소를 배정하지 않음 uid=%s",
+                    auth_user.uid,
+                )
         repository.save_raw_document(FirestorePaths.agent(agent_id), agent)
         repository.save_raw_document(FirestorePaths.user(auth_user.uid), updated)
         _append_audit(
@@ -331,9 +364,11 @@ def build_api_router(
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _bootstrap_authenticated_user(repository, auth_user)
         now = _now()
+        # 외부 지갑을 직접 연결하면 자동 생성된 커스터디 지갑보다 우선한다(SELF 로 승격).
         wallet = {
             "walletAddress": payload.wallet_address,
             "walletNetwork": payload.network,
+            "walletCustody": CUSTODY_SELF,
             "walletUpdatedAt": now,
         }
         role = user.get("role")
@@ -2757,7 +2792,71 @@ def build_api_router(
                     "evidence": verified,
                 },
             )
-        return _ok({"evidence": verified})
+        auto_settlement = _try_auto_settlement(
+            agreement_id=_require_document_str(verified, "agreementId"),
+            milestone_id=_require_document_str(verified, "milestoneId"),
+            promotion_id=str(verified["promotionId"]),
+        )
+        return _ok({"evidence": verified, "autoSettlement": auto_settlement})
+
+    def _try_auto_settlement(
+        *,
+        agreement_id: str,
+        milestone_id: str,
+        promotion_id: str,
+    ) -> dict[str, object]:
+        """evidence 통과 직후 사람 클릭 없이 마일스톤을 정산한다 (best-effort).
+
+        조건이 성립하지 않거나 온체인 릴리즈가 실패하면 예외를 삼키고 사유만 기록한다.
+        수동 Phantom 릴리즈 경로가 그대로 fallback으로 남아 있어야 하기 때문이다.
+        """
+        if not settings.auto_settlement_on_evidence:
+            return {"attempted": False, "reason": "AUTO_SETTLEMENT_DISABLED"}
+        escrow = _find_escrow_by_agreement(repository, agreement_id)
+        if escrow is None:
+            return {"attempted": False, "reason": "ESCROW_NOT_FOUND"}
+        escrow_id = _require_document_str(escrow, "escrowId")
+        if _find_settlement(repository, escrow_id, milestone_id) is not None:
+            return {"attempted": False, "reason": "ALREADY_SETTLED"}
+        # 같은 마일스톤을 두 번 자동 정산하지 않도록 결정적 키를 쓴다.
+        key = f"auto-release-{escrow_id}-{milestone_id}"
+        try:
+            released = _perform_milestone_release(
+                escrow=escrow,
+                escrow_id=escrow_id,
+                milestone_id=milestone_id,
+                key=key,
+            )
+        except Exception as exc:  # noqa: BLE001 — 자동 정산 실패가 evidence 검증을 깨면 안 된다
+            if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
+                code = exc.detail.get("code")
+            else:
+                code = type(exc).__name__
+            _append_promotion_event(
+                repository,
+                promotion_id=promotion_id,
+                event_type="MILESTONE_AUTO_RELEASE_DEFERRED",
+                data={
+                    "escrowId": escrow_id,
+                    "milestoneId": milestone_id,
+                    "code": code or "AUTO_RELEASE_FAILED",
+                    "fallback": "MANUAL_PHANTOM_RELEASE",
+                },
+            )
+            return {
+                "attempted": True,
+                "released": False,
+                "reason": code or "AUTO_RELEASE_FAILED",
+                "fallback": "MANUAL_PHANTOM_RELEASE",
+            }
+        data = released.get("data")
+        settlement = data.get("settlement") if isinstance(data, dict) else None
+        return {
+            "attempted": True,
+            "released": True,
+            "settlement": settlement,
+            "signedBy": "PLATFORM_SETTLEMENT_AUTHORITY",
+        }
 
     @router.get("/promotions/{promotion_id}/timeline")
     def get_promotion_timeline(promotion_id: str) -> dict[str, object]:
@@ -3086,23 +3185,19 @@ def build_api_router(
             gateway_receipt=gateway_receipt,
         )
 
-    @router.post("/escrows/{escrow_id}/milestones/{milestone_id}:release")
-    def release_milestone(
+    def _perform_milestone_release(
+        *,
+        escrow: dict[str, object],
         escrow_id: str,
         milestone_id: str,
-        authorization: str | None = Header(default=None, alias="Authorization"),
-        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        key: str,
     ) -> dict[str, object]:
-        key = _require_idempotency_key(idempotency_key)
-        escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
-        if escrow is None:
-            raise _not_found("escrow", escrow_id)
+        """마일스톤 릴리즈 실행부.
+
+        evidence 통과 직후의 자동 정산 경로와, 수동 Phantom fallback 경로가 함께 쓴다.
+        호출자가 인증·권한 확인을 끝낸 뒤 부른다.
+        """
         agreement_id = _require_document_str(escrow, "agreementId")
-        if authorization:
-            auth_user = _require_auth_user(token_verifier, authorization)
-            user = _require_completed_role(repository, auth_user, "CREATOR")
-            _require_creator_agreement_document(repository, user, agreement_id)
-            _require_creator_wallet_matches_escrow(repository, user, escrow)
         existing_settlement = _find_settlement(repository, escrow_id, milestone_id)
         if existing_settlement is not None:
             if existing_settlement.get("idempotencyKey") == key:
@@ -3314,6 +3409,30 @@ def build_api_router(
             },
         )
         return _ok({"settlement": settlement, "escrow": updated_escrow, "receipt": receipt})
+
+    @router.post("/escrows/{escrow_id}/milestones/{milestone_id}:release")
+    def release_milestone(
+        escrow_id: str,
+        milestone_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+        if escrow is None:
+            raise _not_found("escrow", escrow_id)
+        agreement_id = _require_document_str(escrow, "agreementId")
+        if authorization:
+            auth_user = _require_auth_user(token_verifier, authorization)
+            user = _require_completed_role(repository, auth_user, "CREATOR")
+            _require_creator_agreement_document(repository, user, agreement_id)
+            _require_creator_wallet_matches_escrow(repository, user, escrow)
+        return _perform_milestone_release(
+            escrow=escrow,
+            escrow_id=escrow_id,
+            milestone_id=milestone_id,
+            key=key,
+        )
 
     @router.get("/transaction-receipts/{receipt_id}")
     def get_transaction_receipt(receipt_id: str) -> dict[str, object]:
@@ -4306,12 +4425,14 @@ def _current_user_payload(
     wallet_address = user.get("walletAddress")
     wallet_network = user.get("walletNetwork")
     wallet_updated_at = user.get("walletUpdatedAt")
+    wallet_custody = user.get("walletCustody")
     if role == "BRAND" and isinstance(user.get("brandId"), str):
         brand = repository.get_raw_document(FirestorePaths.brand(str(user["brandId"])))
         if brand is not None:
             wallet_address = brand.get("walletAddress") or wallet_address
             wallet_network = brand.get("walletNetwork") or wallet_network
             wallet_updated_at = brand.get("walletUpdatedAt") or wallet_updated_at
+            wallet_custody = brand.get("walletCustody") or wallet_custody
             profile_summary = {
                 "type": "BRAND",
                 "id": brand.get("brandId"),
@@ -4328,6 +4449,7 @@ def _current_user_payload(
             wallet_address = creator.get("walletAddress") or wallet_address
             wallet_network = creator.get("walletNetwork") or wallet_network
             wallet_updated_at = creator.get("walletUpdatedAt") or wallet_updated_at
+            wallet_custody = creator.get("walletCustody") or wallet_custody
             profile_summary = {
                 "type": "CREATOR",
                 "id": creator.get("creatorId"),
@@ -4350,6 +4472,8 @@ def _current_user_payload(
         "agentId": user.get("agentId") or user.get("brandAgentId") or user.get("creatorAgentId"),
         "walletAddress": _valid_wallet_or_none(wallet_address),
         "walletNetwork": wallet_network if isinstance(wallet_network, str) and wallet_network else None,
+        # "PLATFORM" = 로그인 시 자동 생성된 커스터디 지갑, "SELF" = 유저가 연결한 외부 지갑.
+        "walletCustody": wallet_custody if isinstance(wallet_custody, str) else None,
         "walletUpdatedAt": wallet_updated_at if isinstance(wallet_updated_at, str) else None,
         "schemaVersion": user.get("schemaVersion") or 2,
     }

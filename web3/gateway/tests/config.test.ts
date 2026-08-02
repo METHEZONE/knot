@@ -10,6 +10,17 @@ test("loadConfig uses safe defaults", () => {
   assert.equal(config.solanaRpcUrl, "https://api.devnet.solana.com");
 });
 
+test("loadConfig leaves gas sponsorship off unless a relayer key is configured", () => {
+  const config = loadConfig({});
+  assert.equal(config.relayerKeypairJson, undefined);
+  assert.equal(config.relayerKeypairPath, undefined);
+});
+
+test("loadConfig reads the gas relayer keypair", () => {
+  const config = loadConfig({ KNOT_RELAYER_KEYPAIR_PATH: "/secrets/relayer.json" });
+  assert.equal(config.relayerKeypairPath, "/secrets/relayer.json");
+});
+
 test("loadConfig enables devnet signing explicitly", () => {
   const config = loadConfig({
     KNOT_WEB3_SIGNING_MODE: "devnet",

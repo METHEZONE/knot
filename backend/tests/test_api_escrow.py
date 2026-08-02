@@ -25,8 +25,30 @@ def seeded(settings: Settings | None = None) -> tuple[TestClient, KnotRepository
 
 
 def seeded_gateway(monkeypatch) -> tuple[TestClient, KnotRepository]:
+    """수동 릴리즈 엔드포인트를 검사하는 기본 픽스처.
+
+    evidence 통과 시 자동 정산이 기본값이므로, 수동 경로 자체를 검증하는 테스트에서는
+    자동 정산을 끄고 호출한다. 자동 정산 동작은 seeded_gateway_auto_settlement 로 검증한다.
+    """
     install_confirmed_gateway(monkeypatch)
-    return seeded(Settings(web3_mode="gateway", web3_gateway_base_url="http://web3-gateway.test"))
+    return seeded(
+        Settings(
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            auto_settlement_on_evidence=False,
+        )
+    )
+
+
+def seeded_gateway_auto_settlement(monkeypatch) -> tuple[TestClient, KnotRepository]:
+    install_confirmed_gateway(monkeypatch)
+    return seeded(
+        Settings(
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            auto_settlement_on_evidence=True,
+        )
+    )
 
 
 def auth_headers(uid: str = "user-brand-1", email: str = "brand@example.com") -> dict[str, str]:
@@ -751,7 +773,11 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
 
     monkeypatch.setattr("apps.api.routes.Web3GatewayClient", FakeGatewayClient)
     client, _ = seeded(
-        Settings(web3_mode="gateway", web3_gateway_base_url="http://web3-gateway.test")
+        Settings(
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            auto_settlement_on_evidence=False,
+        )
     )
     agreement = accepted_agreement(client)
 
@@ -778,6 +804,69 @@ def test_lock_and_release_use_web3_gateway_when_enabled(monkeypatch) -> None:
     assert FakeGatewayClient.release_payload["expectedAmountBaseUnits"] == escrow[
         "milestoneAmounts"
     ]["content"]
+
+
+def test_evidence_pass_auto_settles_without_human_signature(monkeypatch) -> None:
+    """evidence 통과만으로 마일스톤이 정산된다 — Phantom 클릭 없음."""
+    client, repository = seeded_gateway_auto_settlement(monkeypatch)
+    agreement = accepted_agreement(client)
+    escrow = lock(client, agreement, "lk")["escrow"]
+
+    pass_evidence(client, agreement, "content")
+
+    settlements = repository.list_raw_documents("settlements")
+    assert len(settlements) == 1
+    assert settlements[0]["milestoneId"] == "content"
+    assert settlements[0]["status"] == "CONFIRMED"
+
+    stored = repository.get_raw_document(f"escrows/{escrow['escrowId']}")
+    assert stored is not None
+    assert stored["status"] == "RELEASED"
+    assert stored["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]
+    assert "MILESTONE_RELEASED" in timeline_types(client)
+
+
+def test_auto_settlement_reports_signer_and_is_not_repeated(monkeypatch) -> None:
+    client, repository = seeded_gateway_auto_settlement(monkeypatch)
+    agreement = accepted_agreement(client)
+    escrow = lock(client, agreement, "lk")["escrow"]
+
+    pass_evidence(client, agreement, "content")
+    assert len(repository.list_raw_documents("settlements")) == 1
+
+    # 이미 자동 정산된 마일스톤은 수동 릴리즈로 다시 지급되지 않는다.
+    replay = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={"Idempotency-Key": "manual-after-auto"},
+    )
+    assert replay.status_code == 409
+    assert replay.json()["detail"]["code"] == "MILESTONE_ALREADY_RELEASED"
+    assert len(repository.list_raw_documents("settlements")) == 1
+
+
+def test_auto_settlement_failure_leaves_manual_release_available(monkeypatch) -> None:
+    """자동 정산이 실패해도 evidence 검증은 통과하고 수동 경로가 살아 있어야 한다."""
+    client, repository = seeded_gateway_auto_settlement(monkeypatch)
+    agreement = accepted_agreement(client)
+    escrow = lock(client, agreement, "lk")["escrow"]
+
+    def exploding_release(*args, **kwargs):
+        raise RuntimeError("gateway unavailable")
+
+    monkeypatch.setattr("apps.api.routes._release_with_web3_gateway", exploding_release)
+    pass_evidence(client, agreement, "content")
+
+    assert repository.list_raw_documents("settlements") == []
+    assert "MILESTONE_AUTO_RELEASE_DEFERRED" in timeline_types(client)
+
+    monkeypatch.undo()
+    install_confirmed_gateway(monkeypatch)
+    manual = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={"Idempotency-Key": "manual-fallback"},
+    )
+    assert manual.status_code == 200, manual.text
+    assert manual.json()["data"]["escrow"]["status"] == "RELEASED"
 
 
 def test_release_is_idempotent_on_repeated_key(monkeypatch) -> None:

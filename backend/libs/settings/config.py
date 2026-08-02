@@ -59,6 +59,12 @@ class Settings(BaseModel):
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
     settlement_authority: str | None = None
+    # 역할 선택 시 유저 임베디드 지갑(플랫폼 커스터디)을 자동 생성한다.
+    # → 구글 로그인만으로 Solana 주소를 갖는다. Phantom 연결은 선택 사항이 된다.
+    user_wallet_provision: bool = False
+    # evidence 검증 통과 즉시 마일스톤 정산을 서버 서명으로 실행한다(사람 클릭 없음).
+    # 실패해도 수동 Phantom 릴리즈 경로가 fallback으로 남는다.
+    auto_settlement_on_evidence: bool = True
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -105,6 +111,10 @@ def get_settings(service_name: str | None = None) -> Settings:
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),
         settlement_authority=os.getenv("KNOT_SETTLEMENT_AUTHORITY"),
+        user_wallet_provision=_truthy(os.getenv("KNOT_USER_WALLET_PROVISION")),
+        auto_settlement_on_evidence=_truthy_default_true(
+            os.getenv("KNOT_AUTO_SETTLEMENT_ON_EVIDENCE")
+        ),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
     )
@@ -112,6 +122,13 @@ def get_settings(service_name: str | None = None) -> Settings:
 
 def _truthy(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
+def _truthy_default_true(value: str | None) -> bool:
+    """미설정이면 켜진 값. 끄려면 명시적으로 0/false/no/off 를 준다."""
+    if value is None or not value.strip():
+        return True
+    return value.lower() in {"1", "true", "yes", "on"}
 
 
 def _csv(value: str | None) -> list[str]:

@@ -70,6 +70,10 @@ export type FundingPrepareResult = {
   network: string;
   mint: string;
   programId: string;
+  /** 이 tx 의 네트워크 수수료를 실제로 내는 지갑. 릴레이어 대납 시 유저 지갑이 아니다. */
+  feePayer: string;
+  /** true 면 유저는 SOL 을 보유할 필요가 없다. */
+  gasSponsored: boolean;
   brandAuthority: string;
   creatorDestination: string;
   settlementAuthority: string;
@@ -134,6 +138,10 @@ export type MilestoneReleasePrepareResult = {
   network: string;
   mint: string;
   programId: string;
+  /** 이 tx 의 네트워크 수수료를 실제로 내는 지갑. 릴레이어 대납 시 유저 지갑이 아니다. */
+  feePayer: string;
+  /** true 면 유저는 SOL 을 보유할 필요가 없다. */
+  gasSponsored: boolean;
   creatorDestination: string;
   settlementAuthority: string;
   expectedAmountBaseUnits: string;
@@ -233,8 +241,7 @@ export async function prepareBrandFunding(
     })
   );
   const latest = await connection.getLatestBlockhash("confirmed");
-  transaction.feePayer = brandAuthority;
-  transaction.recentBlockhash = latest.blockhash;
+  const sponsor = sponsorFeePayer(config, transaction, brandAuthority, latest.blockhash);
   const fee = await transaction.getEstimatedFee(connection);
 
   return {
@@ -244,6 +251,8 @@ export async function prepareBrandFunding(
     network: input.network,
     mint: mint.toBase58(),
     programId: programId.toBase58(),
+    feePayer: sponsor.feePayer,
+    gasSponsored: sponsor.gasSponsored,
     brandAuthority: brandAuthority.toBase58(),
     creatorDestination: creatorDestination.toBase58(),
     settlementAuthority: settlementAuthority.toBase58(),
@@ -495,8 +504,7 @@ export async function prepareAgreementMilestoneRelease(
     index
   });
   const latest = await connection.getLatestBlockhash("confirmed");
-  transaction.feePayer = settlementAuthority;
-  transaction.recentBlockhash = latest.blockhash;
+  const sponsor = sponsorFeePayer(config, transaction, settlementAuthority, latest.blockhash);
   const fee = await transaction.getEstimatedFee(connection);
 
   return {
@@ -507,6 +515,8 @@ export async function prepareAgreementMilestoneRelease(
     network: input.network,
     mint: mint.toBase58(),
     programId: programId.toBase58(),
+    feePayer: sponsor.feePayer,
+    gasSponsored: sponsor.gasSponsored,
     creatorDestination: creatorDestination.toBase58(),
     settlementAuthority: settlementAuthority.toBase58(),
     expectedAmountBaseUnits: amount.toString(),
@@ -625,6 +635,32 @@ function validateAllowedConfig(
   if (input.programId !== config.allowedProgramId) {
     throw new Error("Requested escrow program is not allowlisted");
   }
+}
+
+/**
+ * 가스 대납. 릴레이어 키가 설정돼 있으면 feePayer 를 릴레이어로 바꾸고 미리 부분 서명한다.
+ * 유저 지갑은 instruction 서명자로만 남으므로 SOL 을 보유할 필요가 없다
+ * (Solana 는 feePayer 와 instruction 서명자의 분리를 프로토콜 차원에서 지원한다).
+ *
+ * 릴레이어가 설정돼 있지 않으면 기존 동작 그대로 유저가 feePayer 가 된다.
+ */
+function sponsorFeePayer(
+  config: GatewayConfig,
+  transaction: Transaction,
+  fallbackFeePayer: PublicKey,
+  recentBlockhash: string
+): { feePayer: string; gasSponsored: boolean } {
+  transaction.recentBlockhash = recentBlockhash;
+  if (!config.relayerKeypairJson && !config.relayerKeypairPath) {
+    transaction.feePayer = fallbackFeePayer;
+    return { feePayer: fallbackFeePayer.toBase58(), gasSponsored: false };
+  }
+  const relayer = loadKeypair(config.relayerKeypairJson, config.relayerKeypairPath, "relayer");
+  transaction.feePayer = relayer.publicKey;
+  // partialSign 은 유저 서명 자리를 비워둔 채 릴레이어 서명만 채운다. 이후 Phantom 이
+  // 자기 서명을 더해도 이 서명은 보존된다.
+  transaction.partialSign(relayer);
+  return { feePayer: relayer.publicKey.toBase58(), gasSponsored: true };
 }
 
 function loadKeypair(
