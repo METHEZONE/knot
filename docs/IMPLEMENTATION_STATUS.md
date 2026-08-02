@@ -52,6 +52,9 @@ Updated: 2026-08-02
 - Local memory API can load an explicit `KNOT_EXTRA_MEMORY_SEED_FILE` for dev-only
   recovery of confirmed on-chain escrow records after a process restart. This is
   opt-in and does not create a successful mock fallback.
+- Cloud Run demo deploy script now builds/deploys `knot-web3` and wires `knot-api`
+  to `KNOT_WEB3_MODE=gateway`, the web3 gateway URL, the canonical devnet escrow
+  program, devnet USDC mint, and the current demo settlement authority.
 
 ### Current Money Flow
 
@@ -89,6 +92,7 @@ Updated: 2026-08-02
 - `env PYTHONPATH=backend ./.venv/bin/pytest backend/tests/test_api_escrow.py`: 21 passed.
 - `cd frontend && npm run lint`: passed.
 - `cd frontend && npm run build`: passed.
+- `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
 - Local `POST /api/v1/agreements/agreement-bf47634b-9bbb-4a9d-99ee-b7a3d37b39a1/escrow/prepare`
   returned 200 with a prepared Phantom funding transaction after the gateway route fix.
 - Local funded escrow recovery verified:
