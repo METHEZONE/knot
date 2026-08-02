@@ -3402,6 +3402,20 @@ def _bootstrap_authenticated_user(
     path = FirestorePaths.user(auth_user.uid)
     now = _now()
     existing = repository.get_raw_document(path)
+    email_linked = _completed_user_by_email(repository, auth_user.email, exclude_uid=auth_user.uid)
+    if email_linked is not None and (existing is None or _is_incomplete_account(existing)):
+        user = _auth_bound_user_from_existing(email_linked, auth_user, now)
+        repository.save_raw_document(path, user)
+        _append_audit(
+            repository,
+            action="USER_EMAIL_LINKED",
+            data={
+                "uid": auth_user.uid,
+                "email": auth_user.email,
+                "sourceUserId": email_linked.get("userId") or email_linked.get("uid"),
+            },
+        )
+        return user
     if existing is None:
         user: dict[str, object] = {
             "uid": auth_user.uid,
@@ -3450,6 +3464,54 @@ def _bootstrap_authenticated_user(
     )
     repository.save_raw_document(path, user)
     return user
+
+
+def _completed_user_by_email(
+    repository: KnotRepository,
+    email: str | None,
+    *,
+    exclude_uid: str,
+) -> dict[str, object] | None:
+    if not email:
+        return None
+    normalized = email.strip().lower()
+    for user in repository.list_raw_documents(COLLECTIONS.users):
+        user_id = user.get("uid") or user.get("userId")
+        if user_id == exclude_uid:
+            continue
+        user_email = user.get("email")
+        if not isinstance(user_email, str) or user_email.strip().lower() != normalized:
+            continue
+        if user.get("onboardingStatus") != "COMPLETED" or user.get("role") not in {"BRAND", "CREATOR"}:
+            continue
+        return user
+    return None
+
+
+def _is_incomplete_account(user: dict[str, object]) -> bool:
+    return user.get("onboardingStatus") != "COMPLETED" or user.get("role") not in {"BRAND", "CREATOR"}
+
+
+def _auth_bound_user_from_existing(
+    source: dict[str, object],
+    auth_user: AuthenticatedUser,
+    now: str,
+) -> dict[str, object]:
+    source_user_id = source.get("userId") or source.get("uid")
+    return {
+        **source,
+        "uid": auth_user.uid,
+        "userId": auth_user.uid,
+        "email": auth_user.email or source.get("email"),
+        "displayName": auth_user.display_name
+        or source.get("displayName")
+        or _email_label(auth_user.email),
+        "photoUrl": auth_user.photo_url if auth_user.photo_url is not None else source.get("photoUrl"),
+        "linkedSourceUserId": source_user_id,
+        "schemaVersion": 2,
+        "updatedAt": now,
+        "lastLoginAt": now,
+    }
 
 
 def _require_role(

@@ -189,6 +189,51 @@ def test_wallet_save_rejects_non_base58_demo_value() -> None:
     assert response.status_code == 422
 
 
+def test_get_me_links_completed_seed_account_by_email_when_firebase_uid_differs() -> None:
+    client, repository = client_and_repository()
+    repository.save_raw_document(
+        FirestorePaths.user("user-brand-devnet"),
+        {
+            "uid": "user-brand-devnet",
+            "userId": "user-brand-devnet",
+            "email": "t1@knot.com",
+            "displayName": "KNOT Devnet Brand",
+            "role": "BRAND",
+            "onboardingStatus": "COMPLETED",
+            "brandId": "brand-devnet-phantom",
+            "agentId": "agent-brand-devnet-phantom",
+            "walletAddress": "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6",
+            "walletNetwork": "devnet",
+            "status": "ACTIVE",
+        },
+    )
+    repository.save_raw_document(
+        FirestorePaths.brand("brand-devnet-phantom"),
+        {
+            "brandId": "brand-devnet-phantom",
+            "displayName": "KNOT Devnet Brand",
+            "walletAddress": "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6",
+            "walletNetwork": "devnet",
+        },
+    )
+
+    response = client.get(
+        "/api/v1/me",
+        headers=auth_headers(uid="firebase-generated-uid", email="t1@knot.com"),
+    )
+
+    assert response.status_code == 200
+    account = response.json()["data"]["account"]
+    assert account["uid"] == "firebase-generated-uid"
+    assert account["role"] == "BRAND"
+    assert account["onboardingStatus"] == "COMPLETED"
+    assert account["brandId"] == "brand-devnet-phantom"
+    assert account["walletAddress"] == "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
+    linked = repository.get_raw_document(FirestorePaths.user("firebase-generated-uid"))
+    assert linked is not None
+    assert linked["linkedSourceUserId"] == "user-brand-devnet"
+
+
 def test_creator_profile_rejects_wrong_role() -> None:
     client, _ = client_and_repository()
     headers = auth_headers(uid="brand-owner", email="brand@example.com")

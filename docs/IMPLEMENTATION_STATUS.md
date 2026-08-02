@@ -25,6 +25,9 @@ Updated: 2026-08-02
   public keys, and restores the saved wallet from `/api/v1/me` on Agreement detail pages.
 - Creator onboarding no longer writes a fake settlement wallet. Existing invalid wallet
   values are hidden from current-user ViewModels and rejected before Web3 Gateway calls.
+- Firebase login now links a completed seeded account by verified email when Firebase UID
+  differs from the seeded user document, preventing `t1@knot.com` / `c1@knot.com` from
+  being treated as new signup-required users.
 
 ### Current Money Flow
 
@@ -54,8 +57,8 @@ Updated: 2026-08-02
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
-- `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 26 passed.
-- `./.venv/bin/pytest backend/tests -q`: 125 passed, 5 skipped.
+- `./.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_escrow.py -q`: 27 passed.
+- `./.venv/bin/pytest backend/tests -q`: 126 passed, 5 skipped.
 - `./.venv/bin/pytest backend/tests/test_api_a2a_http_integration.py::test_product_api_runs_real_http_a2a_counter_accept_golden_path -q` outside sandbox: passed.
 - Local current-branch stack health checked:
   - Product API `http://127.0.0.1:18090/readyz`: ready.
