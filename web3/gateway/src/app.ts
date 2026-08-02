@@ -1,11 +1,18 @@
 import express, { type Request, type Response } from "express";
 import { loadConfig, type GatewayConfig } from "./config.js";
 import { EscrowLockService } from "./escrow.js";
-import { confirmBrandFunding, prepareBrandFunding } from "./funding.js";
+import {
+  confirmAgreementMilestoneRelease,
+  confirmBrandFunding,
+  prepareAgreementMilestoneRelease,
+  prepareBrandFunding
+} from "./funding.js";
 
 const lockRoute = /^\/internal\/v1\/escrows:lock$/;
 const prepareFundingRoute = /^\/internal\/v1\/escrows:prepare-funding$/;
 const confirmFundingRoute = /^\/internal\/v1\/escrows:confirm-funding$/;
+const prepareReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):prepare-release$/;
+const confirmReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):confirm-release$/;
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 
 async function handleRelease(
@@ -87,6 +94,68 @@ export function createApp(
         detail: {
           code: "FUNDING_CONFIRM_FAILED",
           title: "Funding confirm failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  });
+
+  app.post(prepareReleaseRoute, async (request: Request, response: Response) => {
+    const match = prepareReleaseRoute.exec(request.path);
+    if (!match) {
+      response.status(404).json({ code: "NOT_FOUND", detail: "Route not found" });
+      return;
+    }
+    const [, escrowId, milestoneId] = match;
+    if (request.body?.escrowId !== escrowId || request.body?.milestoneId !== milestoneId) {
+      response.status(400).json({
+        detail: {
+          code: "VALIDATION_ERROR",
+          title: "Release prepare failed",
+          detail: "Route and body escrowId or milestoneId mismatch"
+        }
+      });
+      return;
+    }
+    try {
+      const result = await prepareAgreementMilestoneRelease(config, request.body);
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "RELEASE_PREPARE_FAILED",
+          title: "Release prepare failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  });
+
+  app.post(confirmReleaseRoute, async (request: Request, response: Response) => {
+    const match = confirmReleaseRoute.exec(request.path);
+    if (!match) {
+      response.status(404).json({ code: "NOT_FOUND", detail: "Route not found" });
+      return;
+    }
+    const [, escrowId, milestoneId] = match;
+    if (request.body?.escrowId !== escrowId || request.body?.milestoneId !== milestoneId) {
+      response.status(400).json({
+        detail: {
+          code: "VALIDATION_ERROR",
+          title: "Release confirm failed",
+          detail: "Route and body escrowId or milestoneId mismatch"
+        }
+      });
+      return;
+    }
+    try {
+      const result = await confirmAgreementMilestoneRelease(config, request.body);
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "RELEASE_CONFIRM_FAILED",
+          title: "Release confirm failed",
           detail: error instanceof Error ? error.message : String(error)
         }
       });

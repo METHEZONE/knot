@@ -38,6 +38,34 @@ class Web3GatewayClient:
             payload=payload,
         )
 
+    def prepare_milestone_release(
+        self,
+        *,
+        escrow_id: str,
+        milestone_id: str,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            f"/internal/v1/escrows/{escrow_id}/milestones/{milestone_id}:prepare-release",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+
+    def confirm_milestone_release(
+        self,
+        *,
+        escrow_id: str,
+        milestone_id: str,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._post(
+            f"/internal/v1/escrows/{escrow_id}/milestones/{milestone_id}:confirm-release",
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+
     def prepare_funding(
         self,
         *,

@@ -589,12 +589,34 @@ function EvidenceForm({
         throw new Error("연결된 Phantom 지갑과 이 escrow의 Creator 수령 지갑이 다릅니다.");
       }
       onSettlementState("verifying");
-      const evidence = await client.submitEvidence(agreement, milestoneId, url);
-      const verified = await client.verifyEvidence(evidence.evidenceId);
-      setLastEvidence(verified);
-      if (verified.status === "PASSED") {
+      let canRelease = false;
+      try {
+        const evidence = await client.submitEvidence(agreement, milestoneId, url);
+        const verified = await client.verifyEvidence(evidence.evidenceId);
+        setLastEvidence(verified);
+        canRelease = verified.status === "PASSED";
+      } catch (caught) {
+        if (caught instanceof ProductApiError && caught.code === "EVIDENCE_ALREADY_SUBMITTED") {
+          canRelease = true;
+        } else {
+          throw caught;
+        }
+      }
+      if (canRelease) {
         onSettlementState("releasing");
-        const released = await client.releaseMilestone(escrow.escrowId, milestoneId);
+        const prepareKey = `frontend-release-prepare-${escrow.escrowId}-${milestoneId}-${connectedWallet}`;
+        const prepared = await client.prepareMilestoneRelease(escrow.escrowId, milestoneId, prepareKey);
+        if (prepared.release.settlementAuthority !== connectedWallet) {
+          throw new Error("연결된 Phantom 지갑과 이 escrow의 정산 승인 지갑이 다릅니다.");
+        }
+        const signature = await sendPreparedSolanaTransaction(prepared.release);
+        const released = await client.confirmMilestoneRelease(
+          escrow.escrowId,
+          milestoneId,
+          signature,
+          prepared.release.creatorTokenAccount,
+          `frontend-release-confirm-${escrow.escrowId}-${milestoneId}-${signature}`,
+        );
         setLastSettlementSignature(released.receipt.signature ?? released.settlement.signature ?? null);
       }
       await onRefresh();

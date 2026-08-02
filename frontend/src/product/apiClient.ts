@@ -481,6 +481,26 @@ export type EscrowFundingPrepare = {
   lastValidBlockHeight: number;
 };
 
+export type EscrowReleasePrepare = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  milestoneId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  expectedAmountBaseUnits: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  creatorTokenAccount: string;
+  estimatedNetworkFeeLamports: string;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
+};
+
 export type ApiDevAdminOverview = {
   enabled: boolean;
   actorUid: string;
@@ -985,6 +1005,33 @@ export class ProductApiClient {
       {
         method: "POST",
         headers: { "Idempotency-Key": `frontend-release-${escrowId}-${milestoneId}` },
+      },
+    );
+  }
+
+  async prepareMilestoneRelease(escrowId: string, milestoneId: string, idempotencyKey: string) {
+    return this.request<{ escrow: ApiEscrow; release: EscrowReleasePrepare }>(
+      `/api/v1/escrows/${escrowId}/milestones/${milestoneId}/release/prepare`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
+  }
+
+  async confirmMilestoneRelease(
+    escrowId: string,
+    milestoneId: string,
+    transactionSignature: string,
+    creatorTokenAccount: string,
+    idempotencyKey: string,
+  ) {
+    return this.request<{ settlement: ApiSettlement; escrow: ApiEscrow; receipt: ApiReceipt }>(
+      `/api/v1/escrows/${escrowId}/milestones/${milestoneId}/release/confirm`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ transactionSignature, creatorTokenAccount }),
       },
     );
   }

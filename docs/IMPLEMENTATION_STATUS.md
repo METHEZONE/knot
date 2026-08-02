@@ -45,6 +45,13 @@ Updated: 2026-08-02
   `/escrows:prepare-funding` from being captured by the legacy `/escrows:lock` handler.
 - Root landing page was restored to the existing `/knot/index.html` iframe landing
   instead of the temporary React `LandingScreen`.
+- Milestone release now has a Phantom-signed prepare/confirm path:
+  `/milestones/{milestoneId}/release/prepare` returns an unsigned Solana devnet
+  release transaction, and `/release/confirm` validates the confirmed signature,
+  settlement signer, vault delta, and Creator USDC ATA delta before writing settlement state.
+- Local memory API can load an explicit `KNOT_EXTRA_MEMORY_SEED_FILE` for dev-only
+  recovery of confirmed on-chain escrow records after a process restart. This is
+  opt-in and does not create a successful mock fallback.
 
 ### Current Money Flow
 
@@ -77,8 +84,23 @@ Updated: 2026-08-02
 - `npm --prefix web3/gateway run build`: passed.
 - `npm --prefix web3/gateway run lint`: passed.
 - `npm --prefix web3/gateway test`: passed.
+- `cd web3/gateway && npm test`: passed outside sandbox after local listen was blocked inside sandbox.
+- `cd web3/gateway && npm run build`: passed after Phantom-signed release prepare/confirm changes.
+- `env PYTHONPATH=backend ./.venv/bin/pytest backend/tests/test_api_escrow.py`: 21 passed.
+- `cd frontend && npm run lint`: passed.
+- `cd frontend && npm run build`: passed.
 - Local `POST /api/v1/agreements/agreement-bf47634b-9bbb-4a9d-99ee-b7a3d37b39a1/escrow/prepare`
   returned 200 with a prepared Phantom funding transaction after the gateway route fix.
+- Local funded escrow recovery verified:
+  - Escrow: `esc9vRLZ1xgG2x2Asr6RSytXFpmuGhZN6TL`
+  - Funding tx: `5fAGfp1pY1NPNaxSJLUHWj5bP6TgFxXTKa1FZq12CSaC4hZBzgfJygLDHvnCV9uLXryANXxLcvo4395t12DLTApR`
+  - Vault: `7Dk2VUaaxxLvBeo1ZQMvbMEyeuoqdeuPbpunwpsDMfet`
+  - Release prepare returned `PREPARED` for settlement authority
+    `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`.
+- Creator Phantom fee funding:
+  - `0.02 SOL` sent to `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`
+  - Funding tx: `4WmqxoC1bEHxSoRA9r1S9x81eZ2yrNULJYjR5nJAzkQozsX8pUgv4Dnm1rNqB5DNM272czZW56Ny364UDXqoLzMb`
+  - Creator SOL balance verified: `0.02 SOL`.
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
@@ -98,6 +120,9 @@ Updated: 2026-08-02
 
 ### Not Yet Verified On Devnet
 
-- Full Phantom-signed funding and milestone release smoke still needs to be rerun
-  after the canonical program deployment.
-- Release smoke still requires funded settlement signer SOL and Brand Phantom devnet USDC/SOL.
+- Browser-side creator Phantom signature for the prepared milestone release transaction
+  still needs to be clicked in the local UI. The backend/gateway prepare path is ready,
+  and the creator fee payer now has SOL.
+- Future production/devnet agreements should use a dedicated backend settlement signer
+  as `settlementAuthority`; the recovered local escrow keeps the already-initialized
+  creator wallet as settlement authority because that value is immutable on-chain.

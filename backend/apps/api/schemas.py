@@ -324,6 +324,11 @@ class EvidenceVerificationRequest(DomainModel):
     observations: EvidenceObservations | None = None
 
 
+class MilestoneReleaseConfirmRequest(DomainModel):
+    transaction_signature: str = Field(alias="transactionSignature")
+    creator_token_account: str = Field(alias="creatorTokenAccount")
+
+
 class ProductAnalysisRequest(DomainModel):
     source_url: str = Field(alias="sourceUrl")
 

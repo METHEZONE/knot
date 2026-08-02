@@ -26,6 +26,7 @@ from apps.api.schemas import (
     EvidenceObservations,
     EvidenceSubmissionRequest,
     EvidenceVerificationRequest,
+    MilestoneReleaseConfirmRequest,
     OnboardingPatchRequest,
     ProductAnalysisRequest,
     PromotionCreateRequest,
@@ -2960,6 +2961,131 @@ def build_api_router(
             raise _not_found("escrow", escrow_id)
         return _ok({"escrow": escrow})
 
+    @router.post("/escrows/{escrow_id}/milestones/{milestone_id}/release/prepare")
+    def prepare_milestone_release(
+        escrow_id: str,
+        milestone_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        escrow, agreement_id, amount = _require_releasable_milestone(
+            repository=repository,
+            settings=settings,
+            token_verifier=token_verifier,
+            authorization=authorization,
+            escrow_id=escrow_id,
+            milestone_id=milestone_id,
+        )
+        payload = _milestone_release_gateway_payload(
+            settings=settings,
+            escrow=escrow,
+            agreement_id=agreement_id,
+            milestone_id=milestone_id,
+            amount=amount,
+        )
+        _claim_idempotency(
+            repository,
+            key,
+            payload=payload,
+            owner_path=f"prepare-release:{escrow_id}:{milestone_id}",
+        )
+        if settings.web3_mode != "gateway":
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "WEB3_GATEWAY_REQUIRED",
+                "Milestone release prepare requires the restricted Web3 Gateway.",
+            )
+        try:
+            prepared = Web3GatewayClient(settings.web3_gateway_base_url).prepare_milestone_release(
+                escrow_id=escrow_id,
+                milestone_id=milestone_id,
+                idempotency_key=key,
+                payload=payload,
+            )
+        except Web3GatewayError as exc:
+            raise _problem(
+                _web3_gateway_http_status(exc),
+                _web3_gateway_error_code(exc, "RELEASE_PREPARE_FAILED"),
+                f"Web3 gateway release prepare failed: {exc}",
+            ) from exc
+        return _ok({"escrow": escrow, "release": prepared})
+
+    @router.post("/escrows/{escrow_id}/milestones/{milestone_id}/release/confirm")
+    def confirm_milestone_release(
+        escrow_id: str,
+        milestone_id: str,
+        payload: MilestoneReleaseConfirmRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        escrow, agreement_id, amount = _require_releasable_milestone(
+            repository=repository,
+            settings=settings,
+            token_verifier=token_verifier,
+            authorization=authorization,
+            escrow_id=escrow_id,
+            milestone_id=milestone_id,
+        )
+        gateway_payload = {
+            **_milestone_release_gateway_payload(
+                settings=settings,
+                escrow=escrow,
+                agreement_id=agreement_id,
+                milestone_id=milestone_id,
+                amount=amount,
+            ),
+            "transactionSignature": payload.transaction_signature,
+            "creatorTokenAccount": payload.creator_token_account,
+        }
+        _claim_idempotency(
+            repository,
+            key,
+            payload=gateway_payload,
+            owner_path=f"confirm-release:{escrow_id}:{milestone_id}",
+        )
+        try:
+            confirmed = Web3GatewayClient(settings.web3_gateway_base_url).confirm_milestone_release(
+                escrow_id=escrow_id,
+                milestone_id=milestone_id,
+                idempotency_key=key,
+                payload=gateway_payload,
+            )
+        except Web3GatewayError as exc:
+            raise _problem(
+                _web3_gateway_http_status(exc),
+                _web3_gateway_error_code(exc, "RELEASE_CONFIRM_FAILED"),
+                f"Web3 gateway release confirm failed: {exc}",
+            ) from exc
+        gateway_receipt = _require_confirmed_gateway_receipt(
+            {
+                **confirmed,
+                "termsHash": escrow["termsHash"],
+                "releasedAmountBaseUnits": str(amount),
+            },
+            expected={
+                "agreementId": agreement_id,
+                "escrowId": escrow_id,
+                "milestoneId": milestone_id,
+                "termsHash": escrow["termsHash"],
+                "releasedAmountBaseUnits": str(amount),
+                "mint": settings.usdc_mint,
+                "programId": settings.escrow_program_id,
+                "network": settings.escrow_network,
+            },
+        )
+        return _record_confirmed_milestone_release(
+            repository=repository,
+            settings=settings,
+            escrow=escrow,
+            agreement_id=agreement_id,
+            milestone_id=milestone_id,
+            amount=amount,
+            idempotency_key=key,
+            gateway_receipt=gateway_receipt,
+        )
+
     @router.post("/escrows/{escrow_id}/milestones/{milestone_id}:release")
     def release_milestone(
         escrow_id: str,
@@ -5755,6 +5881,206 @@ def _release_with_web3_gateway(
             "WEB3_GATEWAY_UNAVAILABLE",
             f"Web3 gateway release failed: {exc}",
         ) from exc
+
+
+def _require_releasable_milestone(
+    *,
+    repository: KnotRepository,
+    settings: Settings,
+    token_verifier: FirebaseTokenVerifier,
+    authorization: str | None,
+    escrow_id: str,
+    milestone_id: str,
+) -> tuple[dict[str, object], str, int]:
+    escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+    if escrow is None:
+        raise _not_found("escrow", escrow_id)
+    agreement_id = _require_document_str(escrow, "agreementId")
+    if authorization:
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "CREATOR")
+        _require_creator_agreement_document(repository, user, agreement_id)
+        _require_creator_wallet_matches_escrow(repository, user, escrow)
+    if _find_settlement(repository, escrow_id, milestone_id) is not None:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "MILESTONE_ALREADY_RELEASED",
+            f"Milestone {milestone_id} was already released.",
+        )
+    if escrow.get("status") not in {"LOCKED", "FUNDED", "PARTIALLY_RELEASED"}:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "INVALID_STATE_TRANSITION",
+            "Escrow is not in a releasable state.",
+        )
+    promotion = _get_promotion(repository, _require_document_str(escrow, "promotionId"))
+    if not promotion.autonomy.auto_release:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "POLICY_VIOLATION",
+            "Auto-release is disabled for this Promotion; human approval is required.",
+        )
+    if _passed_evidence_for_milestone(repository, agreement_id, milestone_id) is None:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "POLICY_VIOLATION",
+            "Milestone evidence has not passed verification.",
+        )
+    locked = int(str(escrow["lockedAmountBaseUnits"]))
+    milestone_amounts = escrow.get("milestoneAmounts")
+    if not isinstance(milestone_amounts, dict) or milestone_id not in milestone_amounts:
+        raise _not_found("milestone", milestone_id)
+    amount = int(str(milestone_amounts[milestone_id]))
+    released = int(str(escrow.get("releasedAmountBaseUnits", "0")))
+    if released + amount > locked:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "POLICY_VIOLATION",
+            "Release amount exceeds the locked balance.",
+        )
+    return escrow, agreement_id, amount
+
+
+def _milestone_release_gateway_payload(
+    *,
+    settings: Settings,
+    escrow: dict[str, object],
+    agreement_id: str,
+    milestone_id: str,
+    amount: int,
+) -> dict[str, object]:
+    milestone_amounts = escrow.get("milestoneAmounts")
+    if not isinstance(milestone_amounts, dict):
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "ESCROW_MILESTONES_MISSING",
+            "Escrow milestone amounts are missing.",
+        )
+    milestone_ids = [str(key) for key in milestone_amounts.keys()]
+    milestone_amount_values = [str(milestone_amounts[key]) for key in milestone_amounts.keys()]
+    return {
+        "agreementId": agreement_id,
+        "escrowId": escrow["escrowId"],
+        "milestoneId": milestone_id,
+        "expectedAmountBaseUnits": str(amount),
+        "mint": settings.usdc_mint,
+        "programId": settings.escrow_program_id,
+        "network": settings.escrow_network,
+        "creatorDestination": escrow["creatorDestination"],
+        "settlementAuthority": escrow["settlementAuthority"],
+        "escrowPda": escrow["escrowPda"],
+        "vaultTokenAccount": escrow["vaultTokenAccount"],
+        "milestoneIds": milestone_ids,
+        "milestoneAmountsBaseUnits": milestone_amount_values,
+    }
+
+
+def _record_confirmed_milestone_release(
+    *,
+    repository: KnotRepository,
+    settings: Settings,
+    escrow: dict[str, object],
+    agreement_id: str,
+    milestone_id: str,
+    amount: int,
+    idempotency_key: str,
+    gateway_receipt: dict[str, object],
+) -> dict[str, object]:
+    milestone = _get_milestone_document(repository, agreement_id, milestone_id)
+    passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
+    if passed_evidence is None:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "POLICY_VIOLATION",
+            "Milestone evidence has not passed verification.",
+        )
+    now = _now()
+    settlement_id = f"settlement-{uuid4()}"
+    receipt_id = f"receipt-{uuid4()}"
+    operation_id = f"op-{uuid4()}"
+    locked = int(str(escrow["lockedAmountBaseUnits"]))
+    released = int(str(escrow.get("releasedAmountBaseUnits", "0")))
+    new_released = released + amount
+    settlement = {
+        "settlementId": settlement_id,
+        "escrowId": escrow["escrowId"],
+        "agreementId": agreement_id,
+        "milestoneId": milestone_id,
+        "amountBaseUnits": str(amount),
+        "network": settings.escrow_network,
+        "status": gateway_receipt["status"],
+        "signature": gateway_receipt["signature"],
+        "evidenceId": passed_evidence["evidenceId"],
+        "sourceDigest": passed_evidence.get("sourceDigest"),
+        "receiptId": receipt_id,
+        "paymentOperationId": operation_id,
+        "idempotencyKey": idempotency_key,
+        "createdAt": now,
+    }
+    updated_escrow = {
+        **escrow,
+        "releasedAmountBaseUnits": str(new_released),
+        "releasedAmountUsdc": _base_units_to_usdc_string(new_released),
+        "status": "RELEASED" if new_released >= locked else "PARTIALLY_RELEASED",
+        "updatedAt": now,
+    }
+    updated_milestone = {
+        **milestone,
+        "status": "RELEASED",
+        "releasedAmountBaseUnits": str(amount),
+        "settlementId": settlement_id,
+        "evidenceId": passed_evidence["evidenceId"],
+        "sourceDigest": passed_evidence.get("sourceDigest"),
+        "releaseReceiptId": receipt_id,
+        "releasedAt": now,
+        "updatedAt": now,
+    }
+    repository.save_raw_document(FirestorePaths.settlement(settlement_id), settlement)
+    repository.save_raw_document(FirestorePaths.escrow(_require_document_str(escrow, "escrowId")), updated_escrow)
+    repository.save_raw_document(FirestorePaths.milestone(agreement_id, milestone_id), updated_milestone)
+    receipt = _record_operation(
+        repository,
+        operation_type="MILESTONE_RELEASE",
+        operation_id=operation_id,
+        receipt_id=receipt_id,
+        escrow_id=_require_document_str(escrow, "escrowId"),
+        agreement_id=agreement_id,
+        idempotency_key=idempotency_key,
+        now=now,
+        network=settings.escrow_network,
+        extra={"settlementId": settlement_id, "milestoneId": milestone_id},
+        receipt=receipt_from_gateway(
+            receipt_id=receipt_id,
+            operation_id=operation_id,
+            gateway_receipt=gateway_receipt,
+            created_at=now,
+        ),
+    )
+    _append_promotion_event(
+        repository,
+        promotion_id=str(escrow["promotionId"]),
+        event_type="MILESTONE_RELEASED",
+        data={
+            "escrowId": escrow["escrowId"],
+            "milestoneId": milestone_id,
+            "amountBaseUnits": str(amount),
+            "settlementId": settlement_id,
+            "evidenceId": passed_evidence["evidenceId"],
+            "sourceDigest": passed_evidence.get("sourceDigest"),
+            "receiptStatus": receipt["status"],
+        },
+    )
+    _append_audit(
+        repository,
+        action="MILESTONE_RELEASE",
+        data={
+            "escrowId": escrow["escrowId"],
+            "milestoneId": milestone_id,
+            "settlementId": settlement_id,
+            "operationId": operation_id,
+        },
+    )
+    return _ok({"settlement": settlement, "escrow": updated_escrow, "receipt": receipt})
 
 
 def _require_confirmed_gateway_receipt(

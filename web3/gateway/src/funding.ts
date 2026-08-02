@@ -42,6 +42,27 @@ const fundingConfirmRequestSchema = fundingPrepareRequestSchema.extend({
   brandTokenAccount: z.string().min(1)
 });
 
+const milestoneReleasePrepareRequestSchema = z.object({
+  agreementId: z.string().min(1),
+  escrowId: z.string().min(1),
+  milestoneId: z.string().min(1),
+  expectedAmountBaseUnits: z.string().regex(/^\d+$/),
+  mint: z.string().min(1),
+  programId: z.string().min(1),
+  network: z.string().min(1),
+  creatorDestination: z.string().min(1),
+  settlementAuthority: z.string().min(1),
+  escrowPda: z.string().min(1),
+  vaultTokenAccount: z.string().min(1),
+  milestoneIds: z.array(z.string().min(1)).min(1),
+  milestoneAmountsBaseUnits: z.array(z.string().regex(/^\d+$/)).min(1)
+});
+
+const milestoneReleaseConfirmRequestSchema = milestoneReleasePrepareRequestSchema.extend({
+  transactionSignature: z.string().min(1),
+  creatorTokenAccount: z.string().min(1)
+});
+
 export type FundingPrepareResult = {
   status: "PREPARED";
   agreementId: string;
@@ -103,6 +124,47 @@ export type AgreementReleaseReceipt = {
   signature: string;
   explorerUrl: string;
   slot: null;
+};
+
+export type MilestoneReleasePrepareResult = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  milestoneId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  expectedAmountBaseUnits: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  creatorTokenAccount: string;
+  estimatedNetworkFeeLamports: string;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
+};
+
+export type MilestoneReleaseConfirmResult = {
+  status: "CONFIRMED";
+  agreementId: string;
+  escrowId: string;
+  milestoneId: string;
+  network: string;
+  mint: string;
+  programId: string;
+  creatorDestination: string;
+  settlementAuthority: string;
+  expectedAmountBaseUnits: string;
+  escrowPda: string;
+  vaultTokenAccount: string;
+  creatorTokenAccount: string;
+  signature: string;
+  explorerUrl: string;
+  vaultDeltaBaseUnits: string;
+  creatorDeltaBaseUnits: string;
+  slot: number;
 };
 
 type FundingPrepareRequest = z.infer<typeof fundingPrepareRequestSchema>;
@@ -387,6 +449,172 @@ export async function submitAgreementMilestoneRelease(
   };
 }
 
+export async function prepareAgreementMilestoneRelease(
+  config: GatewayConfig,
+  body: unknown
+): Promise<MilestoneReleasePrepareResult> {
+  const input = milestoneReleasePrepareRequestSchema.parse(body);
+  validateAllowedConfig(config, input);
+  const amount = parseBaseUnits(input.expectedAmountBaseUnits);
+  const index = releaseMilestoneIndex(input);
+
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const programId = new PublicKey(input.programId);
+  const mint = new PublicKey(input.mint);
+  const settlementAuthority = new PublicKey(input.settlementAuthority);
+  const escrowPda = new PublicKey(input.escrowPda);
+  const vaultTokenAccount = new PublicKey(input.vaultTokenAccount);
+  const creatorDestination = new PublicKey(input.creatorDestination);
+  const creatorTokenAccount = getAssociatedTokenAddressSync(
+    mint,
+    creatorDestination,
+    false
+  );
+
+  const vaultToken = await getAccount(
+    connection,
+    vaultTokenAccount,
+    "confirmed",
+    TOKEN_PROGRAM_ID
+  );
+  if (!vaultToken.owner.equals(escrowPda) || !vaultToken.mint.equals(mint)) {
+    throw new Error("Vault token account owner or mint failed validation");
+  }
+  if (vaultToken.amount < amount) {
+    throw new Error("Vault balance is below the milestone release amount");
+  }
+
+  const transaction = releaseMilestoneTransaction({
+    programId,
+    settlementAuthority,
+    mint,
+    escrowPda,
+    vaultTokenAccount,
+    creatorDestination,
+    creatorTokenAccount,
+    index
+  });
+  const latest = await connection.getLatestBlockhash("confirmed");
+  transaction.feePayer = settlementAuthority;
+  transaction.recentBlockhash = latest.blockhash;
+  const fee = await transaction.getEstimatedFee(connection);
+
+  return {
+    status: "PREPARED",
+    agreementId: input.agreementId,
+    escrowId: input.escrowId,
+    milestoneId: input.milestoneId,
+    network: input.network,
+    mint: mint.toBase58(),
+    programId: programId.toBase58(),
+    creatorDestination: creatorDestination.toBase58(),
+    settlementAuthority: settlementAuthority.toBase58(),
+    expectedAmountBaseUnits: amount.toString(),
+    escrowPda: escrowPda.toBase58(),
+    vaultTokenAccount: vaultTokenAccount.toBase58(),
+    creatorTokenAccount: creatorTokenAccount.toBase58(),
+    estimatedNetworkFeeLamports: String(fee ?? 5000),
+    transactionBase64: transaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false
+    }).toString("base64"),
+    recentBlockhash: latest.blockhash,
+    lastValidBlockHeight: latest.lastValidBlockHeight
+  };
+}
+
+export async function confirmAgreementMilestoneRelease(
+  config: GatewayConfig,
+  body: unknown
+): Promise<MilestoneReleaseConfirmResult> {
+  const input = milestoneReleaseConfirmRequestSchema.parse(body);
+  validateAllowedConfig(config, input);
+  const amount = parseBaseUnits(input.expectedAmountBaseUnits);
+  releaseMilestoneIndex(input);
+
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const programId = new PublicKey(input.programId);
+  const mint = new PublicKey(input.mint);
+  const settlementAuthority = new PublicKey(input.settlementAuthority);
+  const escrowPda = new PublicKey(input.escrowPda);
+  const vaultTokenAccount = new PublicKey(input.vaultTokenAccount);
+  const creatorDestination = new PublicKey(input.creatorDestination);
+  const creatorTokenAccount = new PublicKey(input.creatorTokenAccount);
+  const expectedCreatorToken = getAssociatedTokenAddressSync(mint, creatorDestination, false);
+  if (!creatorTokenAccount.equals(expectedCreatorToken)) {
+    throw new Error("Creator token account does not match Creator destination");
+  }
+
+  const tx = await connection.getParsedTransaction(input.transactionSignature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0
+  });
+  if (!tx || tx.meta?.err) {
+    throw new Error("Release transaction is not confirmed successfully");
+  }
+  const signedAccountKeys = tx.transaction.message.accountKeys
+    .filter((entry) => entry.signer)
+    .map((entry) => entry.pubkey.toBase58());
+  if (!signedAccountKeys.includes(settlementAuthority.toBase58())) {
+    throw new Error("Release transaction was not signed by the settlement authority");
+  }
+  const programAccountKeys = tx.transaction.message.accountKeys.map((entry) =>
+    entry.pubkey.toBase58()
+  );
+  if (!programAccountKeys.includes(programId.toBase58())) {
+    throw new Error("Release transaction does not invoke the configured escrow program");
+  }
+
+  const vaultToken = await getAccount(
+    connection,
+    vaultTokenAccount,
+    "confirmed",
+    TOKEN_PROGRAM_ID
+  );
+  const creatorToken = await getAccount(
+    connection,
+    creatorTokenAccount,
+    "confirmed",
+    TOKEN_PROGRAM_ID
+  );
+  if (!vaultToken.owner.equals(escrowPda) || !vaultToken.mint.equals(mint)) {
+    throw new Error("Vault token account owner or mint failed validation");
+  }
+  if (!creatorToken.owner.equals(creatorDestination) || !creatorToken.mint.equals(mint)) {
+    throw new Error("Creator token account owner or mint failed validation");
+  }
+
+  const vaultDelta = tokenDelta(tx, vaultTokenAccount, mint);
+  const creatorDelta = tokenDelta(tx, creatorTokenAccount, mint);
+  if (vaultDelta !== -amount) {
+    throw new Error("Vault token balance delta does not match milestone amount");
+  }
+  if (creatorDelta !== amount) {
+    throw new Error("Creator token balance delta does not match milestone amount");
+  }
+
+  return {
+    status: "CONFIRMED",
+    agreementId: input.agreementId,
+    escrowId: input.escrowId,
+    milestoneId: input.milestoneId,
+    network: input.network,
+    mint: mint.toBase58(),
+    programId: programId.toBase58(),
+    creatorDestination: creatorDestination.toBase58(),
+    settlementAuthority: settlementAuthority.toBase58(),
+    expectedAmountBaseUnits: amount.toString(),
+    escrowPda: escrowPda.toBase58(),
+    vaultTokenAccount: vaultTokenAccount.toBase58(),
+    creatorTokenAccount: creatorTokenAccount.toBase58(),
+    signature: input.transactionSignature,
+    explorerUrl: `https://explorer.solana.com/tx/${input.transactionSignature}?cluster=${config.solanaCluster}`,
+    vaultDeltaBaseUnits: vaultDelta.toString(),
+    creatorDeltaBaseUnits: creatorDelta.toString(),
+    slot: tx.slot
+  };
+}
+
 function validateAllowedConfig(
   config: GatewayConfig,
   input: Pick<FundingPrepareRequest, "mint" | "programId">
@@ -483,6 +711,62 @@ function fundEscrowIx(input: {
     ],
     data: Buffer.concat([disc("fund_escrow"), u64(input.totalAmount)])
   });
+}
+
+function releaseMilestoneTransaction(input: {
+  programId: PublicKey;
+  settlementAuthority: PublicKey;
+  mint: PublicKey;
+  escrowPda: PublicKey;
+  vaultTokenAccount: PublicKey;
+  creatorDestination: PublicKey;
+  creatorTokenAccount: PublicKey;
+  index: number;
+}): Transaction {
+  return new Transaction().add(
+    new TransactionInstruction({
+      programId: input.programId,
+      keys: [
+        { pubkey: input.settlementAuthority, isSigner: true, isWritable: false },
+        { pubkey: input.escrowPda, isSigner: false, isWritable: true }
+      ],
+      data: Buffer.concat([disc("verify_milestone"), Buffer.from([input.index])])
+    }),
+    new TransactionInstruction({
+      programId: input.programId,
+      keys: [
+        { pubkey: input.settlementAuthority, isSigner: true, isWritable: true },
+        { pubkey: input.mint, isSigner: false, isWritable: false },
+        { pubkey: input.escrowPda, isSigner: false, isWritable: true },
+        { pubkey: input.vaultTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: input.creatorDestination, isSigner: false, isWritable: false },
+        { pubkey: input.creatorTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
+      ],
+      data: Buffer.concat([disc("release_milestone"), Buffer.from([input.index])])
+    })
+  );
+}
+
+function releaseMilestoneIndex(input: {
+  milestoneId: string;
+  expectedAmountBaseUnits: string;
+  milestoneIds: string[];
+  milestoneAmountsBaseUnits: string[];
+}): number {
+  if (input.milestoneIds.length !== input.milestoneAmountsBaseUnits.length) {
+    throw new Error("milestoneIds and milestoneAmountsBaseUnits length mismatch");
+  }
+  const index = input.milestoneIds.indexOf(input.milestoneId);
+  if (index < 0) {
+    throw new Error(`Unknown milestoneId for live escrow: ${input.milestoneId}`);
+  }
+  if (input.milestoneAmountsBaseUnits[index] !== input.expectedAmountBaseUnits) {
+    throw new Error("Release amount does not match milestone amount");
+  }
+  return index;
 }
 
 function pda(seeds: Array<string | Buffer>, programId: PublicKey): PublicKey {
