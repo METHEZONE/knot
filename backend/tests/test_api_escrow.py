@@ -266,7 +266,9 @@ def test_prepare_funding_uses_brand_and_creator_phantom_wallets(monkeypatch) -> 
     assert data["funding"]["status"] == "PREPARED"
     assert gateway.prepare_payload["brandAuthority"] == BRAND_WALLET
     assert gateway.prepare_payload["creatorDestination"] == CREATOR_WALLET
-    stored_agreement = repository.get_raw_document(FirestorePaths.agreement(agreement["agreementId"]))
+    stored_agreement = repository.get_raw_document(
+        FirestorePaths.agreement(agreement["agreementId"])
+    )
     assert stored_agreement is not None
     assert stored_agreement["status"] == "FUNDING_REQUIRED"
 
@@ -301,7 +303,9 @@ def test_confirm_funding_marks_escrow_funded_only_after_gateway_validation(monke
     assert data["escrow"]["fundingTransactionSignature"] == "funding-signature"
     assert data["receipt"]["status"] == "CONFIRMED"
     assert gateway.confirm_payload["transactionSignature"] == "funding-signature"
-    stored_agreement = repository.get_raw_document(FirestorePaths.agreement(agreement["agreementId"]))
+    stored_agreement = repository.get_raw_document(
+        FirestorePaths.agreement(agreement["agreementId"])
+    )
     assert stored_agreement is not None
     assert stored_agreement["status"] == "FUNDED"
 
@@ -450,6 +454,64 @@ def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch)
     receipt_id = data["receipt"]["receiptId"]
     assert client.get(f"/api/v1/transaction-receipts/{receipt_id}").status_code == 200
     assert "MILESTONE_RELEASED" in timeline_types(client)
+
+
+def test_authenticated_creator_release_requires_connected_wallet_match(
+    monkeypatch,
+) -> None:
+    install_funding_gateway(monkeypatch)
+    client, repository = seeded(
+        Settings(
+            auth_mode="emulator",
+            firebase_project_id="knot-dev-503505",
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+            settlement_authority=SETTLEMENT_AUTHORITY,
+        )
+    )
+    agreement = brand_owned_agreement_with_wallets(client, repository)
+    prepare = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/escrow/prepare",
+        headers={**auth_headers(), "Idempotency-Key": "prepare-release-wallet-check"},
+    )
+    assert prepare.status_code == 200
+    confirm = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/escrow/confirm",
+        headers={**auth_headers(), "Idempotency-Key": "confirm-release-wallet-check"},
+        json={"transactionSignature": "funding-signature"},
+    )
+    assert confirm.status_code == 200
+    escrow = confirm.json()["data"]["escrow"]
+    pass_evidence(client, agreement, "content")
+    creator_headers = auth_headers(uid="user-creator-001", email="creator@example.com")
+    repository.save_raw_document(
+        FirestorePaths.user("user-creator-001"),
+        {
+            "uid": "user-creator-001",
+            "userId": "user-creator-001",
+            "email": "creator@example.com",
+            "displayName": "Creator owner",
+            "role": "CREATOR",
+            "onboardingStatus": "COMPLETED",
+            "creatorId": "creator-001",
+            "agentId": "creator-agent-001",
+            "status": "ACTIVE",
+        },
+    )
+    wallet = client.post(
+        "/api/v1/me/wallet",
+        headers=creator_headers,
+        json={"walletAddress": BRAND_WALLET, "network": "devnet"},
+    )
+    assert wallet.status_code == 200
+
+    release = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
+        headers={**creator_headers, "Idempotency-Key": "release-wallet-mismatch"},
+    )
+
+    assert release.status_code == 409
+    assert release.json()["detail"]["code"] == "CREATOR_WALLET_MISMATCH"
 
 
 def test_release_blocked_without_passing_evidence(monkeypatch) -> None:

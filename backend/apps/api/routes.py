@@ -21,9 +21,9 @@ from apps.api.schemas import (
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
     CurrentWalletRequest,
+    EscrowFundingConfirmRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
-    EscrowFundingConfirmRequest,
     EvidenceVerificationRequest,
     OnboardingPatchRequest,
     ProductAnalysisRequest,
@@ -349,7 +349,10 @@ def build_api_router(
             if creator is None:
                 raise _not_found("creatorProfile", creator_id)
             updated_creator = {**creator, **wallet, "updatedAt": now}
-            repository.save_raw_document(FirestorePaths.creator_profile(creator_id), updated_creator)
+            repository.save_raw_document(
+                FirestorePaths.creator_profile(creator_id),
+                updated_creator,
+            )
             repository.save_raw_document(FirestorePaths.user(auth_user.uid), {**user, **wallet})
             return _ok({"wallet": wallet, **_current_user_payload(repository, {**user, **wallet})})
         raise _problem(
@@ -2364,7 +2367,11 @@ def build_api_router(
         locked_amount = lock_amount_base_units(terms)
         milestone_amounts = milestone_amounts_base_units(locked_amount, terms.milestones)
         existing = _find_escrow_by_agreement(repository, agreement_id)
-        if existing is not None and existing.get("status") in {"FUNDED", "PARTIALLY_RELEASED", "RELEASED"}:
+        if existing is not None and existing.get("status") in {
+            "FUNDED",
+            "PARTIALLY_RELEASED",
+            "RELEASED",
+        }:
             return _ok({"escrow": existing, "funding": None})
         escrow_id = (
             _require_document_str(existing, "escrowId")
@@ -2474,10 +2481,17 @@ def build_api_router(
                 "ESCROW_PREPARE_REQUIRED",
                 "Prepare escrow funding before confirming a transaction.",
             )
-        existing_signature = escrow.get("fundingTransactionSignature") or escrow.get("lockSignature")
+        existing_signature = escrow.get("fundingTransactionSignature") or escrow.get(
+            "lockSignature"
+        )
         if escrow.get("status") in {"FUNDED", "PARTIALLY_RELEASED", "RELEASED"}:
             if existing_signature == payload.transaction_signature:
-                return _ok({"escrow": escrow, "receipt": _receipt_by_id(repository, escrow.get("lockReceiptId"))})
+                return _ok(
+                    {
+                        "escrow": escrow,
+                        "receipt": _receipt_by_id(repository, escrow.get("lockReceiptId")),
+                    }
+                )
             raise _problem(
                 status.HTTP_409_CONFLICT,
                 "ESCROW_ALREADY_FUNDED",
@@ -2560,7 +2574,10 @@ def build_api_router(
             "creatorDestination": escrow["creatorDestination"],
             "updatedAt": now,
         }
-        repository.save_raw_document(FirestorePaths.escrow(_require_document_str(escrow, "escrowId")), updated_escrow)
+        repository.save_raw_document(
+            FirestorePaths.escrow(_require_document_str(escrow, "escrowId")),
+            updated_escrow,
+        )
         repository.save_raw_document(FirestorePaths.agreement(agreement_id), updated_agreement)
         receipt = _record_operation(
             repository,
@@ -2936,6 +2953,7 @@ def build_api_router(
     def release_milestone(
         escrow_id: str,
         milestone_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> dict[str, object]:
         key = _require_idempotency_key(idempotency_key)
@@ -2943,6 +2961,11 @@ def build_api_router(
         if escrow is None:
             raise _not_found("escrow", escrow_id)
         agreement_id = _require_document_str(escrow, "agreementId")
+        if authorization:
+            auth_user = _require_auth_user(token_verifier, authorization)
+            user = _require_completed_role(repository, auth_user, "CREATOR")
+            _require_creator_agreement_document(repository, user, agreement_id)
+            _require_creator_wallet_matches_escrow(repository, user, escrow)
         existing_settlement = _find_settlement(repository, escrow_id, milestone_id)
         if existing_settlement is not None:
             if existing_settlement.get("idempotencyKey") == key:
@@ -3865,6 +3888,37 @@ def _require_creator_agreement_document(
             "Agreement does not belong to the authenticated Creator.",
         )
     return agreement
+
+
+def _require_creator_wallet_matches_escrow(
+    repository: KnotRepository,
+    user: dict[str, object],
+    escrow: dict[str, object],
+) -> None:
+    creator_id = _require_document_str(user, "creatorId")
+    creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
+    if creator is None:
+        raise _not_found("creatorProfile", creator_id)
+    wallet = creator.get("walletAddress") or user.get("walletAddress")
+    if not isinstance(wallet, str) or not wallet:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "CREATOR_WALLET_REQUIRED",
+            "Creator must connect a Phantom settlement wallet before milestone release.",
+        )
+    destination = escrow.get("creatorDestination")
+    if not isinstance(destination, str) or not destination:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "CREATOR_DESTINATION_REQUIRED",
+            "Escrow is missing the Creator Phantom payout destination.",
+        )
+    if wallet != destination:
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "CREATOR_WALLET_MISMATCH",
+            "Connected Creator Phantom wallet does not match this escrow payout destination.",
+        )
 
 
 def _creator_participates(user: dict[str, object], document: dict[str, object]) -> bool:
@@ -5271,7 +5325,9 @@ def _record_paysh_operation(
             "paidAmountUsdc": str(amount_usdc) if event_status == "PAID" else None,
             "status": event_status,
             "paymentReceipt": result.get("receipt") or {},
-            "responseSummary": result.get("responseSummary") or result.get("providerResponse") or {},
+            "responseSummary": (
+                result.get("responseSummary") or result.get("providerResponse") or {}
+            ),
             "createdAt": now,
         },
     )
@@ -5529,7 +5585,9 @@ def _release_with_web3_gateway(
             "WEB3_GATEWAY_REQUIRED",
             "Milestone release requires the restricted Web3 Gateway.",
         )
-    lock_context = _lock_context_from_receipt(repository, escrow) or _agreement_escrow_context(escrow)
+    lock_context = _lock_context_from_receipt(repository, escrow) or _agreement_escrow_context(
+        escrow
+    )
     try:
         payload: dict[str, object] = {
             "agreementId": agreement_id,
