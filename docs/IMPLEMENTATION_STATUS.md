@@ -41,6 +41,8 @@ Updated: 2026-08-02
   is already connected.
 - Web3 Gateway funding policy failures now surface as `FUNDING_PREPARE_FAILED` /
   `FUNDING_CONFIRM_FAILED` conflicts instead of generic 502 Bad Gateway responses.
+- Web3 Gateway AIP-136 custom-method routes now use exact regex routes, preventing
+  `/escrows:prepare-funding` from being captured by the legacy `/escrows:lock` handler.
 
 ### Current Money Flow
 
@@ -67,6 +69,8 @@ Updated: 2026-08-02
 - `npm --prefix web3/gateway run build`: passed.
 - `npm --prefix web3/gateway run lint`: passed.
 - `npm --prefix web3/gateway test`: passed.
+- Local `POST /api/v1/agreements/agreement-bf47634b-9bbb-4a9d-99ee-b7a3d37b39a1/escrow/prepare`
+  returned 200 with a prepared Phantom funding transaction after the gateway route fix.
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.

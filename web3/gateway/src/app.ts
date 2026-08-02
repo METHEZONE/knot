@@ -3,6 +3,9 @@ import { loadConfig, type GatewayConfig } from "./config.js";
 import { EscrowLockService } from "./escrow.js";
 import { confirmBrandFunding, prepareBrandFunding } from "./funding.js";
 
+const lockRoute = /^\/internal\/v1\/escrows:lock$/;
+const prepareFundingRoute = /^\/internal\/v1\/escrows:prepare-funding$/;
+const confirmFundingRoute = /^\/internal\/v1\/escrows:confirm-funding$/;
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 
 async function handleRelease(
@@ -51,7 +54,7 @@ export function createApp(
     });
   });
 
-  app.post("/internal/v1/escrows:lock", async (request: Request, response: Response) => {
+  app.post(lockRoute, async (request: Request, response: Response) => {
     const result = await escrowLockService.lock(
       config,
       request.header("Idempotency-Key"),
@@ -60,7 +63,7 @@ export function createApp(
     response.status(result.statusCode).json(result.body);
   });
 
-  app.post("/internal/v1/escrows:prepare-funding", async (request: Request, response: Response) => {
+  app.post(prepareFundingRoute, async (request: Request, response: Response) => {
     try {
       const result = await prepareBrandFunding(config, request.body);
       response.json({ data: result });
@@ -75,7 +78,7 @@ export function createApp(
     }
   });
 
-  app.post("/internal/v1/escrows:confirm-funding", async (request: Request, response: Response) => {
+  app.post(confirmFundingRoute, async (request: Request, response: Response) => {
     try {
       const result = await confirmBrandFunding(config, request.body);
       response.json({ data: result });

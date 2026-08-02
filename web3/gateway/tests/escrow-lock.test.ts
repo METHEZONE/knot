@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { createApp } from "../src/app.js";
 import { EscrowLockService } from "../src/escrow.js";
@@ -116,4 +118,25 @@ test("release service rejects route and body mismatch", async () => {
 
 test("app registers AIP-136 custom method suffix routes", () => {
   assert.doesNotThrow(() => createApp(loadConfig({})));
+});
+
+test("prepare funding route is not captured by escrow lock route", async () => {
+  const app = createApp(loadConfig({}));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/internal/v1/escrows:prepare-funding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "prepare-route-test" },
+      body: JSON.stringify({})
+    });
+    const body = await response.json() as { detail?: { code?: string }; code?: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(body.detail?.code, "FUNDING_PREPARE_FAILED");
+    assert.notEqual(body.code, "VALIDATION_ERROR");
+  } finally {
+    server.close();
+  }
 });
