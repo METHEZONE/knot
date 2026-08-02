@@ -2768,10 +2768,19 @@ def build_api_router(
     @router.post("/agreements/{agreement_id}/escrow:lock")
     def lock_escrow(
         agreement_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> dict[str, object]:
         key = _require_idempotency_key(idempotency_key)
         agreement = _get_agreement_document(repository, agreement_id)
+        if authorization and settings.web3_mode == "gateway":
+            _require_auth_user(token_verifier, authorization)
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "PHANTOM_FUNDING_REQUIRED",
+                "Use /api/v1/agreements/{agreementId}/escrow/prepare and a Brand Phantom "
+                "signature to fund compensation escrow.",
+            )
         promotion = _get_promotion(repository, _require_document_str(agreement, "promotionId"))
         if not promotion.autonomy.auto_escrow:
             raise _problem(

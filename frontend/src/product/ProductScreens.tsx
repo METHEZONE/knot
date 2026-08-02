@@ -1438,6 +1438,19 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                 <InfoBox label="Deliverables" value={detail.agreement.terms.deliverables.map((item) => `${item.count} ${item.format}`).join(", ")} />
                 <InfoBox label="Usage rights" value={detail.agreement.terms.usageRights} />
               </div>
+              {detail.agreement.negotiationId ? (
+                <div className="mt-5">
+                  <PrimaryLink
+                    href={
+                      role === "brand"
+                        ? `/brand/negotiations/${detail.agreement.negotiationId}`
+                        : `/creator/offers/${detail.agreement.negotiationId}`
+                    }
+                  >
+                    Phantom 에스크로/정산 화면 열기
+                  </PrimaryLink>
+                </div>
+              ) : null}
             </Panel>
             <Panel>
               <SectionTitle eyebrow="Escrow" title="Escrow state" />
@@ -1797,12 +1810,10 @@ export function BrandSettlementScreen({
   settlement,
   milestones,
   agreementId,
-  creatorAgentId,
 }: {
   settlement: Settlement;
   milestones: Milestone[];
   agreementId: string;
-  creatorAgentId: string;
 }) {
   return (
     <WorkspaceShell role="brand" active="settlement" title="정산" session={null}>
@@ -1812,7 +1823,6 @@ export function BrandSettlementScreen({
           <MilestonePanel milestones={milestones} mode="brand" />
           <SettlementActionPanel
             agreementId={agreementId}
-            creatorAgentId={creatorAgentId}
             milestoneId={milestones.find((milestone) => milestone.id === "content")?.id ?? milestones[0]?.id}
             alreadyReleased={Boolean(settlement.releaseTx) || settlement.escrowStatus === "RELEASED"}
           />
@@ -2525,52 +2535,26 @@ function CreatorDealCard({ deal }: { deal: CreatorDeal }) {
 
 function SettlementActionPanel({
   agreementId,
-  creatorAgentId,
   milestoneId,
   alreadyReleased,
 }: {
   agreementId: string;
-  creatorAgentId: string;
   milestoneId?: string;
   alreadyReleased: boolean;
 }) {
-  const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "running">("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  async function runSettlement() {
-    if (!milestoneId) return;
-    setStatus("running");
-    setError(null);
-    try {
-      const client = new ProductApiClient();
-      const locked = await client.lockEscrow(agreementId);
-      const evidence = await client.submitEvidence({ agreementId, creatorAgentId }, milestoneId);
-      await client.verifyEvidence(evidence.evidenceId);
-      await client.releaseMilestone(locked.escrow.escrowId, milestoneId);
-      router.refresh();
-    } catch (caught) {
-      setError(errorMessage(caught));
-      setStatus("idle");
-    }
-  }
-
   return (
     <Panel>
-      <SectionTitle eyebrow="Action" title="Escrow 실행" />
+      <SectionTitle eyebrow="Action" title="Phantom 정산 화면으로 이동" />
       <p className="text-sm text-muted">
-        Escrow 성공 처리는 Web3 Gateway가 확인한 Solana Devnet signature가 있을 때만 가능합니다. 페이지
-        진입만으로 실행하지 않고 이 버튼을 눌렀을 때만 write API를 호출합니다.
+        Creator 보상 escrow는 legacy Agent 지갑으로 실행하지 않습니다. Brand Phantom으로 전체 금액을
+        예치하고, Creator가 URL을 제출하면 Agent 검토 뒤 Creator Phantom으로 정산됩니다.
       </p>
-      {error && <FormError message={error} />}
-      <button
-        type="button"
-        onClick={runSettlement}
-        disabled={status === "running" || alreadyReleased || !milestoneId}
-        className="mt-5 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
-      >
-        {alreadyReleased ? "Release 완료" : status === "running" ? "Escrow 처리 중..." : "Fund + verify + release"}
-      </button>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <PrimaryLink href={`/brand/agreements/${agreementId}`}>
+          {alreadyReleased ? "정산 내역 보기" : "Agreement 상세로 이동"}
+        </PrimaryLink>
+        {!milestoneId ? <p className="text-sm text-muted">정산 가능한 milestone이 아직 없습니다.</p> : null}
+      </div>
     </Panel>
   );
 }

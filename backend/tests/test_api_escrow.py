@@ -432,6 +432,26 @@ def test_lock_requires_web3_gateway_for_success() -> None:
     assert lock_operations[0]["status"] == "FAILED"
 
 
+def test_authenticated_gateway_lock_requires_phantom_funding() -> None:
+    client, _ = seeded(
+        Settings(
+            auth_mode="emulator",
+            firebase_project_id="knot-dev-503505",
+            web3_mode="gateway",
+            web3_gateway_base_url="http://web3-gateway.test",
+        )
+    )
+    agreement = accepted_agreement(client)
+
+    response = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/escrow:lock",
+        headers={**auth_headers(), "Idempotency-Key": "legacy-auth-lock"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PHANTOM_FUNDING_REQUIRED"
+
+
 def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch) -> None:
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
