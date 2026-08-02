@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# KNOT — deploy the escrow program to the shared Solana test cluster.
+# KNOT — deploy the escrow program to the shared Solana devnet cluster.
 #
 # Run after merge, by the holder of the program keypair
 # (target/deploy/knot_escrow-keypair.json). This is the shared environment used
 # for the demo; day-to-day testing happens on each developer's local validator.
 #
-#   SOLANA_CLUSTER=testnet SOLANA_RPC_URL=https://api.testnet.solana.com scripts/deploy_devnet.sh
+#   SOLANA_CLUSTER=devnet SOLANA_RPC_URL=https://api.devnet.solana.com scripts/deploy_devnet.sh
 #
 # The wallet (~/.config/solana/id.json) needs cluster SOL — deploy rent is
 # ~2.03 SOL; top up at https://faucet.solana.com if low.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 
-CLUSTER="${SOLANA_CLUSTER:-testnet}"
-RPC="${SOLANA_RPC_URL:-https://api.testnet.solana.com}"
+CLUSTER="${SOLANA_CLUSTER:-devnet}"
+RPC="${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
 SO="target/deploy/knot_escrow.so"
 KP="target/deploy/knot_escrow-keypair.json"
 

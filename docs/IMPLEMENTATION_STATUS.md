@@ -316,6 +316,7 @@ Test proving no unbounded scan: test_run_match_uses_indexed_discovery_without_cr
 | Demo Auth emulator accounts | VERIFIED | working tree | 2026-08-01 | `t1@knot.com` and `c1@knot.com` created with password `000000` |
 | Devnet settlement funding guard | VERIFIED | working tree | 2026-08-02 | Web3 Gateway defaults to `devnet`, disables shared-cluster auto token mint and auto SOL top-up, and requires funded Agent token/SOL balances before escrow lock |
 | Devnet settlement regression checks | VERIFIED | working tree | 2026-08-02 | `npm --prefix web3/gateway test` 13 passed; Web3 build passed; API escrow/promotions/dashboards 49 passed; frontend lint/typecheck/build passed |
+| Devnet settlement preflight | BLOCKED | working tree | 2026-08-02 | Read-only preflight confirmed executable program `Aj63B5hL...B6jysj`, but signer keypairs were not configured locally and the existing config treasury mint is custom `7Hrvv...eK3p`, not Circle devnet USDC `4zMMC9...ncDU` |
 
 ## 16. Latest Verified E2E
 
@@ -356,7 +357,7 @@ Settlement release signature: 4aoP1TNCprGrSy5jgxqByF5cBE9DHYqMTkJTB8WhAxuqtBNh5R
 Creator localnet token balance: 2300
 ```
 
-Live devnet pay.sh purchase and live devnet escrow remain blocked until devnet program/mint, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain devnet transactions exist.
+Live devnet pay.sh purchase and live devnet escrow remain blocked until a Circle devnet USDC escrow program/config, signer/pay.sh secrets, funded wallets, and explicit approval for on-chain devnet transactions exist.
 
 ## 17. Known Blockers
 
@@ -394,6 +395,15 @@ EVIDENCE: Localnet lock/release paid the Creator registered wallet, but no devne
 OWNER: Web3/Payments phase.
 NEXT ACTION: Configure/deploy the devnet program + mint + signer secrets, fund devnet wallets, then run an approved devnet lock/release smoke and record the signature/Explorer URL.
 WORKAROUND FOR DEMO (truthfully labeled): Use localnet live-signing proof until devnet is funded and approved.
+```
+
+```text
+BLOCKER: Current deployed devnet escrow config is initialized to a custom test mint.
+IMPACT: The default Circle devnet USDC mint is intentionally rejected by Web3 Gateway because the on-chain config treasury mint does not match `KNOT_USDC_MINT`.
+EVIDENCE: `npm --prefix web3/gateway run preflight:devnet` read config PDA `5fi9G...cNTv`; treasury token mint was `7Hrvv...eK3p`, while configured USDC mint was `4zMMC9...ncDU`.
+OWNER: Web3/Payments phase.
+NEXT ACTION: After approval, deploy/configure a fresh devnet escrow program using Circle devnet USDC treasury, or explicitly switch all env/UI copy to the existing custom test mint.
+WORKAROUND FOR DEMO (truthfully labeled): Keep localnet live-signing proof until Circle devnet USDC config is ready.
 ```
 
 ## 18. Update Rule
