@@ -134,4 +134,5 @@ Updated: 2026-08-02
   creator wallet as settlement authority because that value is immutable on-chain.
 - Cloud Run deployment of `knot-creator-agent`, `knot-web3`, and `knot-api` completed
   with image tag `97a4e76`; the first `knot-web` build failed on stale package-lock
-  metadata and was fixed by lockfile synchronization.
+  metadata and Linux optional peer resolution. Frontend Docker install now uses
+  `npm ci --legacy-peer-deps` while preserving lockfile-based installs.
