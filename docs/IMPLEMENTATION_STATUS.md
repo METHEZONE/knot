@@ -295,6 +295,27 @@ Updated: 2026-08-03
 - Local HTTP no-match smoke passed: unmatched category/usage produced
   `WAITING_FOR_CREATOR` with `selectedCreatorAgentId=null`.
 
+## 2026-08-03 Agreement Detail UI Regression Fix
+
+### Changed
+
+- `/brand/agreements/[agreementId]` and `/creator/agreements/[agreementId]`
+  now resolve the Agreement and render the same Negotiation Detail surface used by
+  `/brand/negotiations/[negotiationId]` and `/creator/offers/[negotiationId]`.
+- Agreement detail pages again show the top three panels:
+  counterparty profile, agreed work/result, and wallet/escrow settlement.
+- The wallet/settlement panel explicitly displays escrow status, total amount,
+  released amount, remaining balance, Escrow PDA, vault token account,
+  Brand source wallet, Creator destination wallet, and Explorer links.
+- The milestone section and long A2A message thread remain below the three-panel
+  summary so Agreement links and Negotiation links have one consistent UI.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+
 ## 2026-08-03 Brand Signup Simplification And Promotion Real Inputs
 
 ### Changed

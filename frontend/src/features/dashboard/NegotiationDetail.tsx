@@ -245,6 +245,57 @@ export function NegotiationDetail({
   );
 }
 
+export function AgreementNegotiationDetail({
+  role,
+  agreementId,
+}: {
+  role: Role;
+  agreementId: string;
+}) {
+  const client = useMemo(() => new ProductApiClient(), []);
+  const [state, setState] = useState<{
+    loading: boolean;
+    error: string | null;
+    negotiationId: string | null;
+  }>({ loading: true, error: null, negotiationId: null });
+
+  useEffect(() => {
+    let active = true;
+    client
+      .getAgreement(agreementId)
+      .then((agreement) => {
+        if (!active) return;
+        setState({
+          loading: false,
+          error: null,
+          negotiationId: agreement.negotiationId || null,
+        });
+      })
+      .catch((caught: unknown) => {
+        if (!active) return;
+        setState({ loading: false, error: readableError(caught), negotiationId: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [agreementId, client]);
+
+  if (state.loading) {
+    return <PanelMessage title="계약 상세 불러오는 중" body="Agreement와 연결된 협상 기록을 조회하고 있습니다." />;
+  }
+
+  if (state.error || !state.negotiationId) {
+    return (
+      <PanelMessage
+        title="계약 상세를 불러오지 못했습니다"
+        body={state.error ?? "이 Agreement에 연결된 negotiationId가 없습니다."}
+      />
+    );
+  }
+
+  return <NegotiationDetail role={role} negotiationId={state.negotiationId} />;
+}
+
 function CounterpartyProfilePanel({
   role,
   negotiation,
@@ -413,6 +464,19 @@ function SettlementSummaryPanel({
   const signature = escrow?.fundingTransactionSignature ?? escrow?.lockSignature ?? null;
   const funded = escrow?.status === "FUNDED" || escrow?.status === "PARTIALLY_RELEASED" || escrow?.status === "RELEASED";
   const latestSettlement = escrowBundle?.settlements?.[escrowBundle.settlements.length - 1] ?? null;
+  const totalBaseUnits =
+    escrow?.lockedAmountBaseUnits ??
+    (agreement ? String(Math.round(agreement.terms.compensation.baseAmountUsdc * 1_000_000)) : undefined);
+  const releasedBaseUnits =
+    escrow?.releasedAmountBaseUnits ??
+    escrowBundle?.settlements
+      ?.filter((settlement) => settlement.status === "CONFIRMED" || Boolean(settlement.signature))
+      .reduce((sum, settlement) => sum + safeBigInt(settlement.amountBaseUnits), BigInt(0))
+      .toString();
+  const remainingBaseUnits =
+    totalBaseUnits && releasedBaseUnits
+      ? (safeBigInt(totalBaseUnits) - safeBigInt(releasedBaseUnits)).toString()
+      : totalBaseUnits;
 
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
@@ -420,8 +484,14 @@ function SettlementSummaryPanel({
       <div className="grid gap-3">
         <Metric label={role === "brand" ? "Brand Phantom" : "Creator Phantom"} value={walletAddress ?? "연결 필요"} />
         <Metric label="Agreement 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
-        <Metric label="Escrow" value={escrow ? `${escrow.status} · ${baseUnitsToUsdcLabel(escrow.lockedAmountBaseUnits)}` : "아직 잠김 없음"} />
-        <Metric label="Escrow Vault" value={escrow?.vaultTokenAccount ?? "prepare 전"} />
+        <Metric label="Escrow 상태" value={escrow ? escrow.status : agreement ? "CREATED 전" : "계약 전"} />
+        <Metric label="Escrow 총액" value={baseUnitsToUsdcLabel(totalBaseUnits)} />
+        <Metric label="지급 완료" value={baseUnitsToUsdcLabel(releasedBaseUnits)} />
+        <Metric label="Escrow 잔액" value={baseUnitsToUsdcLabel(remainingBaseUnits)} />
+        <Metric label="Escrow PDA" value={escrow?.escrowPda ?? "initialize 전"} />
+        <Metric label="Escrow Vault" value={escrow?.vaultTokenAccount ?? "funding 전"} />
+        <Metric label="Brand source" value={escrow?.brandAuthority ?? "지갑 연결 전"} />
+        <Metric label="Creator destination" value={escrow?.creatorDestination ?? "수령 지갑 연결 필요"} />
         <Metric label={role === "brand" ? "예치 tx" : "정산 tx"} value={role === "brand" ? signature ?? "예치 전" : latestSettlement?.signature ?? "정산 전"} />
       </div>
       {role === "brand" && onFund && !funded ? (
@@ -452,6 +522,16 @@ function SettlementSummaryPanel({
           className="mt-3 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
         >
           Solana Explorer
+        </a>
+      ) : null}
+      {latestSettlement?.signature ? (
+        <a
+          href={`https://explorer.solana.com/tx/${latestSettlement.signature}?cluster=devnet`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
+        >
+          Settlement Explorer
         </a>
       ) : null}
     </section>
@@ -834,6 +914,15 @@ function baseUnitsToUsdcLabel(value: string | undefined) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return value;
   return `${(raw / 1_000_000).toLocaleString()} USDC`;
+}
+
+function safeBigInt(value: string | undefined) {
+  if (!value) return BigInt(0);
+  try {
+    return BigInt(value);
+  } catch {
+    return BigInt(0);
+  }
 }
 
 function readableError(caught: unknown) {
