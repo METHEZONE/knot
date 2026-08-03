@@ -183,6 +183,38 @@ def test_run_match_uses_indexed_discovery_without_creator_profile_scan() -> None
     assert match_run["detailReadCount"] == 2
 
 
+def test_run_match_uses_any_supported_format_not_only_primary_format() -> None:
+    client = client_with_seed()
+    payload = {
+        "promotionId": "promotion-short-format",
+        "title": "Shorts skincare launch",
+        "objective": "short-form awareness",
+        "category": "beauty",
+        "targetAudience": ["skincare"],
+        "budget": {"totalUsdc": 1000, "maxPerCreatorUsdc": 750},
+        "deliverables": [
+            {
+                "format": "short",
+                "count": 1,
+                "postWindow": {"start": "2026-08-10", "end": "2026-08-10"},
+                "revisionRounds": 1,
+            }
+        ],
+        "postingWindow": {"start": "2026-08-10", "end": "2026-08-10"},
+        "usageRights": "organicOnly",
+        "constraints": {"requiredCategories": ["beauty"]},
+    }
+    create_response = client.post("/api/v1/promotions", json=payload)
+    assert create_response.status_code == 201
+
+    run_response = client.post("/api/v1/promotions/promotion-short-format/matches:run")
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
+    assert match_run["discoveryReturnedCount"] >= 1
+
+
 def test_canonical_match_run_alias_preserves_existing_matching_behavior() -> None:
     client = client_with_seed()
 

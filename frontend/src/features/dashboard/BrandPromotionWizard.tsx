@@ -78,24 +78,25 @@ export function BrandPromotionWizard() {
       const maxPerCreator = normalizedUsdc(draft.maxPerDealUsdc, 1);
       const totalBudget = Math.max(normalizedUsdc(draft.totalUsdc, maxPerCreator), maxPerCreator);
       const initialOffer = initialOfferForMax(maxPerCreator);
+      const promotionPayload = {
+        productName: draft.productName,
+        title: `${draft.productName} 협찬 프로젝트`,
+        objective: `${draft.workBrief.trim()} · ${draft.summary || "제품 인지도와 실제 사용 콘텐츠 확보"}`,
+        categories: [draft.category || "beauty"],
+        targetAudience: draft.moodTags.join(", "),
+        totalBudget,
+        initialOffer,
+        maximumPerCreator: maxPerCreator,
+        autoAcceptCeiling: maxPerCreator,
+        maximumRounds: 3,
+        deliverables: deliverablesFromDraft(draft.deliverables),
+        usageRights: draft.usageRights,
+        deadline: deadlineAfterDays(14),
+        prohibitedClaims: splitList(draft.prohibitedClaims),
+      };
       const promotion = await client.createBrandPromotion(
-        {
-          productName: draft.productName,
-          title: `${draft.productName} 협찬 프로젝트`,
-          objective: `${draft.workBrief.trim()} · ${draft.summary || "제품 인지도와 실제 사용 콘텐츠 확보"}`,
-          categories: [draft.category || "beauty"],
-          targetAudience: draft.moodTags.join(", "),
-          totalBudget,
-          initialOffer,
-          maximumPerCreator: maxPerCreator,
-          autoAcceptCeiling: maxPerCreator,
-          maximumRounds: 3,
-          deliverables: deliverablesFromDraft(draft.deliverables),
-          usageRights: draft.usageRights,
-          deadline: deadlineAfterDays(14),
-          prohibitedClaims: splitList(draft.prohibitedClaims),
-        },
-        stableKey("promotion", draft.productUrl, draft.productName, draft.moodTags.join(",")),
+        promotionPayload,
+        stableKey("promotion", JSON.stringify(promotionPayload)),
       );
       const flow = await client.runAgentForPromotion(promotion.promotionId);
       router.push(`/brand/negotiations/${flow.negotiation.negotiationId}`);

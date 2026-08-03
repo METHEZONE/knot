@@ -824,7 +824,10 @@ export class ProductApiClient {
   async runMatches(promotionId: string) {
     const response = await this.request<{ matchRun: ApiMatchRun }>(
       `/api/v1/promotions/${promotionId}/matches:run`,
-      { method: "POST" },
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": `frontend-match-${promotionId}` },
+      },
     );
     return response.matchRun;
   }
@@ -1119,6 +1122,9 @@ function validationMessage(errors: Array<{ loc?: unknown[]; msg?: string }>) {
 }
 
 function noEligibleCreatorMessage(candidates: ApiCandidate[]) {
+  if (!candidates.length) {
+    return "선택 가능한 Creator가 없습니다. 협찬 받기 설정을 완료하고 매니저를 켠 Creator가 있는지 확인한 뒤 다시 실행해주세요.";
+  }
   const reasons = candidates
     .flatMap((candidate) => candidate.hardFilterReasons ?? [])
     .filter((reason, index, all) => all.indexOf(reason) === index)

@@ -71,6 +71,42 @@ Updated: 2026-08-03
     extracted `followerCount=416`; average views, engagement rate, and reel share stayed
     unknown because the public response did not include those values.
 
+## Matching Retry and Low-Budget Creator Fix
+
+### Changed
+
+- Creator discovery now searches `formatKeys array_contains <requested format>` instead
+  of `primaryFormatKey == <requested format>`, so a creator whose primary format is
+  Reels but who also supports Shorts/Post can still be selected for those promotions.
+- Creator setup now supports low MVP test rates such as `10 USDC` and saves
+  `reel`, `short`, and `post` as supported content formats.
+- Re-running Creator setup on an existing completed creator account now updates the
+  actual Creator profile, Agent policy, and discovery projection instead of silently
+  returning the old minimum rate.
+- Brand promotion creation idempotency now includes the full promotion payload, so
+  changing budget, work brief, usage right, deliverables, or prohibited claims and
+  retrying no longer reuses a key from a different request.
+- Match run calls now send a stable per-promotion idempotency key, so retrying the
+  same run reuses the existing MatchRun.
+- Empty candidate errors now distinguish "no published Creator Agent/discovery profile"
+  from "candidates exist but policy blocked them."
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py libs/agents/discovery.py tests/test_api_promotions.py tests/test_api_auth.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_auth.py tests/test_api_onboarding.py tests/test_api_promotions.py::test_run_match_uses_any_supported_format_not_only_primary_format tests/test_api_promotions.py::test_run_match_persists_run_candidates_and_timeline_event tests/test_api_promotions.py::test_match_run_start_is_idempotent_and_records_canonical_events -q`: 23 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local API smoke after restart:
+  - Updated `c1@knot.com` Creator profile to minimum `10 USDC` and formats
+    `reel`, `short`, `post`.
+  - Created Brand promotion with `maximumPerCreator=20`, `initialOffer=12`,
+    `usageRights=organicOnly`, and `short` deliverable.
+  - Matching selected `creator-agent-user-creator-1`, returned one eligible candidate
+    with no hard filter reasons.
+  - A2A negotiation started and produced an Agreement.
+
 ## Payment Rails Refactor
 
 ### Changed

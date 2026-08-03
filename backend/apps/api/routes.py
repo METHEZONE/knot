@@ -500,11 +500,103 @@ def build_api_router(
             existing_creator = repository.get_raw_document(
                 FirestorePaths.creator_profile(existing_creator_id)
             )
-            agent = repository.get_raw_document(FirestorePaths.agent(str(user.get("agentId"))))
+            agent_id = str(user.get("agentId") or user.get("creatorAgentId") or "")
+            agent = repository.get_raw_document(FirestorePaths.agent(agent_id))
+            if existing_creator is None or agent is None:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "PROFILE_INCOMPLETE",
+                    "Creator account points to a missing profile or agent.",
+                )
+            now = _now()
+            existing_model = CreatorProfile.model_validate(existing_creator)
+            updated_creator = existing_model.model_copy(
+                update={
+                    "display_name": payload.creator_name,
+                    "categories": _with_custom_category(
+                        payload.categories,
+                        payload.custom_category,
+                    ),
+                    "prohibited_industries": payload.blocked_domains,
+                    "supported_deliverable_formats": _preferred_formats(
+                        payload.preferred_content
+                    ),
+                    "rate_card": RateCard(
+                        minBaseUsdc=payload.minimum_usdc,
+                        maxBaseUsdc=max(payload.minimum_usdc, 800),
+                    ),
+                    "active": True,
+                }
+            )
+            updated_creator_doc = {
+                **existing_creator,
+                **model_to_document(updated_creator),
+                "socialLinks": [
+                    {"platform": _social_platform(payload.sns_url), "url": payload.sns_url}
+                ],
+                "publicRateBand": {
+                    "currency": "USDC",
+                    "minimum": payload.minimum_usdc,
+                    "maximum": max(payload.minimum_usdc, 800),
+                },
+                "walletAddress": payload.wallet_address or existing_creator.get("walletAddress"),
+                "receivingOffers": True,
+                "status": "ACTIVE",
+                "updatedAt": now,
+            }
+            policy = {
+                **(repository.get_raw_document(FirestorePaths.agent_policy(agent_id)) or {}),
+                "agentId": agent_id,
+                "policyVersion": 1,
+                "agentType": "CREATOR",
+                "ownerUid": auth_user.uid,
+                "creator": {
+                    "minBaseUsdc": payload.minimum_usdc,
+                    "blockedIndustries": payload.blocked_domains,
+                    "maxDeliverablesPerMonth": 4,
+                    "minDaysToPost": 5,
+                    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+                    "maxRevisionRounds": 1,
+                    "maxExclusivityDays": 0,
+                },
+                "preferredContent": payload.preferred_content,
+                "active": True,
+                "updatedAt": now,
+            }
+            updated_agent = {
+                **agent,
+                "displayName": f"{payload.creator_name} Agent",
+                "updatedAt": now,
+            }
+            repository.save_raw_document(
+                FirestorePaths.creator_profile(existing_creator_id),
+                updated_creator_doc,
+            )
+            repository.save_raw_document(FirestorePaths.agent_policy(agent_id), policy)
+            repository.save_raw_document(FirestorePaths.agent(agent_id), updated_agent)
+            if updated_agent.get("publicationStatus") == "PUBLISHED":
+                repository.save_raw_document(
+                    FirestorePaths.creator_discovery_profile(existing_creator_id),
+                    build_creator_discovery_projection(
+                        updated_creator,
+                        updated_agent,
+                        updated_at=now,
+                    ),
+                )
+                repository.save_raw_document(
+                    FirestorePaths.agent_registry_entry(agent_id),
+                    creator_agent_registry_entry(updated_agent, updated_at=now),
+                )
+            _append_audit(
+                repository,
+                action="CREATOR_PROFILE_UPDATED",
+                data={"uid": auth_user.uid, "creatorId": existing_creator_id},
+            )
             return _ok(
                 {
-                    "creator": existing_creator,
-                    "agent": agent,
+                    "creator": updated_creator_doc,
+                    "agent": updated_agent,
+                    "policy": policy,
                     **_current_user_payload(repository, user),
                 }
             )

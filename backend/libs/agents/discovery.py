@@ -141,7 +141,7 @@ def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:
             "array_contains",
             _primary_required_category(promotion),
         ),
-        DocumentQueryFilter("primaryFormatKey", "==", _required_format(promotion)),
+        DocumentQueryFilter("formatKeys", "array_contains", _required_format(promotion)),
         DocumentQueryFilter("nextAvailableAt", "<=", promotion.posting_window.start.isoformat()),
     ]
 

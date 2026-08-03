@@ -88,11 +88,11 @@ function CreatorRulesForm({
           snsUrl: `https://instagram.com/${creator.handle.replace(/^@/, "")}`,
           categories: ["beauty"],
           customCategory: creator.toneKeywords.join(", "),
-          preferredContent: ["reel"],
+          preferredContent: ["reel", "short", "post"],
           blockedDomains: blocked.map((item) => BLOCKED_CATEGORY_LABEL[item]),
           minimumUsdc: min,
         },
-        stableKey("creator-profile", creator.handle),
+        stableKey("creator-profile", creator.handle, String(min), blocked.join(",")),
       );
       await client.publishCreatorAgent();
       writeBoard({
@@ -120,8 +120,8 @@ function CreatorRulesForm({
         <div className="flex items-baseline gap-2">
           <input
             type="number"
-            min={50}
-            step={50}
+            min={1}
+            step={1}
             value={min}
             onChange={(e) => setMin(Math.max(0, Number(e.target.value)))}
             className="sketch-alt ink w-40 border border-border-subtle bg-surface-raised px-4 py-3 font-mono text-2xl outline-none"
