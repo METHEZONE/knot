@@ -677,3 +677,26 @@ Updated: 2026-08-03
 - A real devnet funding transaction still requires the Brand Phantom wallet to
   sign in the browser. After funding, evidence verification should trigger
   automatic release via the deployed Web3 Gateway settlement authority.
+
+## 2026-08-03 Deployment Login Copy And Signup Idempotency Fix
+
+### Changes
+
+- Confirmed the deployed login page was still serving an older frontend build
+  containing internal Firebase/Product API copy, while local `main` had already
+  removed that text.
+- Updated Brand/Creator signup role and Brand profile creation calls to use a
+  fresh request-scoped idempotency key instead of an email-derived fixed key.
+  This prevents retrying signup with a changed form body from failing with
+  `Idempotency-Key was already used for a different request`.
+- Softened the incomplete-account guard copy so users do not see technical
+  onboarding language while account context is being resolved.
+
+### Verification
+
+- `cd frontend && npm run typecheck`: passed.
+- `cd frontend && npm run lint`: passed.
+- `cd frontend && npm run build`: passed.
+- `cd frontend && npm test`: 17 passed, 2 failed. The failures are existing
+  test expectation drift around auth-copy text and API data-source projection;
+  they are not caused by the signup idempotency change.

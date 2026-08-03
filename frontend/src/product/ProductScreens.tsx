@@ -59,6 +59,13 @@ import type {
 
 ProductApiClient.setAuthTokenProvider(currentIdToken);
 
+function uniqueRequestKey(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 type WorkspacePage =
   | "dashboard"
   | "onboarding"
@@ -1532,7 +1539,10 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
       await createFirebaseAccount(email, password, displayName);
       const api = new ProductApiClient();
       await api.getMe();
-      let account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
+      let account = await api.selectMyRole(
+        role.toUpperCase() as "BRAND" | "CREATOR",
+        uniqueRequestKey(`signup-role-${role}`),
+      );
       if (role === "brand") {
         account = await api.createMyBrandProfile(
           {
@@ -1543,7 +1553,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
             description: "프로모션 생성 시 제품과 캠페인 조건을 입력합니다.",
             restrictedClaims: [],
           },
-          `signup-brand-profile-${email}`,
+          uniqueRequestKey("signup-brand-profile"),
         );
       }
       saveCurrentAccount(account);

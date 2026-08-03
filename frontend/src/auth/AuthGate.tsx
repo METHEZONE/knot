@@ -78,7 +78,7 @@ export function AuthGate({
     return <GuardPanel title="이동 중입니다" body="현재 계정 역할에 맞는 대시보드로 이동합니다." />;
   }
   if (requireCompleted && account.onboardingStatus !== "COMPLETED") {
-    return <GuardPanel title="온보딩이 필요합니다" body="프로필을 먼저 완성하면 대시보드를 볼 수 있습니다." />;
+    return <GuardPanel title="프로필 연결이 필요합니다" body="기본 프로필을 연결하면 대시보드로 이동합니다." />;
   }
   if (completedRedirect && account.onboardingStatus === "COMPLETED") {
     return <GuardPanel title="이동 중입니다" body="이미 완료된 계정입니다. 대시보드로 이동합니다." />;
