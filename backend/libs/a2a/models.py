@@ -75,6 +75,7 @@ class NegotiationPayload(A2AModel):
     terms: AgreementTerms
     changed_fields: list[str] = Field(default_factory=list, alias="changedFields")
     rationale: str = ""
+    display: dict[str, Any] = Field(default_factory=dict)
 
 
 class A2ASendConfiguration(A2AModel):

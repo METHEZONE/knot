@@ -5,30 +5,47 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { lookupInstagram, type CreatorSetup } from "@/product/setupStore";
+import { type CreatorSetup } from "@/product/setupStore";
 import { readBoard, writeBoard } from "@/product/dealBoard";
-import { suggestedMinUsdc } from "@/product/setupStore";
+import { ProductApiClient, type AnalysisJob } from "@/product/apiClient";
+
+type CreatorDraft = Omit<CreatorSetup, "minUsdc" | "blocked"> & {
+  analysisId: string;
+  sourceUrl: string;
+  provider: string;
+  fallbackReason: string | null;
+};
 
 export function CreatorConnect() {
   const router = useRouter();
-  const [handle, setHandle] = useState("@demobeauty");
+  const [handle, setHandle] = useState("");
   const [busy, setBusy] = useState(false);
-  const [found, setFound] = useState<ReturnType<typeof lookupInstagram> | null>(null);
+  const [found, setFound] = useState<CreatorDraft | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const analyze = () => {
+  const analyze = async () => {
+    if (!handle.trim()) return;
     setBusy(true);
-    // 사전 수집된 결과를 불러오는 연출. 라이브 스크래핑이 아니다.
-    window.setTimeout(() => {
-      setFound(lookupInstagram(handle));
+    setError(null);
+    try {
+      const sourceUrl = instagramUrlFromHandle(handle);
+      const analysis = await new ProductApiClient().analyzeCreatorProfile(
+        sourceUrl,
+        stableKey("creator-profile-analysis", sourceUrl),
+      );
+      setFound(creatorDraftFromAnalysis(analysis));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
       setBusy(false);
-    }, 1400);
+    }
   };
 
   const next = () => {
     if (!found) return;
     const setup: CreatorSetup = {
       ...found,
-      minUsdc: suggestedMinUsdc(found.followers, found.engagementRate),
+      minUsdc: 150,
       blocked: ["gambling", "loanCrypto", "dietSupplement"],
     };
     writeBoard({ creator: setup, evidenceUrl: null, epoch: readBoard().epoch + 1 });
@@ -55,12 +72,13 @@ export function CreatorConnect() {
         <button
           type="button"
           onClick={analyze}
-          disabled={busy}
+          disabled={busy || !handle.trim()}
           className="sketch-pill bg-accent px-5 py-3 text-background disabled:opacity-50"
         >
           {busy ? "보는 중…" : "분석"}
         </button>
       </div>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
 
       {found ? (
         <motion.div
@@ -76,10 +94,10 @@ export function CreatorConnect() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="팔로워" value={found.followers.toLocaleString()} />
-            <Stat label="평균 조회" value={found.avgViews.toLocaleString()} />
-            <Stat label="참여율" value={`${(found.engagementRate * 100).toFixed(1)}%`} />
-            <Stat label="릴스 비중" value={`${found.reelShare}%`} />
+            <Stat label="팔로워" value={unknownableNumber(found.followers)} />
+            <Stat label="평균 조회" value={unknownableNumber(found.avgViews)} />
+            <Stat label="참여율" value={found.engagementRate ? `${(found.engagementRate * 100).toFixed(1)}%` : "확인 필요"} />
+            <Stat label="릴스 비중" value={found.reelShare ? `${found.reelShare}%` : "확인 필요"} />
           </div>
 
           <div className="mt-4 flex flex-wrap gap-1.5">
@@ -94,7 +112,8 @@ export function CreatorConnect() {
           </div>
 
           <p className="mt-4 text-xs text-muted">
-            숫자는 수집된 게시물에서 계산했고, 문장만 AI가 씁니다.
+            {found.provider}
+            {found.fallbackReason ? ` · ${found.fallbackReason}` : ""}
           </p>
 
           <button
@@ -117,4 +136,68 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono text-xl">{value}</div>
     </div>
   );
+}
+
+function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
+  const draft = analysis.draft;
+  const handle = stringField(draft.handle) || handleFromUrl(analysis.sourceUrl);
+  return {
+    analysisId: analysis.analysisId,
+    sourceUrl: analysis.sourceUrl,
+    handle,
+    followers: 0,
+    avgViews: 0,
+    engagementRate: 0,
+    reelShare: 0,
+    toneKeywords: stringArray(draft.audienceTags).concat(stringArray(draft.proposedMoodIds)).slice(0, 3),
+    capturedAt: new Date().toISOString().slice(0, 10),
+    provider: analysis.provider,
+    fallbackReason: analysis.fallbackReason,
+  };
+}
+
+function instagramUrlFromHandle(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("https://")) return trimmed;
+  const clean = trimmed.replace(/^@/, "").replace(/^\/+/, "");
+  return `https://instagram.com/${clean}`;
+}
+
+function handleFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const handle = url.pathname.split("/").filter(Boolean)[0] || "creator";
+    return handle.startsWith("@") ? handle : `@${handle}`;
+  } catch {
+    return "@creator";
+  }
+}
+
+function stringField(value: unknown): string | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  return typeof fieldValue === "string" && fieldValue.trim() ? fieldValue : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function unknownableNumber(value: number) {
+  return value > 0 ? value.toLocaleString() : "확인 필요";
+}
+
+function stableKey(prefix: string, ...parts: string[]) {
+  let hash = 0x811c9dc5;
+  for (const part of parts.join("|")) {
+    hash ^= part.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${prefix}-${(hash >>> 0).toString(16)}`;
 }

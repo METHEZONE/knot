@@ -97,7 +97,23 @@ export function BrandMood() {
     setSaving(true);
     setError(null);
     try {
-      await new ProductApiClient().createMyBrandProfile(
+      const client = new ProductApiClient();
+      const analysisId = typeof draft.analysisId === "string" ? draft.analysisId : null;
+      if (analysisId) {
+        await client.confirmAnalysis(
+          analysisId,
+          {
+            confirmedFields: ["product.name", "product.category", "product.summary"],
+            edits: {
+              productName: setup.productName,
+              category: setup.category,
+              moodTags,
+            },
+          },
+          stableKey("brand-analysis-confirm", analysisId, setup.productName),
+        );
+      }
+      await client.createMyBrandProfile(
         {
           brandName: "KNOT Brand",
           websiteUrl: setup.productUrl || "https://brand.example",

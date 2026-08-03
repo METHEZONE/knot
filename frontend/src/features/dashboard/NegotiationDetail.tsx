@@ -720,6 +720,18 @@ function messageSide(message: ApiNegotiationMessage, index: number): Role {
 
 function messageLine(message: ApiNegotiationMessage, index: number) {
   const payload = message.payload ?? {};
+  const display = isRecord(payload.display) ? payload.display : null;
+  if (typeof display?.message === "string" && display.message.trim()) {
+    const headline =
+      typeof display.headline === "string" && display.headline.trim()
+        ? `${display.headline} · `
+        : "";
+    const rationale =
+      typeof display.rationale === "string" && display.rationale.trim()
+        ? ` ${display.rationale}`
+        : "";
+    return `${headline}${display.message}${rationale}`;
+  }
   const type = String(payload.type ?? (index === 0 ? "OFFER" : "COUNTER")).toUpperCase();
   const terms = isRecord(payload.terms) ? payload.terms : null;
   const compensation = terms && isRecord(terms.compensation) ? terms.compensation : null;

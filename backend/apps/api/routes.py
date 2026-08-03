@@ -1904,6 +1904,12 @@ def build_api_router(
             terms=terms,
             changedFields=[],
             rationale="Initial promotion offer",
+            display=_brand_negotiation_display(
+                message_type=NegotiationMessageType.OFFER,
+                terms=terms,
+                promotion=promotion,
+                rationale="딜당 권한 한도 안에서 첫 제안을 보냅니다.",
+            ),
         )
         offer_message = A2AMessage(
             messageId=offer_message_id,
@@ -2018,101 +2024,238 @@ def build_api_router(
                 }
             )
             if final_brand_decision.allowed:
-                changed_fields_value = creator_decision_document.get("changedFields")
-                changed_fields = (
-                    [item for item in changed_fields_value if isinstance(item, str)]
-                    if isinstance(changed_fields_value, list)
-                    else []
-                )
-                accept_payload = NegotiationPayload(
-                    type=NegotiationMessageType.ACCEPT,
-                    round=2,
-                    promotion=promotion,
-                    terms=counter_terms,
-                    changedFields=changed_fields,
-                    rationale="Brand policy accepted Creator counteroffer.",
-                )
-                accept_message_id = f"message-{uuid4()}"
-                accept_message = A2AMessage(
-                    messageId=accept_message_id,
-                    contextId=context_id,
-                    taskId=task_id,
-                    role=A2ARole.USER,
-                    parts=[
-                        A2APart(
-                            mediaType="application/json",
-                            data=accept_payload.model_dump(by_alias=True, mode="json"),
-                        )
-                    ],
-                )
-                try:
-                    a2a_task = _send_creator_a2a_task(
-                        settings=settings,
-                        base_url=creator_a2a_base_url,
-                        creator_agent_id=creator_agent_id,
-                        message=accept_message,
-                        context=creator_context,
+                bridge_terms = _brand_bridge_counter_terms(terms, counter_terms)
+                if bridge_terms is not None and promotion.autonomy.max_negotiation_rounds >= 3:
+                    bridge_payload = NegotiationPayload(
+                        type=NegotiationMessageType.COUNTER,
+                        round=2,
+                        promotion=promotion,
+                        terms=bridge_terms,
+                        changedFields=["compensation.baseAmountUsdc"],
+                        rationale="Brand policy allows one more counteroffer before accepting.",
+                        display=_brand_negotiation_display(
+                            message_type=NegotiationMessageType.COUNTER,
+                            terms=bridge_terms,
+                            promotion=promotion,
+                            rationale="예산 안에서 한 번 더 조정해봅니다.",
+                        ),
                     )
-                except CreatorA2AClientError as exc:
-                    raise _problem(
-                        status.HTTP_502_BAD_GATEWAY,
-                        "A2A_CREATOR_AGENT_UNAVAILABLE",
-                        f"Creator A2A accept failed: {exc}",
-                    ) from exc
-                persisted_messages.append(
-                    {
-                        "messageId": accept_message_id,
-                        "contextId": context_id,
-                        "taskId": task_id,
-                        "role": "ROLE_USER",
-                        "sequence": 3,
-                        "payload": accept_payload.model_dump(by_alias=True, mode="json"),
-                        "a2aMessage": accept_message.model_dump(by_alias=True, mode="json"),
-                        "createdAt": now,
-                    }
-                )
-                response_message = a2a_task.status.message
-                try:
-                    creator_decision_document = first_part_data(response_message)
-                except CreatorA2AClientError as exc:
-                    raise _problem(
-                        status.HTTP_409_CONFLICT,
-                        "INVALID_STATE_TRANSITION",
-                        f"Creator A2A final response is invalid: {exc}",
-                    ) from exc
-                decision_type = _decision_type_from_document(creator_decision_document)
-                response_message_id = (
-                    response_message.message_id if response_message else f"message-{uuid4()}"
-                )
-                response_terms = creator_decision_document.get("terms")
-                current_terms = (
-                    response_terms if isinstance(response_terms, dict) else current_terms
-                )
-                if response_message is not None:
+                    bridge_message_id = f"message-{uuid4()}"
+                    bridge_message = A2AMessage(
+                        messageId=bridge_message_id,
+                        contextId=context_id,
+                        taskId=task_id,
+                        role=A2ARole.USER,
+                        parts=[
+                            A2APart(
+                                mediaType="application/json",
+                                data=bridge_payload.model_dump(by_alias=True, mode="json"),
+                            )
+                        ],
+                    )
+                    try:
+                        a2a_task = _send_creator_a2a_task(
+                            settings=settings,
+                            base_url=creator_a2a_base_url,
+                            creator_agent_id=creator_agent_id,
+                            message=bridge_message,
+                            context=creator_context,
+                        )
+                    except CreatorA2AClientError as exc:
+                        raise _problem(
+                            status.HTTP_502_BAD_GATEWAY,
+                            "A2A_CREATOR_AGENT_UNAVAILABLE",
+                            f"Creator A2A counter failed: {exc}",
+                        ) from exc
                     persisted_messages.append(
                         {
-                            "messageId": response_message_id,
+                            "messageId": bridge_message_id,
                             "contextId": context_id,
                             "taskId": task_id,
-                            "role": "ROLE_AGENT",
-                            "sequence": 4,
-                            "payload": creator_decision_document,
-                            "a2aMessage": response_message.model_dump(
+                            "role": "ROLE_USER",
+                            "sequence": 3,
+                            "payload": bridge_payload.model_dump(by_alias=True, mode="json"),
+                            "a2aMessage": bridge_message.model_dump(
                                 by_alias=True,
                                 mode="json",
                             ),
                             "createdAt": now,
                         }
                     )
-                persisted_decisions.append(
-                    {
-                        "decisionId": f"decision-{uuid4()}",
-                        "messageId": response_message_id,
-                        "type": decision_type.value,
-                        "policyDecision": creator_decision_document.get("policyDecision"),
-                        "createdAt": now,
-                    }
-                )
+                    response_message = a2a_task.status.message
+                    try:
+                        creator_decision_document = first_part_data(response_message)
+                    except CreatorA2AClientError as exc:
+                        raise _problem(
+                            status.HTTP_409_CONFLICT,
+                            "INVALID_STATE_TRANSITION",
+                            f"Creator A2A counter response is invalid: {exc}",
+                        ) from exc
+                    decision_type = _decision_type_from_document(creator_decision_document)
+                    response_message_id = (
+                        response_message.message_id
+                        if response_message
+                        else f"message-{uuid4()}"
+                    )
+                    response_terms = creator_decision_document.get("terms")
+                    current_terms = (
+                        response_terms if isinstance(response_terms, dict) else current_terms
+                    )
+                    if response_message is not None:
+                        persisted_messages.append(
+                            {
+                                "messageId": response_message_id,
+                                "contextId": context_id,
+                                "taskId": task_id,
+                                "role": "ROLE_AGENT",
+                                "sequence": 4,
+                                "payload": creator_decision_document,
+                                "a2aMessage": response_message.model_dump(
+                                    by_alias=True,
+                                    mode="json",
+                                ),
+                                "createdAt": now,
+                            }
+                        )
+                    persisted_decisions.append(
+                        {
+                            "decisionId": f"decision-{uuid4()}",
+                            "messageId": response_message_id,
+                            "type": decision_type.value,
+                            "policyDecision": creator_decision_document.get("policyDecision"),
+                            "createdAt": now,
+                        }
+                    )
+                    if decision_type != NegotiationMessageType.COUNTER:
+                        final_brand_decision = validate_brand_terms(
+                            promotion,
+                            creator,
+                            AgreementTerms.model_validate(current_terms),
+                            current_round=3,
+                        )
+                    else:
+                        counter_terms = AgreementTerms.model_validate(current_terms)
+                        final_brand_decision = validate_brand_terms(
+                            promotion,
+                            creator,
+                            counter_terms,
+                            current_round=3,
+                        )
+                    persisted_decisions.append(
+                        {
+                            "decisionId": f"decision-{uuid4()}",
+                            "messageId": response_message_id,
+                            "type": "BRAND_POLICY_EVALUATION",
+                            "policyDecision": final_brand_decision.model_dump(
+                                by_alias=True,
+                                mode="json",
+                            ),
+                            "createdAt": now,
+                        }
+                    )
+                if decision_type == NegotiationMessageType.COUNTER and final_brand_decision.allowed:
+                    counter_terms = AgreementTerms.model_validate(current_terms)
+                    changed_fields_value = creator_decision_document.get("changedFields")
+                    changed_fields = (
+                        [item for item in changed_fields_value if isinstance(item, str)]
+                        if isinstance(changed_fields_value, list)
+                        else []
+                    )
+                    accept_payload = NegotiationPayload(
+                        type=NegotiationMessageType.ACCEPT,
+                        round=3 if len(persisted_messages) >= 4 else 2,
+                        promotion=promotion,
+                        terms=counter_terms,
+                        changedFields=changed_fields,
+                        rationale="Brand policy accepted Creator counteroffer.",
+                        display=_brand_negotiation_display(
+                            message_type=NegotiationMessageType.ACCEPT,
+                            terms=counter_terms,
+                            promotion=promotion,
+                            rationale="권한 범위 안이라 사람 승인 없이 최종 조건을 수락합니다.",
+                        ),
+                    )
+                    accept_message_id = f"message-{uuid4()}"
+                    accept_message = A2AMessage(
+                        messageId=accept_message_id,
+                        contextId=context_id,
+                        taskId=task_id,
+                        role=A2ARole.USER,
+                        parts=[
+                            A2APart(
+                                mediaType="application/json",
+                                data=accept_payload.model_dump(by_alias=True, mode="json"),
+                            )
+                        ],
+                    )
+                    try:
+                        a2a_task = _send_creator_a2a_task(
+                            settings=settings,
+                            base_url=creator_a2a_base_url,
+                            creator_agent_id=creator_agent_id,
+                            message=accept_message,
+                            context=creator_context,
+                        )
+                    except CreatorA2AClientError as exc:
+                        raise _problem(
+                            status.HTTP_502_BAD_GATEWAY,
+                            "A2A_CREATOR_AGENT_UNAVAILABLE",
+                            f"Creator A2A accept failed: {exc}",
+                        ) from exc
+                    persisted_messages.append(
+                        {
+                            "messageId": accept_message_id,
+                            "contextId": context_id,
+                            "taskId": task_id,
+                            "role": "ROLE_USER",
+                            "sequence": len(persisted_messages) + 1,
+                            "payload": accept_payload.model_dump(by_alias=True, mode="json"),
+                            "a2aMessage": accept_message.model_dump(by_alias=True, mode="json"),
+                            "createdAt": now,
+                        }
+                    )
+                    response_message = a2a_task.status.message
+                    try:
+                        creator_decision_document = first_part_data(response_message)
+                    except CreatorA2AClientError as exc:
+                        raise _problem(
+                            status.HTTP_409_CONFLICT,
+                            "INVALID_STATE_TRANSITION",
+                            f"Creator A2A final response is invalid: {exc}",
+                        ) from exc
+                    decision_type = _decision_type_from_document(creator_decision_document)
+                    response_message_id = (
+                        response_message.message_id if response_message else f"message-{uuid4()}"
+                    )
+                    response_terms = creator_decision_document.get("terms")
+                    current_terms = (
+                        response_terms if isinstance(response_terms, dict) else current_terms
+                    )
+                    if response_message is not None:
+                        persisted_messages.append(
+                            {
+                                "messageId": response_message_id,
+                                "contextId": context_id,
+                                "taskId": task_id,
+                                "role": "ROLE_AGENT",
+                                "sequence": len(persisted_messages) + 1,
+                                "payload": creator_decision_document,
+                                "a2aMessage": response_message.model_dump(
+                                    by_alias=True,
+                                    mode="json",
+                                ),
+                                "createdAt": now,
+                            }
+                        )
+                    persisted_decisions.append(
+                        {
+                            "decisionId": f"decision-{uuid4()}",
+                            "messageId": response_message_id,
+                            "type": decision_type.value,
+                            "policyDecision": creator_decision_document.get("policyDecision"),
+                            "createdAt": now,
+                        }
+                    )
         negotiation_status = _negotiation_status(decision_type)
         artifact = a2a_task.artifacts[0] if a2a_task.artifacts else None
         artifact_id = artifact.artifact_id if artifact else f"artifact-{uuid4()}"
@@ -2147,7 +2290,7 @@ def build_api_router(
             "contextId": context_id,
             "taskId": task_id,
             "status": negotiation_status,
-            "currentRound": 2 if len(persisted_messages) >= 3 else 1,
+            "currentRound": _current_negotiation_round(persisted_messages),
             "maxRounds": promotion.autonomy.max_negotiation_rounds,
             "currentTerms": current_terms,
             "initialAmountUsdc": terms.compensation.base_amount_usdc,
@@ -3466,6 +3609,88 @@ def _promotion_initial_offer_usdc(promotion: dict[str, object]) -> int | None:
     if isinstance(initial_offer, int) and initial_offer > 0:
         return initial_offer
     return None
+
+
+def _brand_bridge_counter_terms(
+    initial_terms: AgreementTerms,
+    creator_counter_terms: AgreementTerms,
+) -> AgreementTerms | None:
+    initial_amount = initial_terms.compensation.base_amount_usdc
+    counter_amount = creator_counter_terms.compensation.base_amount_usdc
+    spread = counter_amount - initial_amount
+    if spread < 40:
+        return None
+    next_amount = initial_amount + max(20, spread // 2)
+    if next_amount >= counter_amount:
+        return None
+    bridge = creator_counter_terms.model_copy(deep=True)
+    bridge.compensation.base_amount_usdc = next_amount
+    return bridge
+
+
+def _brand_negotiation_display(
+    *,
+    message_type: NegotiationMessageType,
+    terms: AgreementTerms,
+    promotion: Promotion,
+    rationale: str,
+) -> dict[str, object]:
+    amount = terms.compensation.base_amount_usdc
+    deliverables = [
+        {
+            "format": item.format,
+            "count": item.count,
+            "deadline": item.post_window.end.isoformat(),
+        }
+        for item in terms.deliverables
+    ]
+    if message_type == NegotiationMessageType.OFFER:
+        headline = f"{amount} USDC"
+        message = f"{promotion.title} 협업을 {amount} USDC 조건으로 시작합니다."
+    elif message_type == NegotiationMessageType.COUNTER:
+        headline = f"{amount} USDC 재제안"
+        message = f"산출물과 사용권은 유지하고 보상만 {amount} USDC로 다시 제안합니다."
+    elif message_type == NegotiationMessageType.ACCEPT:
+        headline = f"{amount} USDC 체결"
+        message = f"공개 조건이 Brand Agent 정책 안에 있어 {amount} USDC로 수락합니다."
+    else:
+        headline = str(message_type.value)
+        message = rationale
+    return {
+        "agentLabel": promotion.brand_agent_id,
+        "headline": headline,
+        "message": message,
+        "rationale": rationale,
+        "termsSummary": {
+            "amountUsdc": amount,
+            "deliverables": deliverables,
+            "usageRights": terms.usage_rights.value,
+            "milestones": [
+                {
+                    "id": milestone.id,
+                    "trigger": milestone.trigger,
+                    "releasePct": milestone.release_pct,
+                }
+                for milestone in terms.milestones
+            ],
+        },
+        "policySummary": {
+            "allowed": True,
+            "publicReason": "사용자 승인 없이 처리 가능한 공개 조건 범위입니다.",
+        },
+    }
+
+
+def _current_negotiation_round(messages: list[dict[str, object]]) -> int:
+    rounds: list[int] = []
+    for message in messages:
+        payload = message.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        value = payload.get("round")
+        if isinstance(value, int):
+            rounds.append(value)
+    return max(rounds) if rounds else 1
 
 
 def _terms_base_amount_usdc(terms: dict[str, object]) -> int | None:

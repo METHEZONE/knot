@@ -5,30 +5,50 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { extractProduct } from "@/product/setupStore";
+import { ProductApiClient, type AnalysisJob } from "@/product/apiClient";
 
 const DRAFT_KEY = "knot.draft.product";
 
+type ProductDraft = {
+  analysisId: string;
+  productUrl: string;
+  productName: string;
+  priceKrw: number | null;
+  category: string;
+  summary: string;
+  provider: string;
+  fallbackReason: string | null;
+};
+
 export function BrandProduct() {
   const router = useRouter();
-  const [url, setUrl] = useState("https://demo-skincare.example.com/spf-daily");
+  const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [found, setFound] = useState<ReturnType<typeof extractProduct> | null>(null);
+  const [found, setFound] = useState<ProductDraft | null>(null);
   const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const extract = () => {
+  const extract = async () => {
+    if (!url.trim()) return;
     setBusy(true);
-    window.setTimeout(() => {
-      const p = extractProduct(url);
-      setFound(p);
-      setName(p.productName);
+    setError(null);
+    try {
+      const analysis = await new ProductApiClient().analyzeProduct(
+        url.trim(),
+        stableKey("brand-product-analysis", url.trim()),
+      );
+      const draft = productDraftFromAnalysis(analysis);
+      setFound(draft);
+      setName(draft.productName);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
       setBusy(false);
-    }, 1200);
+    }
   };
 
   const next = () => {
     if (!found) return;
-    // 무드 화면에서 마무리하므로 여기서는 초안만 넘긴다.
     window.sessionStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ ...found, productName: name, productUrl: url }),
@@ -54,12 +74,13 @@ export function BrandProduct() {
         <button
           type="button"
           onClick={extract}
-          disabled={busy}
+          disabled={busy || !url.trim()}
           className="sketch-pill bg-accent px-5 py-3 text-background disabled:opacity-50"
         >
           {busy ? "읽는 중…" : "읽어오기"}
         </button>
       </div>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
 
       {found ? (
         <motion.div
@@ -78,7 +99,9 @@ export function BrandProduct() {
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <div className="text-xs text-muted">가격</div>
-              <div className="font-mono text-lg">{found.priceKrw.toLocaleString()}원</div>
+              <div className="font-mono text-lg">
+                {found.priceKrw === null ? "확인 필요" : `${found.priceKrw.toLocaleString()}원`}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted">카테고리</div>
@@ -87,7 +110,8 @@ export function BrandProduct() {
           </div>
           <p className="mt-3 text-sm text-muted">{found.summary}</p>
           <p className="mt-3 text-xs text-muted">
-            안 고쳐도 그대로 넘어갈 수 있어요.
+            {found.provider}
+            {found.fallbackReason ? ` · ${found.fallbackReason}` : ""}
           </p>
           <button
             type="button"
@@ -100,4 +124,49 @@ export function BrandProduct() {
       ) : null}
     </div>
   );
+}
+
+function productDraftFromAnalysis(analysis: AnalysisJob): ProductDraft {
+  const draft = analysis.draft;
+  const product = asRecord(draft.product);
+  return {
+    analysisId: analysis.analysisId,
+    productUrl: analysis.sourceUrl,
+    productName: stringField(product.name) || "제품명 확인 필요",
+    priceKrw: priceField(product.price),
+    category: stringField(product.category) || "category-required",
+    summary: stringField(product.summary) || "요약 확인 필요",
+    provider: analysis.provider,
+    fallbackReason: analysis.fallbackReason,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringField(value: unknown): string | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  return typeof fieldValue === "string" && fieldValue.trim() ? fieldValue : null;
+}
+
+function priceField(value: unknown): number | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) return fieldValue;
+  if (typeof fieldValue !== "string") return null;
+  const numeric = Number(fieldValue.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function stableKey(prefix: string, ...parts: string[]) {
+  let hash = 0x811c9dc5;
+  for (const part of parts.join("|")) {
+    hash ^= part.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${prefix}-${(hash >>> 0).toString(16)}`;
 }

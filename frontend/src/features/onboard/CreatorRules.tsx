@@ -63,7 +63,26 @@ function CreatorRulesForm({
     setSaving(true);
     setError(null);
     try {
-      await new ProductApiClient().createMyCreatorProfile(
+      const client = new ProductApiClient();
+      const creatorWithAnalysis = creator as unknown as { analysisId?: unknown };
+      const analysisId =
+        typeof creatorWithAnalysis.analysisId === "string"
+          ? creatorWithAnalysis.analysisId
+          : null;
+      if (analysisId) {
+        await client.confirmAnalysis(
+          analysisId,
+          {
+            confirmedFields: ["handle", "categoryKeys", "formatKeys"],
+            edits: {
+              minimumUsdc: min,
+              blockedDomains: blocked.map((item) => BLOCKED_CATEGORY_LABEL[item]),
+            },
+          },
+          stableKey("creator-analysis-confirm", analysisId, creator.handle),
+        );
+      }
+      await client.createMyCreatorProfile(
         {
           creatorName: creator.handle,
           snsUrl: `https://instagram.com/${creator.handle.replace(/^@/, "")}`,
@@ -75,6 +94,7 @@ function CreatorRulesForm({
         },
         stableKey("creator-profile", creator.handle),
       );
+      await client.publishCreatorAgent();
       writeBoard({
         creator: nextCreator,
         evidenceUrl: null,

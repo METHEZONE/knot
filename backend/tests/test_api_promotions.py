@@ -604,7 +604,7 @@ def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
     assert start_response.status_code == 201, start_response.text
     body = start_response.json()["data"]
     assert body["negotiation"]["status"] == "AGREED"
-    assert body["negotiation"]["currentRound"] == 2
+    assert body["negotiation"]["currentRound"] == 3
     assert body["agreement"]["terms"]["compensation"]["baseAmountUsdc"] == 650
     messages = client.get(
         f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
@@ -612,13 +612,16 @@ def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
     assert [message["payload"]["type"] for message in messages] == [
         "OFFER",
         "COUNTER",
+        "COUNTER",
+        "COUNTER",
         "ACCEPT",
         "ACCEPT",
     ]
     assert [
         message["payload"]["terms"]["compensation"]["baseAmountUsdc"]
         for message in messages
-    ] == [300, 650, 650, 650]
+    ] == [300, 650, 475, 650, 650, 650]
+    assert all(isinstance(message["payload"].get("display"), dict) for message in messages)
 
 
 def test_agreement_document_rejects_artifact_terms_hash_mismatch() -> None:

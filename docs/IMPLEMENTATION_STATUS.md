@@ -136,3 +136,26 @@ Updated: 2026-08-02
   with image tag `97a4e76`; the first `knot-web` build failed on stale package-lock
   metadata and Linux optional peer resolution. Frontend Docker install now uses
   `npm ci --legacy-peer-deps` while preserving lockfile-based installs.
+
+## 2026-08-03 Real Onboarding And Richer A2A Negotiation
+
+### Changed
+
+- Brand and Creator onboarding no longer call frontend deterministic fixture helpers
+  (`extractProduct`, `lookupInstagram`) for product/profile analysis.
+- Brand product onboarding now calls `/api/v1/analyses/product`, shows unknown fields as
+  user-confirmable values, and confirms the analysis before creating the Brand profile.
+- Creator connect onboarding now calls `/api/v1/analyses/creator-profile`, avoids
+  fabricated follower/view metrics, confirms the analysis, creates the Creator profile,
+  and publishes the Creator Agent so matching can discover it.
+- A2A negotiation payloads now include a role-safe `display` projection with public
+  message text, term summary, and public policy summary.
+- When a Creator counteroffer is within Brand policy, Brand Agent can send one bridge
+  counteroffer before final acceptance, producing a multi-turn A2A transcript instead
+  of a single counter/accept jump.
+
+### Verification
+
+- `/Users/yewonchoi/Desktop/knot/.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_promotions.py -q`:
+  40 passed, 1 skipped.
+- `cd frontend && npm run typecheck`: passed.
