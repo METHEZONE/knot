@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 from solders.pubkey import Pubkey
@@ -22,6 +23,14 @@ def validate_solana_pubkey(value: str) -> str:
     except ValueError as exc:
         raise ValueError("walletAddress must be a valid Solana public key") from exc
     return normalized
+
+
+def normalize_public_url(value: str) -> str:
+    normalized = value.strip()
+    parsed = urlparse(normalized)
+    if parsed.scheme:
+        return normalized
+    return f"https://{normalized.lstrip('/')}"
 
 
 class UserBootstrapRequest(DomainModel):
@@ -345,9 +354,10 @@ class ProductAnalysisRequest(DomainModel):
     @field_validator("source_url")
     @classmethod
     def validate_source_url(cls, value: str) -> str:
-        if not value.startswith("https://"):
+        normalized = normalize_public_url(value)
+        if not normalized.startswith("https://"):
             raise ValueError("sourceUrl must use https")
-        return value
+        return normalized
 
 
 class CreatorProfileAnalysisRequest(DomainModel):
@@ -356,9 +366,10 @@ class CreatorProfileAnalysisRequest(DomainModel):
     @field_validator("source_url")
     @classmethod
     def validate_source_url(cls, value: str) -> str:
-        if not value.startswith("https://"):
+        normalized = normalize_public_url(value)
+        if not normalized.startswith("https://"):
             raise ValueError("sourceUrl must use https")
-        return value
+        return normalized
 
 
 class BrandSourceAnalysisRequest(DomainModel):
@@ -370,7 +381,7 @@ class BrandSourceAnalysisRequest(DomainModel):
         value = self.product_url or self.website_url
         if not value:
             raise ValueError("productUrl or websiteUrl is required")
-        return value
+        return normalize_public_url(value)
 
 
 class AnalysisConfirmRequest(DomainModel):

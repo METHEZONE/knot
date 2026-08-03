@@ -5030,6 +5030,10 @@ def _deterministic_creator_profile_draft(
         "fallbackReason": fallback_reason,
         "displayName": _field(handle.removeprefix("@"), source="URL_PATH", confidence=0.45),
         "handle": _field(handle, source="URL_PATH", confidence=0.75),
+        "followerCount": _field(None, source="UNKNOWN", confidence=0.0),
+        "averageViews": _field(None, source="UNKNOWN", confidence=0.0),
+        "engagementRate": _field(None, source="UNKNOWN", confidence=0.0),
+        "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
         "categoryKeys": [],
         "formatKeys": [],
         "audienceTags": [],
@@ -5227,6 +5231,10 @@ def _gemini_creator_profile_draft(
         "outputSchema": {
             "displayName": {"value": "string|null", "confidence": "number"},
             "handle": {"value": "string|null", "confidence": "number"},
+            "followerCount": {"value": "integer|null", "confidence": "number"},
+            "averageViews": {"value": "integer|null", "confidence": "number"},
+            "engagementRate": {"value": "number|null", "confidence": "number"},
+            "reelShare": {"value": "integer|null", "confidence": "number"},
             "categoryKeys": ["string"],
             "formatKeys": ["string"],
             "audienceTags": ["string"],
@@ -5325,6 +5333,26 @@ def _normalize_gemini_creator_draft(
         "fallbackReason": None,
         "displayName": _field(display_name, source="GEMINI_PAGE_ANALYSIS", confidence=0.86),
         "handle": _field(handle, source="GEMINI_PAGE_ANALYSIS", confidence=0.9),
+        "followerCount": _field(
+            _positive_int_or_none(_data_field_value(data.get("followerCount"))),
+            source="GEMINI_PAGE_ANALYSIS",
+            confidence=0.65,
+        ),
+        "averageViews": _field(
+            _positive_int_or_none(_data_field_value(data.get("averageViews"))),
+            source="GEMINI_PAGE_ANALYSIS",
+            confidence=0.55,
+        ),
+        "engagementRate": _field(
+            _ratio_or_none(_data_field_value(data.get("engagementRate"))),
+            source="GEMINI_PAGE_ANALYSIS",
+            confidence=0.45,
+        ),
+        "reelShare": _field(
+            _percent_int_or_none(_data_field_value(data.get("reelShare"))),
+            source="GEMINI_PAGE_ANALYSIS",
+            confidence=0.45,
+        ),
         "categoryKeys": _string_list(data.get("categoryKeys")),
         "formatKeys": _string_list(data.get("formatKeys")),
         "audienceTags": _string_list(data.get("audienceTags")),
@@ -5404,6 +5432,7 @@ def _secure_fetch_creator_profile_draft(
     display_name = (fetched.title or handle.removeprefix("@")).split("|")[0].strip()
     summary = fetched.description or fetched.text[:220] or "공개 프로필 내용을 읽었습니다."
     tags = _keyword_hits(f"{display_name} {summary} {fetched.text[:1200]}")
+    metrics_text = f"{fetched.title or ''} {fetched.description or ''} {fetched.text[:4000]}"
     draft = {
         "schemaVersion": "knot.creator-profile.v1",
         "sourceUrl": source_url,
@@ -5412,6 +5441,26 @@ def _secure_fetch_creator_profile_draft(
         "fallbackReason": fallback_reason,
         "displayName": _field(display_name[:80], source="SOURCE_TITLE", confidence=0.72),
         "handle": _field(handle, source="URL_PATH", confidence=0.82),
+        "followerCount": _field(
+            _extract_creator_count(metrics_text, ["followers", "follower", "팔로워"]),
+            source="SOURCE_TEXT",
+            confidence=0.58,
+        ),
+        "averageViews": _field(
+            _extract_creator_count(metrics_text, ["views", "view", "조회", "조회수"]),
+            source="SOURCE_TEXT",
+            confidence=0.42,
+        ),
+        "engagementRate": _field(
+            _extract_percent_near(metrics_text, ["engagement", "참여율"]),
+            source="SOURCE_TEXT",
+            confidence=0.35,
+        ),
+        "reelShare": _field(
+            _extract_percent_near(metrics_text, ["reels", "reel", "릴스"]),
+            source="SOURCE_TEXT",
+            confidence=0.35,
+        ),
         "categoryKeys": [_infer_category(f"{display_name} {summary} {fetched.text[:1200]}")],
         "formatKeys": [],
         "audienceTags": tags,
@@ -5481,6 +5530,34 @@ def _price_value(value: object) -> int | float | None:
     return None
 
 
+def _positive_int_or_none(value: object) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value > 0:
+        return int(value)
+    if isinstance(value, str):
+        parsed = _parse_compact_number(value)
+        return parsed if parsed and parsed > 0 else None
+    return None
+
+
+def _ratio_or_none(value: object) -> float | None:
+    if isinstance(value, int | float) and value > 0:
+        return float(value / 100 if value > 1 else value)
+    if isinstance(value, str):
+        percent = _extract_percent_near(value, [""])
+        return float(percent / 100) if percent is not None else None
+    return None
+
+
+def _percent_int_or_none(value: object) -> int | None:
+    if isinstance(value, int | float) and 0 < value <= 100:
+        return int(value)
+    if isinstance(value, str):
+        return _extract_percent_near(value, [""])
+    return None
+
+
 def _extract_price(text: str) -> int | None:
     patterns = [
         r"(?:₩|KRW\s*)\s*([0-9][0-9,]{2,})",
@@ -5495,6 +5572,63 @@ def _extract_price(text: str) -> int | None:
         except ValueError:
             continue
     return None
+
+
+def _extract_creator_count(text: str, labels: list[str]) -> int | None:
+    compact = _compact_text(text)
+    label_pattern = "|".join(re.escape(label) for label in labels if label)
+    patterns = [
+        rf"([0-9][0-9,.]*)\s*(k|m|만|천)?\s*(?:{label_pattern})",
+        rf"(?:{label_pattern})\s*([0-9][0-9,.]*)\s*(k|m|만|천)?",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, compact, flags=re.IGNORECASE)
+        if not match:
+            continue
+        parsed = _parse_compact_number("".join(part or "" for part in match.groups()))
+        if parsed and parsed > 0:
+            return parsed
+    return None
+
+
+def _extract_percent_near(text: str, labels: list[str]) -> int | None:
+    compact = _compact_text(text)
+    label_pattern = "|".join(re.escape(label) for label in labels if label)
+    percent_pattern = r"([0-9](?:[0-9.]{0,4})?)\s*%"
+    if label_pattern:
+        patterns = [
+            rf"{percent_pattern}\s*(?:{label_pattern})",
+            rf"(?:{label_pattern}).{{0,30}}?{percent_pattern}",
+        ]
+    else:
+        patterns = [percent_pattern]
+    for pattern in patterns:
+        match = re.search(pattern, compact, flags=re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            parsed = float(match.group(1))
+        except ValueError:
+            continue
+        if 0 < parsed <= 100:
+            return int(round(parsed))
+    return None
+
+
+def _parse_compact_number(value: str) -> int | None:
+    normalized = value.strip().lower().replace(",", "")
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)(k|m|만|천)?", normalized)
+    if not match:
+        return None
+    amount = float(match.group(1))
+    suffix = match.group(2)
+    multiplier = {
+        "k": 1_000,
+        "m": 1_000_000,
+        "천": 1_000,
+        "만": 10_000,
+    }.get(suffix, 1)
+    return int(amount * multiplier)
 
 
 def _infer_category(text: str) -> str:

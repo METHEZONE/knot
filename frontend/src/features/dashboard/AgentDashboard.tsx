@@ -14,8 +14,6 @@ import {
   ProductApiError,
   type CurrentUserContext,
 } from "@/product/apiClient";
-import { useBoard } from "@/product/dealBoard";
-import type { BrandSetup } from "@/product/setupStore";
 
 type Role = "brand" | "creator";
 
@@ -42,7 +40,6 @@ export function AgentDashboard({
 }
 
 function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
-  const { board } = useBoard();
   const client = useMemo(() => new ProductApiClient(), []);
   const [dashboard, setDashboard] = useState<LoadState<BrandDashboard>>(emptyLoad);
   const [agreements, setAgreements] = useState<Array<ApiAgreement & Record<string, unknown>>>([]);
@@ -73,7 +70,6 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
     };
   }, [client]);
 
-  const product = board.brand;
   const totalContracted = agreements.reduce(
     (sum, agreement) => sum + (agreement.terms?.compensation?.baseAmountUsdc ?? 0),
     0,
@@ -107,8 +103,8 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
 
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
           <SectionHeader eyebrow="에이전트 관리" title="협찬 제안하기" />
-          {product ? (
-            <BrandProjectReview product={product} />
+          {promotions.length ? (
+            <BrandProjectReview promotion={promotions[0]} />
           ) : (
             <p className="text-sm text-muted">
               새 프로모션은 제품 URL을 읽고 무드를 추출한 뒤, 검토 화면에서 협상을 시작합니다.
@@ -325,27 +321,33 @@ function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
-function BrandProjectReview({ product }: { product: BrandSetup }) {
+function BrandProjectReview({ promotion }: { promotion: ApiPromotion }) {
+  const prohibitedClaims = promotion.constraints?.prohibitedClaims ?? [];
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
       <div>
-        <p className="text-3xl">{product.productName}</p>
-        <p className="mt-2 text-sm text-muted">{product.summary}</p>
+        <p className="text-3xl">{promotion.title}</p>
+        <p className="mt-2 text-sm text-muted">{promotion.objective}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {[product.category, ...product.moodTags].filter(Boolean).map((item) => (
-            <span
-              key={item}
-              className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm"
-            >
-              {item}
-            </span>
-          ))}
+          {[promotion.category, ...promotion.targetAudience, ...prohibitedClaims]
+            .filter(Boolean)
+            .slice(0, 6)
+            .map((item) => (
+              <span
+                key={item}
+                className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm"
+              >
+                {item}
+              </span>
+            ))}
         </div>
       </div>
       <div className="sketch ink min-w-44 border border-border-subtle bg-surface p-4">
         <p className="text-xs text-muted">딜당 한도</p>
-        <Money usdc={product.maxPerDealUsdc} size="lg" />
-        <p className="mt-2 text-xs text-muted">총 {product.totalUsdc.toLocaleString()} USDC 안에서 협상</p>
+        <Money usdc={promotion.budget.maxPerCreatorUsdc} size="lg" />
+        <p className="mt-2 text-xs text-muted">
+          총 {promotion.budget.totalUsdc.toLocaleString()} USDC 안에서 협상
+        </p>
       </div>
     </div>
   );

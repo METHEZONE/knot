@@ -4,6 +4,7 @@ import json
 from fastapi.testclient import TestClient
 
 from apps.api.main import create_app
+from apps.api.repository_factory import build_repository
 from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
@@ -37,6 +38,18 @@ def emulator_token(uid: str, email: str) -> str:
 def _b64(payload: dict[str, object]) -> str:
     encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     return encoded.rstrip("=")
+
+
+def test_memory_repository_does_not_seed_demo_data_by_default() -> None:
+    repository = build_repository(Settings(repository_backend="memory"))
+
+    assert repository.get_raw_document(FirestorePaths.user("user-brand-1")) is None
+
+
+def test_memory_repository_seeds_demo_data_when_explicitly_enabled() -> None:
+    repository = build_repository(Settings(repository_backend="memory", memory_seed_demo=True))
+
+    assert repository.get_raw_document(FirestorePaths.user("user-brand-1")) is not None
 
 
 def test_get_me_rejects_missing_or_invalid_token() -> None:

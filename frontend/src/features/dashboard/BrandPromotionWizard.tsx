@@ -55,9 +55,10 @@ export function BrandPromotionWizard() {
     setBusy(true);
     setError(null);
     try {
+      const normalizedUrl = normalizeSourceUrl(productUrl);
       const analysis = await client.analyzeProduct(
-        productUrl.trim(),
-        stableKey("promotion-analysis", productUrl.trim()),
+        normalizedUrl,
+        stableKey("promotion-analysis", normalizedUrl),
       );
       setDraft(draftFromAnalysis(analysis));
       setStep("review");
@@ -129,7 +130,7 @@ export function BrandPromotionWizard() {
               <input
                 value={productUrl}
                 onChange={(event) => setProductUrl(event.target.value)}
-                placeholder="https://..."
+                placeholder="thezonebio.com/products/spf 또는 https://..."
                 className="sketch-alt ink min-w-0 flex-1 border border-border-subtle bg-surface-raised px-4 py-3 outline-none"
               />
               <button
@@ -178,6 +179,7 @@ export function BrandPromotionWizard() {
                   <textarea
                     value={draft.workBrief}
                     onChange={(event) => setDraft({ ...draft, workBrief: event.target.value })}
+                    placeholder="예: 릴스 1개에서 제품 사용 장면과 사용감을 보여주고, 설명란에 브랜드명과 필수 해시태그를 넣기"
                     className="sketch-alt ink mt-2 min-h-20 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
                   />
                 </label>
@@ -359,6 +361,12 @@ function stableKey(prefix: string, ...parts: string[]) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `${prefix}-${(hash >>> 0).toString(16)}`;
+}
+
+function normalizeSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^\/+/, "")}`;
 }
 
 function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {

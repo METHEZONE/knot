@@ -34,6 +34,43 @@ Updated: 2026-08-03
 - Local analysis API verified with `https://example.com`: provider `vertex-gemini`,
   model `gemini-2.5-flash`, fallback `null`.
 
+## Demo Data Cleanup and Public Metric Parsing
+
+### Changed
+
+- Memory repository no longer seeds demo fixtures unless `KNOT_MEMORY_SEED_DEMO=1` is
+  explicitly set. This prevents new local signup accounts from seeing old fixture
+  promotions on their dashboard.
+- Local demo account setup now uses the real Auth Emulator and Product API profile
+  endpoints to prepare `t1@knot.com` and `c1@knot.com`; it does not load promotion
+  fixtures by default.
+- Brand dashboard Agent management now reads the current user's API promotions only,
+  not stale `sessionStorage` onboarding state.
+- Product and Creator analysis requests accept bare domains such as
+  `thezonebio.com/products/spf` and normalize them to `https://...` before validation.
+- Creator analysis draft now carries public metric fields when they are actually
+  present in fetched public page text: `followerCount`, `averageViews`,
+  `engagementRate`, and `reelShare`.
+- Creator onboarding now displays those metric fields from the analysis result instead
+  of hardcoding all values to unknown.
+- Brand promotion work-brief input now includes an explicit placeholder example.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/repository_factory.py apps/api/routes.py apps/api/schemas.py libs/settings/config.py tests/test_api_auth.py tests/test_api_onboarding.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_auth.py tests/test_api_onboarding.py -q`: 20 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local API verification after restart:
+  - `t1@knot.com / 000000` has a clean API-created Brand profile and
+    `GET /api/v1/brand/promotions` returned 0 promotions.
+  - Bare `example.com` product analysis normalized to `https://example.com` and returned
+    provider `vertex-gemini`.
+  - `instagram.com/ye__5o` Creator analysis returned provider `vertex-gemini` and
+    extracted `followerCount=416`; average views, engagement rate, and reel share stayed
+    unknown because the public response did not include those values.
+
 ## Payment Rails Refactor
 
 ### Changed

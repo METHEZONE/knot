@@ -34,9 +34,10 @@ export function BrandProduct() {
     setBusy(true);
     setError(null);
     try {
+      const normalizedUrl = normalizeSourceUrl(url);
       const analysis = await new ProductApiClient().analyzeProduct(
-        url.trim(),
-        stableKey("brand-product-analysis", url.trim()),
+        normalizedUrl,
+        stableKey("brand-product-analysis", normalizedUrl),
       );
       const draft = productDraftFromAnalysis(analysis);
       setFound(draft);
@@ -52,7 +53,7 @@ export function BrandProduct() {
     if (!found) return;
     window.sessionStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ ...found, productName: name, productUrl: url }),
+      JSON.stringify({ ...found, productName: name, productUrl: normalizeSourceUrl(url) }),
     );
     router.push("/brand/mood");
   };
@@ -169,4 +170,10 @@ function stableKey(prefix: string, ...parts: string[]) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `${prefix}-${(hash >>> 0).toString(16)}`;
+}
+
+function normalizeSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^\/+/, "")}`;
 }

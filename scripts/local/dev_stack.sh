@@ -72,8 +72,7 @@ if curl -fsS -m 1 http://127.0.0.1:9099 >/dev/null 2>&1; then
   echo "▸ demo auth accounts"
   "$HERE/demo_login.sh" user-brand-1 >/dev/null
   "$HERE/demo_login.sh" user-creator-1 >/dev/null
-  echo "  ✅ t1@knot.com / 000000"
-  echo "  ✅ c1@knot.com / 000000"
+  python3 "$HERE/seed_demo_accounts.py"
 fi
 
 echo

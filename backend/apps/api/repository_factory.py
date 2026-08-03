@@ -1,6 +1,6 @@
-from importlib import import_module
 import json
 import os
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
@@ -17,7 +17,8 @@ def build_repository(settings: Settings) -> KnotRepository:
 
     memory_store = InMemoryDocumentStore()
     repository = KnotRepository(memory_store)
-    seed_demo_repository(repository)
+    if settings.memory_seed_demo:
+        seed_demo_repository(repository)
     _seed_extra_documents(repository)
     return repository
 

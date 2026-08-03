@@ -145,10 +145,10 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
     analysisId: analysis.analysisId,
     sourceUrl: analysis.sourceUrl,
     handle,
-    followers: 0,
-    avgViews: 0,
-    engagementRate: 0,
-    reelShare: 0,
+    followers: numberField(draft.followerCount) ?? 0,
+    avgViews: numberField(draft.averageViews) ?? 0,
+    engagementRate: ratioField(draft.engagementRate) ?? 0,
+    reelShare: numberField(draft.reelShare) ?? 0,
     toneKeywords: stringArray(draft.audienceTags).concat(stringArray(draft.proposedMoodIds)).slice(0, 3),
     capturedAt: new Date().toISOString().slice(0, 10),
     provider: analysis.provider,
@@ -158,7 +158,8 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
 
 function instagramUrlFromHandle(value: string): string {
   const trimmed = value.trim();
-  if (trimmed.startsWith("https://")) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.includes(".")) return `https://${trimmed.replace(/^\/+/, "")}`;
   const clean = trimmed.replace(/^@/, "").replace(/^\/+/, "");
   return `https://instagram.com/${clean}`;
 }
@@ -177,6 +178,23 @@ function stringField(value: unknown): string | null {
   const record = asRecord(value);
   const fieldValue = record.value;
   return typeof fieldValue === "string" && fieldValue.trim() ? fieldValue : null;
+}
+
+function numberField(value: unknown): number | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  if (typeof fieldValue === "number" && Number.isFinite(fieldValue) && fieldValue > 0) {
+    return fieldValue;
+  }
+  if (typeof fieldValue !== "string") return null;
+  const numeric = Number(fieldValue.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function ratioField(value: unknown): number | null {
+  const numeric = numberField(value);
+  if (numeric === null) return null;
+  return numeric > 1 ? numeric / 100 : numeric;
 }
 
 function stringArray(value: unknown): string[] {

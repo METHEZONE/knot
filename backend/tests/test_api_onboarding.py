@@ -163,6 +163,40 @@ def test_product_analysis_uses_secure_fetched_source_when_available(monkeypatch)
     assert analysis["draft"]["product"]["category"]["value"] == "beauty"
 
 
+def test_product_analysis_normalizes_bare_https_domain(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("brand-bare-url", "brand-bare-url@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "brand-bare-url-role"},
+        json={"role": "BRAND"},
+    )
+
+    def fetched_source_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="The Zone Bio SPF",
+                description="Daily SPF skincare product.",
+                text="SPF cream daily skincare.",
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_secure_fetch_source_page", fetched_source_page)
+
+    response = client.post(
+        "/api/v1/analyses/product",
+        headers={**headers, "Idempotency-Key": "brand-bare-url-product"},
+        json={"sourceUrl": "thezonebio.com/products/spf"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    assert analysis["sourceUrl"] == "https://thezonebio.com/products/spf"
+
+
 def test_creator_profile_analysis_and_confirmation_are_owner_scoped() -> None:
     client, _ = authed_client_and_repository()
     creator_headers = auth_headers("creator-analysis", "creator-analysis@example.com")
@@ -201,6 +235,44 @@ def test_creator_profile_analysis_and_confirmation_are_owner_scoped() -> None:
     assert forbidden.status_code == 403
     assert confirmed.status_code == 200
     assert confirmed.json()["data"]["analysis"]["status"] == "CONFIRMED"
+
+
+def test_creator_profile_analysis_extracts_public_metrics_when_present(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("creator-metrics", "creator-metrics@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-metrics-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def fetched_source_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="@ye__5o profile",
+                description="12.4K Followers, 평균 조회 8,200, 참여율 4.8%, 릴스 비중 65%",
+                text="12.4K followers and average views 8,200. Engagement 4.8%. Reels 65%.",
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_secure_fetch_source_page", fetched_source_page)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-metrics-analysis"},
+        json={"sourceUrl": "instagram.com/ye__5o"},
+    )
+
+    assert response.status_code == 202
+    draft = response.json()["data"]["analysis"]["draft"]
+    assert draft["sourceUrl"] == "https://instagram.com/ye__5o"
+    assert draft["followerCount"]["value"] == 12_400
+    assert draft["averageViews"]["value"] == 8_200
+    assert draft["engagementRate"]["value"] == 5
+    assert draft["reelShare"]["value"] == 65
 
 
 def test_analysis_rejects_unsafe_source_urls() -> None:
