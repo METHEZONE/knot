@@ -316,6 +316,28 @@ Updated: 2026-08-03
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
 
+## 2026-08-03 Promotion Detail UI Regression Fix
+
+### Changed
+
+- `/brand/promotions/[promotionId]` no longer renders the legacy
+  `ProductScreens.BrandPromotionDetailScreen`.
+- Promotion detail now uses the current dashboard visual language with three
+  top panels: Promotion conditions, Agent run state, and escrow settlement
+  summary.
+- The page fetches Agreement escrow bundles and shows contracted amount,
+  escrow total, released amount, remaining balance, funded status, and links to
+  the unified Agreement/Negotiation detail surface.
+- Promotion timeline rows now use the same Agent-run event wording used by the
+  dashboard instead of the old generic activity list.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local route bundle check for `/brand/promotions/test`: passed.
+
 ## 2026-08-03 Brand Signup Simplification And Promotion Real Inputs
 
 ### Changed
