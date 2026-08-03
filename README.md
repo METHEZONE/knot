@@ -2,9 +2,9 @@
 
 > Agents negotiate. Creators create. Solana settles.
 
-KNOT은 브랜드 에이전트와 크리에이터 에이전트가 협찬 조건을 협상하고, 합의된 작업이 검증되면 Solana devnet USDC 에스크로에서 자동 정산하는 Agent-native Creator Contracting & Settlement 프로덕트입니다.
+KNOT은 브랜드 에이전트와 크리에이터 에이전트가 협찬 조건을 협상하고, 합의된 작업이 검증되면 Solana USDC 에스크로에서 자동 정산하는 Agent-native Creator Contracting & Settlement 프로덕트입니다.
 
-[Live Demo](https://knot-web-7k3walthgq-uc.a.run.app) · [Pitch Deck PDF](docs/assets/pitch/knotpitch.pdf)
+[Pitch Deck PDF](docs/assets/pitch/knotpitch.pdf)
 
 ![KNOT product home](docs/assets/readme/01-product-home.png)
 
@@ -15,28 +15,11 @@ KNOT은 크리에이터 협찬을 DM, 스프레드시트, 수동 송금이 아�
 1. 브랜드가 제품 URL, 작업 조건, 예산 한도를 입력합니다.
 2. Brand Agent가 Creator 후보를 찾고 필요한 검증을 수행합니다.
 3. Brand Agent와 Creator Agent가 HTTP A2A 메시지로 가격, 납기, 작업 범위를 협상합니다.
-4. 합의가 생성되면 브랜드가 Phantom으로 devnet USDC를 에스크로에 예치합니다.
+4. 합의가 생성되면 브랜드가 Phantom으로 USDC를 에스크로에 예치합니다.
 5. 크리에이터가 콘텐츠 URL을 제출합니다.
 6. evidence 검증이 통과하면 정산 권한이 마일스톤을 릴리즈하고 Creator 지갑으로 USDC를 지급합니다.
 
 핵심은 "AI가 추천한다"가 아니라 "AI 에이전트가 사람의 서비스를 계약하고, 검증하고, 정산한다"입니다.
-
-## Demo
-
-| Role | Email | Password | Wallet |
-|---|---|---|---|
-| Brand | `t1@knot.com` | `000000` | Phantom 연결 후 예치 서명 |
-| Creator | `c1@knot.com` | `000000` | Phantom 연결 후 정산 수령 확인 |
-
-Demo network:
-
-| Item | Value |
-|---|---|
-| Solana cluster | `devnet` |
-| Escrow program | `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn` |
-| Devnet USDC mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
-
-README의 데모 계정은 발표용으로 준비된 계정입니다. 실제 예치와 정산은 연결된 Phantom 지갑 주소를 기준으로 실행되며, 고정된 개인키나 seed는 브라우저나 Firestore에 저장하지 않습니다.
 
 ## Product Screens
 
@@ -69,7 +52,19 @@ Creator 보상에는 pay.sh를 사용하지 않습니다. pay.sh는 에이전트
 - 크리에이터는 작업 완료 후 대금이 지연되는 것을 원하지 않습니다.
 - 양쪽 모두 가격, 납기, 사용권, 산출물 조건을 합의해야 합니다.
 
-KNOT은 합의 금액을 devnet USDC 에스크로에 잠그고, evidence 검증 후 마일스톤 단위로 정산합니다. 협상 메시지와 프로필은 오프체인에 저장하고, 자금 이동과 최종 증명만 온체인에 둡니다.
+KNOT은 합의 금액을 USDC 에스크로에 잠그고, evidence 검증 후 마일스톤 단위로 정산합니다. 협상 메시지와 프로필은 오프체인에 저장하고, 자금 이동과 최종 증명만 온체인에 둡니다.
+
+AI 에이전트는 법인이 아니기 때문에 은행 계좌나 카드를 직접 만들 수 없습니다. 에이전트가 유료 검증 API를 사고, 합의된 보상을 조건부로 지급하려면 프로그램이 통제할 수 있는 지갑과 자산이 필요합니다. KNOT이 Solana를 쓰는 이유는 web3라는 이름 때문이 아니라, 에이전트가 사람의 서비스를 계약하고 정산할 수 있는 실행 레이어가 필요하기 때문입니다.
+
+온체인에서 맡는 일은 세 가지로 제한합니다.
+
+| Layer | Why it exists |
+|---|---|
+| Agreement hash | A2A 협상 결과를 나중에 바꿔 말할 수 없게 만듭니다. |
+| USDC escrow | Brand 자금을 조건부로 잠그고, 검증 통과 후 Creator에게 지급합니다. |
+| Transaction proof | funding / release signature로 실제 자금 이동을 확인합니다. |
+
+Solana는 소액·고빈도 결제에 필요한 낮은 수수료와 빠른 확정을 제공합니다. USDC는 협상 금액과 정산 금액이 변동하지 않게 해 자동 정산을 가능하게 만듭니다.
 
 ## Stack
 
@@ -81,19 +76,25 @@ KNOT은 합의 금액을 devnet USDC 에스크로에 잠그고, evidence 검증 
 | Agent Runtime | Brand Agent, Creator Agent, HTTP A2A |
 | AI | Gemini / Vertex AI for analysis and verification rationale |
 | Agent Payment | pay.sh / x402 |
-| Web3 | Solana devnet, Anchor, USDC, Web3 Gateway |
+| Web3 | Solana, Anchor, USDC, Web3 Gateway |
 | Deployment | Google Cloud Run |
 
 ## Current Boundary
 
-KNOT MVP는 Solana devnet 전용입니다. mainnet 자산은 사용하지 않습니다.
+KNOT MVP는 Solana test network 전용입니다. mainnet 자산은 사용하지 않습니다.
 
-성공으로 표시되는 에스크로와 정산은 confirmed devnet signature가 있어야만 기록됩니다. 시뮬레이션 영수증, 가짜 Explorer 링크, mock payment success는 제품 경로에서 성공 처리하지 않습니다.
+성공으로 표시되는 에스크로와 정산은 confirmed network signature가 있어야만 기록됩니다. 시뮬레이션 영수증, 가짜 Explorer 링크, mock payment success는 제품 경로에서 성공 처리하지 않습니다.
 
 pay.sh는 Creator 보상 정산에 쓰지 않습니다. 배포 환경에서 pay.sh resource가 설정되지 않은 경우 Agent operational payment event는 `SKIPPED`로 기록되며, 이를 `PAID`처럼 표시하지 않습니다.
 
 ## Pitch
 
-발표용 피치 페이지는 `https://thezonebio.com/knotpitch` 기준으로 PDF 캡처했습니다.
+발표용 피치 PDF를 함께 포함했습니다.
 
 [Open generated PDF](docs/assets/pitch/knotpitch.pdf)
+
+추가 제출 문서:
+
+- [Pitch deck ready Korean version](docs/PITCH_DECK_READY_KO.md)
+- [Pitch coverage and feature shells](docs/PITCH_COVERAGE_AND_FEATURE_SHELLS.md)
+- [Blockchain narrative](docs/BLOCKCHAIN_NARRATIVE.md)
