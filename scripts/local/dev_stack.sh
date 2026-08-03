@@ -67,6 +67,15 @@ for probe in "product-api|http://127.0.0.1:18080/healthz" "creator-a2a|http://12
 done
 [[ $WITH_FE == 1 ]] && { wait_http http://127.0.0.1:3000 90 && echo "  ✅ frontend  http://127.0.0.1:3000" || echo "  ❌ frontend → $LOGS/frontend.log"; }
 
+if curl -fsS -m 1 http://127.0.0.1:9099 >/dev/null 2>&1; then
+  echo
+  echo "▸ demo auth accounts"
+  "$HERE/demo_login.sh" user-brand-1 >/dev/null
+  "$HERE/demo_login.sh" user-creator-1 >/dev/null
+  echo "  ✅ t1@knot.com / 000000"
+  echo "  ✅ c1@knot.com / 000000"
+fi
+
 echo
 echo "Auth 에뮬레이터 UI: http://127.0.0.1:4000   로그: $LOGS"
 echo "종료: Ctrl-C"

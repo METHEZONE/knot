@@ -46,6 +46,8 @@ class Settings(BaseModel):
     vertex_ai_location: str = "us-central1"
     gemini_mode: str = "off"
     gemini_model: str = "gemini-2.5-flash"
+    secure_fetch_enabled: bool = True
+    secure_fetch_timeout_seconds: float = 8.0
     paysh_mode: str = "sandbox"
     paysh_resource_id: str = "replace-me"
     paysh_timeout_seconds: int = 90
@@ -96,6 +98,8 @@ def get_settings(service_name: str | None = None) -> Settings:
         vertex_ai_location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
         gemini_mode=os.getenv("KNOT_GEMINI_MODE", "off"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        secure_fetch_enabled=_truthy_default_true(os.getenv("KNOT_SECURE_FETCH_ENABLED")),
+        secure_fetch_timeout_seconds=float(os.getenv("KNOT_SECURE_FETCH_TIMEOUT_SECONDS", "8")),
         paysh_mode=os.getenv("PAYSH_MODE", "sandbox"),
         paysh_resource_id=os.getenv("PAYSH_RESOURCE_ID", "replace-me"),
         paysh_timeout_seconds=int(os.getenv("PAYSH_TIMEOUT_SECONDS", "90")),

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
+import { analysisSourceLabel } from "@/features/onboard/analysisSourceLabel";
 import { ProductApiClient, ProductApiError, type AnalysisJob } from "@/product/apiClient";
 
 type WizardStep = "url" | "review" | "running";
@@ -170,8 +171,7 @@ export function BrandPromotionWizard() {
                 </label>
                 <p className="mt-3 text-sm text-muted">{draft.summary}</p>
                 <p className="mt-2 text-xs text-muted">
-                  {draft.provider}
-                  {draft.fallbackReason ? ` · ${draft.fallbackReason}` : ""}
+                  {analysisSourceLabel(draft.provider, draft.fallbackReason)}
                 </p>
                 <label className="mt-4 block text-sm text-muted">
                   해야 하는 작업

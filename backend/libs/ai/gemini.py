@@ -113,6 +113,10 @@ def creator_rationale(
     )
 
 
+def structured_analysis_json(*, settings: Settings, prompt: dict[str, object]) -> GenerationResult:
+    return _generate_json(settings=settings, prompt=prompt)
+
+
 def _fallback(
     settings: Settings,
     text: str,

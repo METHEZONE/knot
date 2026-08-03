@@ -1,6 +1,38 @@
 # Implementation Status
 
-Updated: 2026-08-02
+Updated: 2026-08-03
+
+## Real Onboarding Analysis and Local Demo Login
+
+### Changed
+
+- Product and Creator analysis jobs now run through the documented URL analysis path:
+  HTTPS URL validation, public DNS/private IP rejection, bounded server-side fetch,
+  HTML/meta text extraction, Gemini structured JSON when `KNOT_GEMINI_MODE=vertex`,
+  and explicit fallback reasons when fetch or Gemini fails.
+- The analysis API no longer stamps every result as
+  `secure_fetch_and_gemini_not_configured`; provider/model/fallback now reflect the
+  actual path used (`vertex-gemini`, `secure-fetch`, or `deterministic`).
+- Brand promotion creation and legacy onboarding review screens now show a Korean
+  source label instead of exposing internal fallback codes in the UI.
+- `scripts/local/dev_stack.sh` now recreates the Auth Emulator accounts
+  `t1@knot.com / 000000` and `c1@knot.com / 000000` after the emulator is ready, so
+  local memory seed users can be used without manual account setup.
+- Local `.env.local` was updated for this worktree to enable Vertex Gemini attempts
+  and secure fetch. This file remains untracked and must not be committed.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py libs/settings/config.py libs/ai/gemini.py tests/test_api_onboarding.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_onboarding.py tests/test_api_auth.py -q`: 16 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local Auth Emulator login verified:
+  - `t1@knot.com / 000000` → UID `user-brand-1`, role `BRAND`, completed onboarding.
+  - `c1@knot.com / 000000` → UID `user-creator-1`, role `CREATOR`, completed onboarding.
+- Local analysis API verified with `https://example.com`: provider `vertex-gemini`,
+  model `gemini-2.5-flash`, fallback `null`.
 
 ## Payment Rails Refactor
 

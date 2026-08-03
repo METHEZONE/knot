@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { analysisSourceLabel } from "@/features/onboard/analysisSourceLabel";
 import { type CreatorSetup } from "@/product/setupStore";
 import { readBoard, writeBoard } from "@/product/dealBoard";
 import { ProductApiClient, type AnalysisJob } from "@/product/apiClient";
@@ -112,8 +113,7 @@ export function CreatorConnect() {
           </div>
 
           <p className="mt-4 text-xs text-muted">
-            {found.provider}
-            {found.fallbackReason ? ` · ${found.fallbackReason}` : ""}
+            {analysisSourceLabel(found.provider, found.fallbackReason)}
           </p>
 
           <button

@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { analysisSourceLabel } from "@/features/onboard/analysisSourceLabel";
 import { ProductApiClient, type AnalysisJob } from "@/product/apiClient";
 
 const DRAFT_KEY = "knot.draft.product";
@@ -110,8 +111,7 @@ export function BrandProduct() {
           </div>
           <p className="mt-3 text-sm text-muted">{found.summary}</p>
           <p className="mt-3 text-xs text-muted">
-            {found.provider}
-            {found.fallbackReason ? ` · ${found.fallbackReason}` : ""}
+            {analysisSourceLabel(found.provider, found.fallbackReason)}
           </p>
           <button
             type="button"

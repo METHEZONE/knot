@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from apps.api import routes
 from apps.api.main import create_app
 from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
@@ -123,6 +124,43 @@ def test_authenticated_brand_product_analysis_persists_resume_state() -> None:
         repository.get_raw_document(FirestorePaths.analysis_job(analysis["analysisId"]))
         is not None
     )
+
+
+def test_product_analysis_uses_secure_fetched_source_when_available(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("brand-secure-fetch", "brand-secure-fetch@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "brand-secure-fetch-role"},
+        json={"role": "BRAND"},
+    )
+
+    def fetched_source_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="Daily SPF Moisturizer",
+                description="A daily skincare cream with SPF for a morning routine.",
+                text="Daily skincare routine cream SPF review ingredient texture.",
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_secure_fetch_source_page", fetched_source_page)
+
+    response = client.post(
+        "/api/v1/analyses/product",
+        headers={**headers, "Idempotency-Key": "brand-secure-fetch-product"},
+        json={"sourceUrl": "https://brand.example/products/spf"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    assert analysis["provider"] == "secure-fetch"
+    assert analysis["fallbackReason"] == "gemini_mode_off"
+    assert analysis["draft"]["product"]["name"]["value"] == "Daily SPF Moisturizer"
+    assert analysis["draft"]["product"]["category"]["value"] == "beauty"
 
 
 def test_creator_profile_analysis_and_confirmation_are_owner_scoped() -> None:
