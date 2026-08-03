@@ -30,10 +30,7 @@ export function CreatorConnect() {
     setError(null);
     try {
       const sourceUrl = instagramUrlFromHandle(handle);
-      const analysis = await new ProductApiClient().analyzeCreatorProfile(
-        sourceUrl,
-        stableKey("creator-profile-analysis", sourceUrl),
-      );
+      const analysis = await new ProductApiClient().analyzeCreatorProfile(sourceUrl);
       setFound(creatorDraftFromAnalysis(analysis));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -158,7 +155,7 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
 
 function instagramUrlFromHandle(value: string): string {
   const trimmed = value.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
   if (trimmed.includes(".")) return `https://${trimmed.replace(/^\/+/, "")}`;
   const clean = trimmed.replace(/^@/, "").replace(/^\/+/, "");
   return `https://instagram.com/${clean}`;
@@ -209,13 +206,4 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function unknownableNumber(value: number) {
   return value > 0 ? value.toLocaleString() : "확인 필요";
-}
-
-function stableKey(prefix: string, ...parts: string[]) {
-  let hash = 0x811c9dc5;
-  for (const part of parts.join("|")) {
-    hash ^= part.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `${prefix}-${(hash >>> 0).toString(16)}`;
 }

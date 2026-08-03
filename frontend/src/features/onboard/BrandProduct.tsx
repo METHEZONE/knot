@@ -35,10 +35,7 @@ export function BrandProduct() {
     setError(null);
     try {
       const normalizedUrl = normalizeSourceUrl(url);
-      const analysis = await new ProductApiClient().analyzeProduct(
-        normalizedUrl,
-        stableKey("brand-product-analysis", normalizedUrl),
-      );
+      const analysis = await new ProductApiClient().analyzeProduct(normalizedUrl);
       const draft = productDraftFromAnalysis(analysis);
       setFound(draft);
       setName(draft.productName);
@@ -163,17 +160,8 @@ function priceField(value: unknown): number | null {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
-function stableKey(prefix: string, ...parts: string[]) {
-  let hash = 0x811c9dc5;
-  for (const part of parts.join("|")) {
-    hash ^= part.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `${prefix}-${(hash >>> 0).toString(16)}`;
-}
-
 function normalizeSourceUrl(value: string) {
   const trimmed = value.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
   return `https://${trimmed.replace(/^\/+/, "")}`;
 }

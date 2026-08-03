@@ -273,6 +273,39 @@ def test_creator_profile_analysis_extracts_public_metrics_when_present(monkeypat
     assert draft["averageViews"]["value"] == 8_200
     assert draft["engagementRate"]["value"] == 5
     assert draft["reelShare"]["value"] == 65
+    assert "followerCount" not in draft["unknownFields"]
+    assert "averageViews" not in draft["unknownFields"]
+
+
+def test_product_analysis_normalizes_http_and_reuses_without_idempotency(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("product-http", "product-http@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "product-http-role"},
+        json={"role": "BRAND"},
+    )
+    monkeypatch.setattr(routes, "_secure_fetch_source_page", lambda *_args: (None, "test_no_fetch"))
+
+    first = client.post(
+        "/api/v1/analyses/product",
+        headers=headers,
+        json={"sourceUrl": "http://example.com/products/spf"},
+    )
+    second = client.post(
+        "/api/v1/analyses/product",
+        headers=headers,
+        json={"sourceUrl": "example.com/products/spf"},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    first_analysis = first.json()["data"]["analysis"]
+    second_analysis = second.json()["data"]["analysis"]
+    assert first_analysis["sourceUrl"] == "https://example.com/products/spf"
+    assert second_analysis["sourceUrl"] == "https://example.com/products/spf"
+    assert second_analysis["analysisId"] == first_analysis["analysisId"]
 
 
 def test_analysis_rejects_unsafe_source_urls() -> None:

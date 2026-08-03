@@ -28,6 +28,8 @@ def validate_solana_pubkey(value: str) -> str:
 def normalize_public_url(value: str) -> str:
     normalized = value.strip()
     parsed = urlparse(normalized)
+    if parsed.scheme == "http":
+        return f"https://{normalized.removeprefix('http://')}"
     if parsed.scheme:
         return normalized
     return f"https://{normalized.lstrip('/')}"

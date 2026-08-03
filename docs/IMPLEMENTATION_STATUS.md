@@ -338,6 +338,34 @@ Updated: 2026-08-03
 - `npm --prefix frontend run build`: passed.
 - Local route bundle check for `/brand/promotions/test`: passed.
 
+## 2026-08-03 Analysis Retry And Public Metrics Fix
+
+### Changed
+
+- Product and Creator analysis frontend calls no longer send fixed URL-based
+  idempotency keys. Re-running analysis for the same URL now avoids
+  `IDEMPOTENCY_CONFLICT` 409 errors.
+- Frontend and backend URL normalization now convert `http://...` and bare
+  domains to `https://...` for public analysis inputs.
+- Creator public metric analysis now removes extracted metrics from
+  `unknownFields`; only metrics not present in the public page remain as
+  user-confirmable unknowns.
+- Instagram profile analysis still does not fabricate average views,
+  engagement rate, or reel share when the public HTML does not expose them.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py apps/api/schemas.py tests/test_api_onboarding.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_onboarding.py -q`: 9 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local HTTP smoke: repeated product analysis for `http://example.com/products/spf`
+  and `example.com/products/spf` returned 202, normalized to HTTPS, and reused
+  the same analysis ID.
+- Local HTTP smoke: creator analysis for `http://instagram.com/ye__5o`
+  normalized to HTTPS and left only unavailable public metrics in `unknownFields`.
+
 ## 2026-08-03 Brand Signup Simplification And Promotion Real Inputs
 
 ### Changed

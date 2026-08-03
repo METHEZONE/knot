@@ -5538,6 +5538,21 @@ def _secure_fetch_creator_profile_draft(
     summary = fetched.description or fetched.text[:220] or "공개 프로필 내용을 읽었습니다."
     tags = _keyword_hits(f"{display_name} {summary} {fetched.text[:1200]}")
     metrics_text = f"{fetched.title or ''} {fetched.description or ''} {fetched.text[:4000]}"
+    follower_count = _extract_creator_count(metrics_text, ["followers", "follower", "팔로워"])
+    average_views = _extract_creator_count(metrics_text, ["views", "view", "조회", "조회수"])
+    engagement_rate = _extract_percent_near(metrics_text, ["engagement", "참여율"])
+    reel_share = _extract_percent_near(metrics_text, ["reels", "reel", "릴스"])
+    unknown_fields = [
+        field
+        for field, value in {
+            "followerCount": follower_count,
+            "averageViews": average_views,
+            "engagementRate": engagement_rate,
+            "reelShare": reel_share,
+            "recentPosts": None,
+        }.items()
+        if value is None
+    ]
     draft = {
         "schemaVersion": "knot.creator-profile.v1",
         "sourceUrl": source_url,
@@ -5547,24 +5562,24 @@ def _secure_fetch_creator_profile_draft(
         "displayName": _field(display_name[:80], source="SOURCE_TITLE", confidence=0.72),
         "handle": _field(handle, source="URL_PATH", confidence=0.82),
         "followerCount": _field(
-            _extract_creator_count(metrics_text, ["followers", "follower", "팔로워"]),
+            follower_count,
             source="SOURCE_TEXT",
-            confidence=0.58,
+            confidence=0.58 if follower_count is not None else 0.0,
         ),
         "averageViews": _field(
-            _extract_creator_count(metrics_text, ["views", "view", "조회", "조회수"]),
+            average_views,
             source="SOURCE_TEXT",
-            confidence=0.42,
+            confidence=0.42 if average_views is not None else 0.0,
         ),
         "engagementRate": _field(
-            _extract_percent_near(metrics_text, ["engagement", "참여율"]),
+            engagement_rate,
             source="SOURCE_TEXT",
-            confidence=0.35,
+            confidence=0.35 if engagement_rate is not None else 0.0,
         ),
         "reelShare": _field(
-            _extract_percent_near(metrics_text, ["reels", "reel", "릴스"]),
+            reel_share,
             source="SOURCE_TEXT",
-            confidence=0.35,
+            confidence=0.35 if reel_share is not None else 0.0,
         ),
         "categoryKeys": [_infer_category(f"{display_name} {summary} {fetched.text[:1200]}")],
         "formatKeys": [],
@@ -5572,7 +5587,7 @@ def _secure_fetch_creator_profile_draft(
         "proposedMoodIds": tags[:3],
         "summary": summary[:260],
         "representativeUrls": [fetched.final_url],
-        "unknownFields": ["averageViews", "followerCount", "recentPosts"],
+        "unknownFields": unknown_fields,
         "safetyFlags": [],
         "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
     }

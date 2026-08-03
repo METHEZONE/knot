@@ -657,21 +657,23 @@ export class ProductApiClient {
     return response.onboarding;
   }
 
-  async analyzeProduct(sourceUrl: string, idempotencyKey: string) {
+  async analyzeProduct(sourceUrl: string, idempotencyKey?: string) {
+    const headers = idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
     const response = await this.request<{ analysis: AnalysisJob }>("/api/v1/analyses/product", {
       method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
+      headers,
       body: JSON.stringify({ sourceUrl }),
     });
     return response.analysis;
   }
 
-  async analyzeCreatorProfile(sourceUrl: string, idempotencyKey: string) {
+  async analyzeCreatorProfile(sourceUrl: string, idempotencyKey?: string) {
+    const headers = idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
     const response = await this.request<{ analysis: AnalysisJob }>(
       "/api/v1/analyses/creator-profile",
       {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey },
+        headers,
         body: JSON.stringify({ sourceUrl }),
       },
     );

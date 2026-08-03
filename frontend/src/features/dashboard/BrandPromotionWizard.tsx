@@ -56,10 +56,7 @@ export function BrandPromotionWizard() {
     setError(null);
     try {
       const normalizedUrl = normalizeSourceUrl(productUrl);
-      const analysis = await client.analyzeProduct(
-        normalizedUrl,
-        stableKey("promotion-analysis", normalizedUrl),
-      );
+      const analysis = await client.analyzeProduct(normalizedUrl);
       setDraft(draftFromAnalysis(analysis));
       setStep("review");
     } catch (caught) {
@@ -359,6 +356,12 @@ export function BrandPromotionWizard() {
   );
 }
 
+function normalizeSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
 function stableKey(prefix: string, ...parts: string[]) {
   let hash = 0x811c9dc5;
   for (const part of parts.join("|")) {
@@ -366,12 +369,6 @@ function stableKey(prefix: string, ...parts: string[]) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `${prefix}-${(hash >>> 0).toString(16)}`;
-}
-
-function normalizeSourceUrl(value: string) {
-  const trimmed = value.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed.replace(/^\/+/, "")}`;
 }
 
 function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
