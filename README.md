@@ -2,7 +2,7 @@
 
 > Agents negotiate. Creators create. Solana settles.
 
-KNOT은 브랜드 에이전트와 크리에이터 에이전트가 협찬 조건을 협상하고, 합의된 작업이 검증되면 Solana USDC 에스크로에서 자동 정산하는 Agent-native Creator Contracting & Settlement 프로덕트입니다.
+KNOT은 AI 에이전트가 브랜드와 크리에이터의 협찬 조건을 대신 협상하고, 약속한 콘텐츠가 게시되면 Solana USDC 에스크로에서 대금을 자동 정산하는 서비스입니다.
 
 ![KNOT pitch cover](docs/assets/readme/02-pitch-cover.png)
 
