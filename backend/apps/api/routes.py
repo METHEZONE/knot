@@ -1987,8 +1987,8 @@ def build_api_router(
             raise _problem(
                 status.HTTP_409_CONFLICT,
                 "NO_ELIGIBLE_CREATOR",
-                "MatchRun has no eligible creator candidate. Adjust Promotion category, "
-                "deliverable, usage rights, budget, or schedule and run matching again.",
+                "지금 바로 협상 가능한 Creator가 없습니다. 예산이나 일정 조건을 조금 넓히거나 "
+                "새 Creator가 들어온 뒤 다시 시도해주세요.",
             )
         promotion = _get_promotion(repository, promotion_id)
         promotion_document = (
@@ -5994,8 +5994,8 @@ def _role_session(
     agent_id = str(agent.get("agentId") or "")
     agent_label = str(agent.get("displayName") or agent_id)
     profile_summary = (
-        f"{display_name} profile is stored in the Product API repository. "
-        "Agent negotiation uses persisted policy and public profile snapshots."
+        f"{display_name} 프로필이 저장되었습니다. "
+        "에이전트는 저장된 공개 조건을 기준으로 협상합니다."
     )
     return {
         "role": role,

@@ -9,7 +9,6 @@ import {
 import {
   ProductApiClient,
   ProductApiError,
-  apiBaseUrl,
   type ApiAgreement,
   type ApiAgreementTerms,
   type ApiCandidate,
@@ -163,11 +162,11 @@ class ApiKnotDataSource implements KnotDataSource {
 
   async getDevOverview(): Promise<DevOverview> {
     const events: DevEvent[] = [
-      { id: "api-auth", type: "AUTH", label: "Firebase auth projection not wired yet", status: "pending" },
-      { id: "api-db", type: "DB", label: "Product API repository boundary active", status: "ok" },
-      { id: "api-a2a", type: "A2A", label: "Frontend consumes Product API A2A projection, not direct A2A messages", status: "ok" },
-      { id: "api-policy", type: "POLICY", label: "Agreement, evidence and escrow checks are deterministic", status: "ok" },
-      { id: "api-web3", type: "WEB3", label: "Escrow receipts come from Product API; live signatures require gateway testnet signing mode", status: "warning" },
+      { id: "api-auth", type: "AUTH", label: "계정 상태를 확인하는 중입니다", status: "pending" },
+      { id: "api-db", type: "DB", label: "서비스 데이터가 연결되어 있습니다", status: "ok" },
+      { id: "api-a2a", type: "A2A", label: "에이전트 협상 기록을 불러옵니다", status: "ok" },
+      { id: "api-policy", type: "POLICY", label: "계약과 정산 기준을 확인합니다", status: "ok" },
+      { id: "api-web3", type: "WEB3", label: "예치와 정산 기록을 확인합니다", status: "warning" },
     ];
 
     try {
@@ -181,7 +180,7 @@ class ApiKnotDataSource implements KnotDataSource {
           {
             id: "api-unreachable",
             type: "DB",
-            label: `Product API unreachable at ${apiBaseUrl()}: ${errorMessage(error)}`,
+            label: `서비스에 연결할 수 없습니다: ${errorMessage(error)}`,
             status: "warning",
           },
           ...events.filter((event) => event.type !== "DB"),
@@ -208,7 +207,7 @@ class ApiKnotDataSource implements KnotDataSource {
     const promotions = await this.client.listPromotions();
     const promotion = promotions[0];
     if (!promotion) {
-      throw new ProductApiError("Product API returned no Promotions", 404, "NO_PROMOTION", null);
+      throw new ProductApiError("생성된 프로모션이 없습니다.", 404, "NO_PROMOTION", null);
     }
     return promotion;
   }
@@ -305,14 +304,14 @@ function negotiationFlowToView(flow: NegotiationFlow, role: Role): NegotiationVi
     publicSummary:
       role === "brand"
         ? [
-            `${creatorLabel}와 Product API-backed A2A negotiation projection을 불러왔습니다.`,
-            "Creator의 private policy와 minimum은 Brand 화면에 노출하지 않습니다.",
-            "Agreement Artifact가 있으면 termsHash를 UI에 표시합니다.",
+            `${creatorLabel}와 협상 결과를 불러왔습니다.`,
+            "Creator의 내부 정책과 최소 금액은 Brand 화면에 노출하지 않습니다.",
+            "계약이 있으면 합의 조건과 진행 상태를 표시합니다.",
           ]
         : [
             `${brandDisplayName()} 제안을 Agent가 처리했습니다.`,
-            "브랜드의 hard maximum과 내부 matching score는 Creator 화면에 노출하지 않습니다.",
-            "결과에는 공개 가능한 조건과 Agreement 상태만 표시합니다.",
+            "브랜드의 내부 최대 금액과 평가 기준은 Creator 화면에 노출하지 않습니다.",
+            "결과에는 공개 가능한 조건과 계약 상태만 표시합니다.",
     ],
     terms: termsToRows(terms),
     termsHash: agreement?.termsHash ?? "pending-agreement-artifact",
@@ -366,23 +365,23 @@ function apiTasks(flow: NegotiationFlow, completed: boolean): AgentTask[] {
   return [
     {
       id: "api-match",
-      label: "Creator candidates ranked",
+      label: "Creator 후보 비교",
       status: hasMatch ? "done" : "running",
-      visibleDetail: "Product API가 deterministic matching 결과와 후보 순위를 저장했습니다.",
+      visibleDetail: "제품 조건에 맞춰 후보 순위를 저장했습니다.",
     },
     {
       id: "api-payment",
-      label: "Agent API payment recorded",
+      label: "후보 검증 기록",
       status: apiPayment ? "done" : hasMatch ? "running" : "queued",
       visibleDetail: apiPaymentStatus
-        ? `pay.sh/x402 creator verification event: ${apiPaymentStatus}. Deal escrow와 별도 비용입니다.`
-        : "Brand Agent가 후보 검증용 paid API 호출을 준비합니다.",
+        ? `후보 검증 결과: ${apiPaymentStatus}. 계약 예치금과 별도 비용입니다.`
+        : "브랜드 에이전트가 후보 검증을 준비합니다.",
     },
     {
       id: "api-a2a",
-      label: "A2A negotiation projected",
+      label: "협상 기록 저장",
       status: hasNegotiation ? "done" : "running",
-      visibleDetail: "Frontend는 직접 A2A를 호출하지 않고 Product API의 A2A projection만 읽습니다.",
+      visibleDetail: "저장된 에이전트 협상 기록을 표시합니다.",
     },
     {
       id: "api-policy",
@@ -566,7 +565,7 @@ function candidateSummary(candidate: ApiCandidate, matchRun: ApiMatchRun) {
     reason:
       candidate.explanation ??
       candidate.hardFilterReasons?.join(", ") ??
-      "Product API candidate snapshot",
+      "후보 스냅샷",
     selected: candidate.creatorAgentId === matchRun.selectedCreatorAgentId,
   };
 }
@@ -652,8 +651,8 @@ function technicalProofItems(flow: NegotiationFlow, runEvents: AgentRunEvent[]) 
       value: runEvents.map((event) => `${event.sequence ?? "-"}:${event.type}`).join(" -> ") || "pending",
       status: proofStatus(runEvents.length > 0),
     },
-    { label: "A2A context ID", value: flow.negotiation.contextId || "pending", status: proofStatus(Boolean(flow.negotiation.contextId)) },
-    { label: "A2A Task ID", value: flow.negotiation.taskId || "pending", status: proofStatus(Boolean(flow.negotiation.taskId)) },
+    { label: "협상 context", value: flow.negotiation.contextId || "pending", status: proofStatus(Boolean(flow.negotiation.contextId)) },
+    { label: "협상 기록", value: flow.negotiation.taskId || "pending", status: proofStatus(Boolean(flow.negotiation.taskId)) },
     { label: "Negotiation events", value: String(flow.negotiationEvents.length), status: proofStatus(flow.negotiationEvents.length > 0) },
     { label: "Agreement ID", value: flow.agreement?.agreementId ?? "pending", status: proofStatus(Boolean(flow.agreement)) },
     { label: "Agreement termsHash", value: flow.agreement?.termsHash ?? "pending", status: proofStatus(Boolean(flow.agreement?.termsHash)) },

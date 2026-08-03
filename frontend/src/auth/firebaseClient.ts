@@ -25,7 +25,7 @@ export function firebaseConfigured() {
 }
 
 export function authConfigurationError() {
-  return "Firebase Auth 환경변수가 설정되지 않았습니다. NEXT_PUBLIC_FIREBASE_* 값을 확인해주세요.";
+  return "로그인 설정을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
 }
 
 export function firebaseAuth(): Auth {
@@ -70,7 +70,7 @@ export async function signInWithGoogle() {
       process.env.NODE_ENV !== "production"
     ) {
       console.error(
-        `[Firebase Auth] Add "${window.location.hostname}" to Firebase Authentication > Settings > Authorized domains.`,
+        `[Auth] Add "${window.location.hostname}" to the allowed login domains.`,
       );
     }
     throw error;
@@ -104,7 +104,7 @@ function googleAuthProvider() {
 
 export function firebaseAuthErrorMessage(error: unknown) {
   if (isFirebaseAuthCode(error, "auth/unauthorized-domain")) {
-    return "현재 접속한 도메인이 Firebase 로그인 허용 목록에 등록되지 않았습니다.";
+    return "현재 접속한 주소에서는 로그인을 사용할 수 없습니다.";
   }
   if (isFirebaseAuthCode(error, "auth/popup-closed-by-user")) {
     return "로그인 창이 닫혔습니다. 다시 시도해주세요.";
@@ -125,7 +125,7 @@ export function firebaseAuthErrorMessage(error: unknown) {
     return "이메일 형식을 확인해주세요.";
   }
   if (isFirebaseAuthCode(error, "auth/operation-not-allowed")) {
-    return "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.";
+    return "현재 사용할 수 없는 로그인 방식입니다. 다른 방식으로 시도해주세요.";
   }
   if (isFirebaseAuthCode(error, "auth/invalid-credential")) {
     return "이메일 또는 비밀번호가 올바르지 않습니다.";

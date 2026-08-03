@@ -48,7 +48,7 @@ export function AuthGate({
   }, [completedRedirect, context, expectedRole, requireCompleted, router, status]);
 
   if (status === "loading") {
-    return <GuardPanel title="계정 확인 중" body="Firebase session과 Product API account context를 확인하고 있습니다." />;
+    return <GuardPanel title="계정 확인 중" body="로그인 상태와 계정 정보를 확인하고 있습니다." />;
   }
 
   if (status === "unauthenticated") {

@@ -182,7 +182,7 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     technicalProof: [
       { label: "Data source", value: "DEMO FIXTURE", status: "warning" },
       { label: "Match Run ID", value: "match-run-mock-alpha", status: "warning" },
-      { label: "A2A Task ID", value: "a2a-task-20260725-001", status: "warning" },
+      { label: "협상 기록", value: "a2a-task-20260725-001", status: "warning" },
       { label: "Agreement termsHash", value: "sha256:mock-explicit-fixture-only", status: "warning" },
     ],
   },
@@ -267,7 +267,7 @@ export const negotiationViews: Record<"brand" | "creator", NegotiationView> = {
     technicalProof: [
       { label: "Data source", value: "DEMO FIXTURE", status: "warning" },
       { label: "Match Run ID", value: "match-run-mock-alpha", status: "warning" },
-      { label: "A2A Task ID", value: "a2a-task-20260725-001", status: "warning" },
+      { label: "협상 기록", value: "a2a-task-20260725-001", status: "warning" },
       { label: "Agreement termsHash", value: "sha256:mock-explicit-fixture-only", status: "warning" },
     ],
   },

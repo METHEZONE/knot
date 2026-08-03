@@ -166,7 +166,7 @@ export function NegotiationDetail({
     const address = await connectAndSaveWalletAddress();
     if (escrowDestination && escrowDestination !== address) {
       throw new Error(
-        `연결된 Phantom 지갑이 이 escrow의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
+        `연결된 지갑이 이 계약의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
           address,
         )}, 필요: ${shortAddress(escrowDestination)}`,
       );
@@ -175,7 +175,7 @@ export function NegotiationDetail({
   }
 
   if (state.loading) {
-    return <PanelMessage title="협상 기록 불러오는 중" body="A2A 메시지와 계약 정보를 조회하고 있습니다." />;
+    return <PanelMessage title="협상 기록 불러오는 중" body="에이전트 대화와 계약 정보를 조회하고 있습니다." />;
   }
 
   if (state.error || !state.detail?.negotiation) {
@@ -219,7 +219,7 @@ export function NegotiationDetail({
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="계약과 escrow" title="마일스톤 정산" />
+        <SectionHeader eyebrow="계약과 예치금" title="마일스톤 정산" />
         {agreement ? (
           <MilestonePanel
             role={role}
@@ -235,14 +235,14 @@ export function NegotiationDetail({
         ) : (
           <PanelMessage
             title="아직 계약이 생성되지 않았습니다"
-            body="협상이 합의되면 termsHash, 마일스톤, escrow 상태가 이 영역에 표시됩니다."
+            body="협상이 합의되면 마일스톤과 예치 상태가 이 영역에 표시됩니다."
           />
         )}
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
       </section>
 
       <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-        <SectionHeader eyebrow="실제 A2A 메시지" title="Agent 대화" />
+        <SectionHeader eyebrow="협상 메시지" title="Agent 대화" />
         <MessageThread role={role} messages={messages} />
       </section>
     </div>
@@ -390,13 +390,13 @@ function WorkSummaryPanel({
         <Metric label="연동된 크리에이터" value={creatorName} />
         <Metric label="제품/프로모션" value={productName} />
         <Metric label="합의 금액" value={`${amount.toLocaleString()} USDC`} />
-        <Metric label="A2A Round" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
+        <Metric label="협상 라운드" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
       </div>
       <div className="mt-4">
         <p className="text-xs text-muted">{role === "creator" ? "내가 해야 받을 작업" : "합의된 작업"}</p>
         <WorkItemList terms={terms} compact={false} />
       </div>
-      <p className="mt-4 break-all font-mono text-xs text-muted">A2A Task {negotiation.taskId}</p>
+      <p className="mt-4 break-all font-mono text-xs text-muted">협상 기록 {negotiation.taskId}</p>
     </section>
   );
 }
@@ -413,7 +413,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   const visible = messages.slice(0, visibleCount);
 
   if (!messages.length) {
-    return <p className="text-sm text-muted">저장된 A2A 메시지가 없습니다.</p>;
+    return <p className="text-sm text-muted">저장된 협상 메시지가 없습니다.</p>;
   }
 
   return (
@@ -437,12 +437,12 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
                 {side === "brand" ? "Brand Agent" : "Creator Agent"} · #{message.sequence ?? index + 1}
               </p>
               <p className="mt-1 font-mono text-[10px] opacity-70">
-                {String(message.payload?.type ?? "A2A")} · {message.taskId}
+                {String(message.payload?.type ?? "협상")} · {message.taskId}
               </p>
               <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
               <details className="mt-3">
                 <summary className="cursor-pointer font-mono text-[10px] uppercase opacity-70">
-                  A2A payload
+                  상세 조건
                 </summary>
                 <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[10px] text-foreground">
                   {formatA2aPayload(message)}
@@ -455,7 +455,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
       })}
       {visibleCount < messages.length ? (
         <div className="flex items-center gap-2 text-sm text-muted">
-          <TypingDots /> 다음 A2A 메시지
+          <TypingDots /> 다음 협상 메시지
         </div>
       ) : null}
     </div>
@@ -501,13 +501,13 @@ function SettlementSummaryPanel({
 
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <SectionHeader eyebrow="Wallet & settlement" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
+      <SectionHeader eyebrow="정산" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
       <div className="grid gap-3">
-        <Metric label={role === "brand" ? "Brand Phantom" : "Creator Phantom"} value={shortAddress(walletAddress) ?? "연결 필요"} />
-        <Metric label="Agreement 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
-        <Metric label="Escrow 상태" value={escrow ? escrow.status : agreement ? "CREATED 전" : "계약 전"} />
-        <Metric label={role === "brand" ? "Escrow 잔액" : "지급 완료"} value={role === "brand" ? baseUnitsToUsdcLabel(remainingBaseUnits) : baseUnitsToUsdcLabel(releasedBaseUnits)} />
-        <Metric label={role === "brand" ? "예치 tx" : "정산 tx"} value={primaryTx ? "Explorer 확인 가능" : role === "brand" ? "예치 전" : "정산 전"} />
+        <Metric label="지갑 연결" value={walletAddress ? shortAddress(walletAddress) ?? walletAddress : "연결 필요"} />
+        <Metric label="계약 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
+        <Metric label="예치 상태" value={escrow ? escrow.status : agreement ? "CREATED 전" : "계약 전"} />
+        <Metric label={role === "brand" ? "남은 예치금" : "지급 완료"} value={role === "brand" ? baseUnitsToUsdcLabel(remainingBaseUnits) : baseUnitsToUsdcLabel(releasedBaseUnits)} />
+        <Metric label={role === "brand" ? "예치 기록" : "정산 기록"} value={primaryTx ? "확인 가능" : role === "brand" ? "예치 전" : "정산 전"} />
       </div>
       {role === "brand" && onFund && !funded ? (
         <button
@@ -526,15 +526,15 @@ function SettlementSummaryPanel({
           disabled={fundingState !== "idle"}
           className="sketch-pill mt-4 border border-border-subtle px-4 py-2 disabled:opacity-50"
         >
-          {walletAddress ? "수령 지갑 다시 연결" : "Phantom 수령 지갑 연결"}
+          {walletAddress ? "수령 지갑 다시 연결" : "수령 지갑 연결"}
         </button>
       ) : null}
-      {signature ? <TransactionReference signature={signature} network={escrow?.network} label="예치 tx" /> : null}
+      {signature ? <TransactionReference signature={signature} network={escrow?.network} label="예치 기록" /> : null}
       {latestSettlement?.signature ? (
         <TransactionReference
           signature={latestSettlement.signature}
           network={escrow?.network}
-          label="정산 tx"
+          label="정산 기록"
         />
       ) : null}
     </section>
@@ -667,7 +667,7 @@ function EvidenceForm({
       const connectedWallet = await onEnsureCreatorWallet(escrow.creatorDestination);
       if (escrow.creatorDestination && connectedWallet !== escrow.creatorDestination) {
         throw new Error(
-          `연결된 Phantom 지갑이 이 escrow의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
+          `연결된 지갑이 이 계약의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
             connectedWallet,
           )}, 필요: ${shortAddress(escrow.creatorDestination)}`,
         );
@@ -715,7 +715,7 @@ function EvidenceForm({
   return (
     <div className="mt-4 flex flex-col gap-2">
       <div className="sketch-alt ink border border-border-subtle bg-background p-3 text-xs">
-        <p className="text-muted">정산 받을 Phantom</p>
+        <p className="text-muted">정산 받을 지갑</p>
         <p className="mt-1 break-all font-mono">
           {shortAddress(walletAddress) ?? "연결 필요"}
         </p>
@@ -736,7 +736,7 @@ function EvidenceForm({
       </button>
       {lastEvidence ? <p className="text-xs text-muted">최근 검토: {lastEvidence.status}</p> : null}
       {lastSettlementSignature ? (
-        <TransactionReference signature={lastSettlementSignature} network={escrow.network} label="release tx" />
+        <TransactionReference signature={lastSettlementSignature} network={escrow.network} label="정산 기록" />
       ) : null}
     </div>
   );
@@ -918,22 +918,22 @@ function fundingButtonLabel(
   state: "idle" | "connecting" | "signing" | "confirming" | "done",
   walletAddress: string | null,
 ) {
-  if (state === "connecting") return "Phantom 연결 중";
-  if (state === "signing") return "Phantom에서 승인해 주세요";
+  if (state === "connecting") return "지갑 연결 중";
+  if (state === "signing") return "지갑에서 승인해 주세요";
   if (state === "confirming") return "에스크로 예치 중";
   if (state === "done") return "에스크로 예치 완료";
-  return walletAddress ? "Phantom으로 에스크로 예치하기" : "Phantom 연결";
+  return walletAddress ? "지갑으로 에스크로 예치하기" : "지갑 연결";
 }
 
 function settlementButtonLabel(
   state: "idle" | "connecting" | "verifying" | "releasing" | "done",
   walletAddress: string | null,
 ) {
-  if (state === "connecting") return "Phantom 수령 지갑 연결 중";
+  if (state === "connecting") return "수령 지갑 연결 중";
   if (state === "verifying") return "Agent가 결과물을 검토 중";
   if (state === "releasing") return "Creator 지갑으로 정산 중";
   if (state === "done") return "정산 완료";
-  return walletAddress ? "URL 제출하고 정산 요청" : "Phantom 연결 후 정산";
+  return walletAddress ? "URL 제출하고 정산 요청" : "지갑 연결 후 정산";
 }
 
 function formatTime(value: string) {

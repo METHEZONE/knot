@@ -154,7 +154,7 @@ export function LoginScreen() {
     <AuthFrame
       eyebrow="Sign in"
       title="계정으로 로그인"
-      body="Firebase Auth로 로그인하고 Product API가 검증한 account context를 기준으로 이동합니다."
+      body="로그인하면 계정 역할에 맞는 대시보드로 이동합니다."
     >
       <Panel>
         <form action={submit} className="grid gap-4">
@@ -352,7 +352,7 @@ export function CreatorDashboardScreen({ context }: { context: CurrentUserContex
                         type="button"
                         disabled
                         className="rounded-full border border-border-subtle bg-surface-raised px-5 py-2.5 text-sm font-semibold text-muted"
-                        title="실제 Solana claim 서명 연동 전까지 fake 성공 처리는 하지 않습니다."
+                        title="정산이 확인되기 전까지 완료로 표시하지 않습니다."
                       >
                         지갑 연결 후 정산 가능
                       </button>
@@ -650,7 +650,7 @@ function CreatorReplayCard({ dashboard }: { dashboard: CreatorDashboard }) {
           { label: "Data source", value: "LIVE", status: "ok" },
           { label: "Match Run ID", value: detail.negotiation.matchRunId, status: "ok" },
           { label: "A2A context ID", value: detail.negotiation.contextId, status: "ok" },
-          { label: "A2A Task ID", value: detail.negotiation.taskId, status: "ok" },
+          { label: "협상 기록", value: detail.negotiation.taskId, status: "ok" },
         ] satisfies TechnicalProofItem[],
       };
     }, setState);
@@ -1280,7 +1280,7 @@ export function CreatorSettlementScreen() {
                   <InfoBox label="지갑" value="연결 필요" />
                 </div>
                 <div className="mt-5 rounded border border-border-subtle bg-background p-4 text-sm text-muted">
-                  실제 Solana claim 서명과 Escrow release가 준비되기 전까지 성공한 정산처럼 표시하지 않습니다.
+                  정산이 확인되기 전까지 완료된 금액처럼 표시하지 않습니다.
                 </div>
               </Panel>
               <Panel>
@@ -1405,7 +1405,7 @@ export function BrandNegotiationDetailScreen({ negotiationId }: { negotiationId:
                   <InfoBox label="상태" value={negotiation.status} />
                   <InfoBox label="라운드" value={`${negotiation.currentRound}/${negotiation.maxRounds}`} />
                   <InfoBox label="제안 금액" value={`${negotiation.currentTerms.compensation.baseAmountUsdc} USDC`} />
-                  <InfoBox label="A2A Task" value={negotiation.taskId} />
+                  <InfoBox label="협상 기록" value={negotiation.taskId} />
                 </div>
               </Panel>
               <A2ANegotiationVisualizer events={events} />
@@ -1458,13 +1458,13 @@ function AgreementResourceScreen({ role, agreementId }: { role: Role; agreementI
                         : `/creator/offers/${detail.agreement.negotiationId}`
                     }
                   >
-                    Phantom 에스크로/정산 화면 열기
+                    에스크로/정산 화면 열기
                   </PrimaryLink>
                 </div>
               ) : null}
             </Panel>
             <Panel>
-              <SectionTitle eyebrow="Escrow" title="Escrow state" />
+              <SectionTitle eyebrow="예치금" title="예치 상태" />
               {detail.escrow ? (
                 <div className="mt-4 grid gap-3">
                   {role === "brand" ? (
@@ -1559,7 +1559,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
     <AuthFrame
       eyebrow={`${role} signup`}
       title={`${roleSession.organizationLabel} 프로필 생성`}
-      body="Firebase 계정을 만들고, Product API가 검증한 UID에 역할을 연결합니다."
+      body="계정을 만들고 선택한 역할에 맞는 프로필을 연결합니다."
     >
       <Panel>
         <form action={submit}>
@@ -1665,7 +1665,7 @@ export function BrandOnboardingScreen() {
           <div className="space-y-3">
             <InfoBox label="이 페이지에 저장" value="브랜드명, 웹사이트, 카테고리, 타겟, 제한 표현" />
             <InfoBox label="여기서 제외" value="제품명, 예산, deliverables, usage rights, deadline" />
-            <InfoBox label="저장 위치" value="Product API가 verified UID로 Brand Profile과 Brand Agent를 생성" />
+            <InfoBox label="저장 위치" value="계정에 브랜드 프로필과 에이전트를 연결" />
           </div>
         </Panel>
       </div>
@@ -1753,14 +1753,14 @@ export function BrandProductScreen({ product }: { product: BrandProduct }) {
           </form>
         </Panel>
         <Panel>
-          <SectionTitle eyebrow="Agent handoff" title="Brand Agent가 사용할 공개 조건" />
+          <SectionTitle eyebrow="협상 조건" title="에이전트가 사용할 공개 조건" />
           <div className="space-y-3">
             <InfoBox label="Product" value={product.title} />
             <InfoBox label="Target audience" value={product.targetAudience} />
             <InfoBox label="Max public offer" value={`${product.maxOfferUsdc} USDC`} />
           </div>
           <PrivacyNote>
-            내부 hard cap, 정책 score, 승인 기준은 Creator Agent에게 공개하지 않습니다. A2A 메시지는 공개 가능한 offer/counter terms만 전달합니다.
+            내부 한도와 승인 기준은 상대에게 공개하지 않습니다. 공개 가능한 제안 조건만 협상에 사용합니다.
           </PrivacyNote>
         </Panel>
       </div>
@@ -1787,7 +1787,7 @@ export function BrandNegotiationScreen({ view, product }: { view: NegotiationVie
                 />
               ))
             ) : (
-              <EmptyState text="아직 matchRun이 없습니다. Run Agent를 누르면 Product API가 후보를 계산하고 저장합니다." />
+              <EmptyState text="아직 후보 탐색을 시작하지 않았습니다. 에이전트를 실행하면 협상 가능한 후보를 찾습니다." />
             )}
           </div>
         </Panel>
@@ -1799,7 +1799,7 @@ export function BrandNegotiationScreen({ view, product }: { view: NegotiationVie
           <InfoBox label="Budget" value={`${product.budgetUsdc} USDC`} />
           <InfoBox label="Max offer" value={`${product.maxOfferUsdc} USDC`} />
           <InfoBox label="Status" value={product.status} />
-          <InfoBox label="A2A task" value={view.taskId} />
+          <InfoBox label="협상 기록" value={view.taskId} />
         </div>
       </Panel>
     </WorkspaceShell>
@@ -1812,17 +1812,17 @@ export function BrandResultScreen({ view }: { view: NegotiationView }) {
       <AgreementPanel view={view} />
       <div className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
         <Panel>
-          <SectionTitle eyebrow="Result" title={view.agreementId ? `${view.counterpartyLabel}와 합의됐습니다` : "아직 Agreement가 없습니다"} />
+          <SectionTitle eyebrow="Result" title={view.agreementId ? `${view.counterpartyLabel}와 합의됐습니다` : "아직 계약이 없습니다"} />
           <p className="text-muted">
             {view.agreementId
-              ? "Brand Agent와 Creator Agent가 A2A Task를 완료했고, Agreement Artifact에 공개 가능한 합의 조건과 termsHash만 저장했습니다."
-              : "먼저 협상 화면에서 Run Agent를 실행해야 Agreement Artifact가 생성됩니다."}
+              ? "양쪽 에이전트가 협상을 마쳤고, 공개 가능한 합의 조건만 계약에 저장했습니다."
+              : "먼저 협상 화면에서 에이전트를 실행해야 계약이 생성됩니다."}
           </p>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Next" title="정산 준비" />
           <p className="text-muted">
-            실제 지급은 LLM 판단이 아니라 deterministic policy check와 web3 gateway 승인 뒤 Solana Devnet escrow로 진행됩니다.
+            실제 지급은 검증 기준을 통과한 뒤 계약 예치금에서 진행됩니다.
           </p>
           <div className="mt-5">
             {view.agreementId ? (
@@ -2046,7 +2046,7 @@ export function CreatorResultScreen({ deals }: { deals: CreatorDeal[] }) {
         <Panel>
           <SectionTitle eyebrow="Agent summary" title="Creator Agent가 처리한 제안" />
           <p className="text-muted">
-            각 브랜드와의 협상 결과만 보여줍니다. 브랜드의 내부 최대가, 평가 점수, A2A 메시지 전문은 공개하지 않습니다.
+            각 브랜드와의 협상 결과만 보여줍니다. 브랜드의 내부 최대가와 평가 기준은 공개하지 않습니다.
           </p>
           <div className="mt-5 grid gap-3">
             <InfoBox label="Negotiated" value={String(deals.length)} />
@@ -2143,12 +2143,12 @@ export function RoleSettingsScreen({ role, session }: { role: Role; session?: Ro
           <SectionTitle eyebrow="Agent" title="에이전트" />
           <InfoBox label="Agent ID" value={roleSession.agentId} />
           <InfoBox label="Mode" value="ACTIVE" />
-          <PrivacyNote>Agent policy 변경은 audit event로 남기고, 결제 승인은 deterministic checks를 통과해야 합니다.</PrivacyNote>
+          <PrivacyNote>에이전트 설정 변경은 기록으로 남고, 결제는 정해진 승인 기준을 통과해야 합니다.</PrivacyNote>
         </Panel>
         <Panel>
           <SectionTitle eyebrow="Wallet" title="지갑" />
           <Input label="Wallet address" placeholder={roleSession.walletAddress} />
-          <InfoBox label="Network" value="Solana Devnet" />
+          <InfoBox label="네트워크" value="테스트 결제망" />
         </Panel>
       </div>
     </WorkspaceShell>
@@ -2161,12 +2161,12 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
       <PageTitle
         eyebrow="Dev admin"
         title="운영자용 상태 확인"
-        body="mock/API data source가 같은 인터페이스를 사용합니다. API mode에서는 Product API projection을 읽고, A2A 메시지를 브라우저에서 직접 만들지 않습니다."
+        body="시연 데이터와 실제 서비스 데이터의 연결 상태를 확인합니다."
       />
       <div className="grid gap-5 md:grid-cols-3">
-        <InfoPanel label="Data mode" value={overview.dataMode} />
-        <InfoPanel label="Active A2A tasks" value={String(overview.activeTaskCount)} />
-        <InfoPanel label="Mock collections" value={String(overview.mockCollectionCount)} />
+        <InfoPanel label="데이터 상태" value={overview.dataMode} />
+        <InfoPanel label="진행 중 협상" value={String(overview.activeTaskCount)} />
+        <InfoPanel label="시연 데이터" value={String(overview.mockCollectionCount)} />
       </div>
       <Panel>
         <SectionTitle eyebrow="Routes" title="MVP app surface" />
@@ -2238,7 +2238,7 @@ export function DevAdminLiveScreen() {
       <PageTitle
         eyebrow="Dev admin"
         title="운영자용 상태 확인"
-        body="Verified admin claim 또는 서버 allowlist를 통과한 계정만 Product API 운영 정보를 볼 수 있습니다."
+        body="운영 권한이 있는 계정만 서비스 상태를 확인할 수 있습니다."
       />
       {status === "loading" && <Panel>관리자 권한과 운영 데이터를 확인하는 중입니다.</Panel>}
       {status === "error" && (
@@ -2429,8 +2429,8 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
         title={view.agreementId ? "협상이 완료됐습니다" : status === "running" ? "진행중이에요!" : "Agent 실행 대기"}
         body={
           view.agreementId
-            ? `${view.counterpartyAgentLabel}와 A2A Task 결과를 불러왔습니다.`
-            : "Run Agent를 누르면 Product API가 matchRun과 negotiation resource를 생성합니다."
+            ? `${view.counterpartyAgentLabel}와 협상 결과를 불러왔습니다.`
+            : "에이전트를 실행하면 후보 탐색과 협상을 시작합니다."
         }
         progress={progress}
       />
@@ -2447,7 +2447,7 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
         <TechnicalProofPanel items={view.technicalProof} />
       </div>
       <PrivacyNote>
-        사용자에게는 진행 상태와 최종 결과만 보여줍니다. private policy, 상대의 hard cap, 내부 scoring, A2A 메시지 전문은 숨깁니다.
+        사용자에게는 진행 상태와 최종 결과만 보여줍니다. 상대의 내부 한도와 평가 기준은 숨깁니다.
       </PrivacyNote>
       {error && <FormError message={error} />}
       <div className="mt-6 flex flex-wrap gap-3">
@@ -2457,7 +2457,7 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
           disabled={status === "running" || Boolean(view.agreementId)}
           className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background"
         >
-          {status === "running" ? "Agent 실행 중..." : view.agreementId ? "Agreement 생성됨" : "Run Agent"}
+          {status === "running" ? "에이전트 실행 중..." : view.agreementId ? "계약 생성됨" : "에이전트 실행"}
         </button>
         {view.agreementId && <PrimaryLink href={`/brand/result?promotionId=${promotionId}&negotiationId=${view.negotiationId}&agreementId=${view.agreementId}`}>결과 확인</PrimaryLink>}
       </div>
@@ -2468,14 +2468,14 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
 function AgreementPanel({ view }: { view: NegotiationView }) {
   return (
     <Panel>
-      <SectionTitle eyebrow="Agreement artifact" title={view.title} />
+      <SectionTitle eyebrow="계약" title={view.title} />
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         {view.terms.map((term) => (
           <InfoBox key={term.label} label={term.label} value={term.value} />
         ))}
       </div>
       <div className="mt-5 rounded border border-border-subtle bg-background p-4">
-        <div className="font-mono text-xs uppercase text-muted">termsHash</div>
+        <div className="font-mono text-xs uppercase text-muted">계약 증명</div>
         <div className="mt-1 break-all font-mono text-sm">{view.termsHash}</div>
       </div>
     </Panel>
@@ -2485,19 +2485,19 @@ function AgreementPanel({ view }: { view: NegotiationView }) {
 function SettlementPanel({ settlement }: { settlement: Settlement }) {
   return (
     <Panel>
-      <SectionTitle eyebrow="Deal escrow" title="크리에이터 보수 정산" />
+      <SectionTitle eyebrow="예치금" title="크리에이터 보수 정산" />
       <div className="grid gap-3 md:grid-cols-2">
-        <InfoBox label="Escrow status" value={settlement.escrowStatus} />
-        <InfoBox label="Locked" value={`${settlement.escrowAmountUsdc} USDC`} />
-        <InfoBox label="Released" value={`${settlement.releasedUsdc} USDC`} />
-        <InfoBox label="Pending" value={`${settlement.pendingUsdc} USDC`} />
+        <InfoBox label="예치 상태" value={settlement.escrowStatus} />
+        <InfoBox label="예치 금액" value={`${settlement.escrowAmountUsdc} USDC`} />
+        <InfoBox label="지급 완료" value={`${settlement.releasedUsdc} USDC`} />
+        <InfoBox label="지급 대기" value={`${settlement.pendingUsdc} USDC`} />
       </div>
       <div className="mt-5 space-y-3">
-        <TxBox label="Escrow lock transaction" value={settlement.lockTx} />
-        <TxBox label="Escrow release transaction" value={settlement.releaseTx} />
+        <TxBox label="예치 기록" value={settlement.lockTx} />
+        <TxBox label="정산 기록" value={settlement.releaseTx} />
       </div>
       <PrivacyNote>
-        pay.sh API 비용과 Creator 보수 escrow는 분리됩니다. 이 화면은 deal escrow만 표시합니다.
+        외부 검증 비용과 크리에이터 보수 예치금은 분리되어 관리됩니다.
       </PrivacyNote>
     </Panel>
   );
@@ -2581,14 +2581,13 @@ function SettlementActionPanel({
 }) {
   return (
     <Panel>
-      <SectionTitle eyebrow="Action" title="Phantom 정산 화면으로 이동" />
+      <SectionTitle eyebrow="Action" title="정산 화면으로 이동" />
       <p className="text-sm text-muted">
-        Creator 보상 escrow는 legacy Agent 지갑으로 실행하지 않습니다. Brand Phantom으로 전체 금액을
-        예치하고, Creator가 URL을 제출하면 Agent 검토 뒤 Creator Phantom으로 정산됩니다.
+        브랜드가 전체 금액을 예치하고, Creator가 URL을 제출하면 에이전트 검토 뒤 정산됩니다.
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <PrimaryLink href={`/brand/agreements/${agreementId}`}>
-          {alreadyReleased ? "정산 내역 보기" : "Agreement 상세로 이동"}
+          {alreadyReleased ? "정산 내역 보기" : "계약 상세로 이동"}
         </PrimaryLink>
         {!milestoneId ? <p className="text-sm text-muted">정산 가능한 milestone이 아직 없습니다.</p> : null}
       </div>

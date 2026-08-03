@@ -29,13 +29,13 @@ export function getPhantomProvider() {
 export async function connectPhantomWallet(): Promise<PhantomWallet> {
   const provider = await waitForPhantomProvider();
   if (!provider) {
-    throw new Error("Phantom 지갑을 찾을 수 없습니다. 브라우저 확장 프로그램을 설치해 주세요.");
+    throw new Error("지갑을 찾을 수 없습니다. 브라우저 지갑 확장 프로그램을 설치해 주세요.");
   }
   try {
     const response = await provider.connect();
     return { address: response.publicKey.toString() };
   } catch (caught) {
-    throw normalizeWalletError(caught, "Phantom 연결이 취소되었거나 실패했습니다.");
+    throw normalizeWalletError(caught, "지갑 연결이 취소되었거나 실패했습니다.");
   }
 }
 
@@ -60,7 +60,7 @@ export async function sendPreparedSolanaTransaction(input: {
 }) {
   const provider = await waitForPhantomProvider();
   if (!provider) {
-    throw new Error("Phantom 지갑을 찾을 수 없습니다.");
+    throw new Error("지갑을 찾을 수 없습니다.");
   }
   const transaction = Transaction.from(Buffer.from(input.transactionBase64, "base64"));
   if (!provider.signTransaction) {
@@ -70,10 +70,10 @@ export async function sendPreparedSolanaTransaction(input: {
         await confirmSignature(signature, input);
         return signature;
       } catch (caught) {
-        throw normalizeWalletError(caught, "Phantom transaction 전송이 실패했습니다.");
+        throw normalizeWalletError(caught, "거래 전송이 실패했습니다.");
       }
     }
-    throw new Error("현재 Phantom provider가 Solana transaction signing을 지원하지 않습니다.");
+    throw new Error("현재 지갑에서 거래 서명을 사용할 수 없습니다.");
   }
   try {
     const signed = await provider.signTransaction(transaction);
@@ -84,7 +84,7 @@ export async function sendPreparedSolanaTransaction(input: {
     await confirmSignature(signature, input);
     return signature;
   } catch (caught) {
-    throw normalizeWalletError(caught, "Phantom transaction 서명 또는 전송이 실패했습니다.");
+    throw normalizeWalletError(caught, "거래 서명 또는 전송이 실패했습니다.");
   }
 }
 
@@ -119,7 +119,7 @@ async function confirmSignature(
     "confirmed",
   );
   if (result.value.err) {
-    throw new Error(`Solana transaction failed: ${JSON.stringify(result.value.err)}`);
+    throw new Error(`거래가 실패했습니다: ${JSON.stringify(result.value.err)}`);
   }
 }
 
@@ -129,7 +129,7 @@ function defaultRpcUrl() {
 
 function normalizeWalletError(caught: unknown, fallback: string) {
   if (isWalletUserRejection(caught)) {
-    return new Error("Phantom에서 사용자가 요청을 취소했습니다.");
+    return new Error("지갑에서 사용자가 요청을 취소했습니다.");
   }
   if (caught instanceof Error && caught.message) return caught;
   return new Error(fallback);

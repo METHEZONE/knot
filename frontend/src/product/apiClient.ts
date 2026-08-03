@@ -1120,7 +1120,7 @@ function toApiError(status: number, body: unknown) {
       body.detail,
     );
   }
-  return new ProductApiError(`Product API request failed with ${status}`, status, "API_ERROR", body);
+  return new ProductApiError(`요청이 실패했습니다. 상태 코드: ${status}`, status, "API_ERROR", body);
 }
 
 function isProblemEnvelope(value: unknown): value is {
