@@ -118,12 +118,6 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
             <Link href="/brand/promotions/new" className="sketch-pill bg-accent px-5 py-3 text-background">
               프로모션 만들기
             </Link>
-            <Link
-              href="/brand/product"
-              className="sketch-pill ink border border-border-subtle bg-surface px-5 py-3 text-sm"
-            >
-              온보딩 다시 보기
-            </Link>
           </div>
         </section>
       </div>

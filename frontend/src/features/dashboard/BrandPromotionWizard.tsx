@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
-import { ProductApiClient, ProductApiError } from "@/product/apiClient";
-import { extractProduct } from "@/product/setupStore";
+import { ProductApiClient, ProductApiError, type AnalysisJob } from "@/product/apiClient";
 
 type WizardStep = "url" | "review" | "running";
 
 type MoodDraft = {
+  analysisId: string;
   productUrl: string;
   productName: string;
-  priceKrw: number;
+  priceKrw: number | null;
   summary: string;
   category: string;
   moodTags: string[];
@@ -21,6 +21,10 @@ type MoodDraft = {
   maxPerDealUsdc: number;
   workBrief: string;
   deliverables: DeliverableCounts;
+  prohibitedClaims: string;
+  usageRights: string;
+  provider: string;
+  fallbackReason: string | null;
 };
 
 type DeliverableCounts = {
@@ -40,28 +44,27 @@ export function BrandPromotionWizard() {
   const router = useRouter();
   const client = useMemo(() => new ProductApiClient(), []);
   const [step, setStep] = useState<WizardStep>("url");
-  const [productUrl, setProductUrl] = useState("https://demo-skincare.example.com/spf-daily");
+  const [productUrl, setProductUrl] = useState("");
   const [draft, setDraft] = useState<MoodDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function extractMood() {
+  async function extractMood() {
+    if (!productUrl.trim()) return;
     setBusy(true);
     setError(null);
-    window.setTimeout(() => {
-      const product = extractProduct(productUrl);
-      setDraft({
-        ...product,
-        productUrl,
-        moodTags: product.category === "wellness" ? ["집중", "루틴", "설명형"] : ["설명형", "루틴", "클로즈업"],
-        totalUsdc: 2000,
-        maxPerDealUsdc: 800,
-        workBrief: "제품을 직접 사용한 후기 중심의 콘텐츠 제작",
-        deliverables: { reel: 1, short: 0, post: 0 },
-      });
+    try {
+      const analysis = await client.analyzeProduct(
+        productUrl.trim(),
+        stableKey("promotion-analysis", productUrl.trim()),
+      );
+      setDraft(draftFromAnalysis(analysis));
       setStep("review");
+    } catch (caught) {
+      setError(readableError(caught));
+    } finally {
       setBusy(false);
-    }, 800);
+    }
   }
 
   async function startNegotiation() {
@@ -86,9 +89,9 @@ export function BrandPromotionWizard() {
           autoAcceptCeiling: maxPerCreator,
           maximumRounds: 3,
           deliverables: deliverablesFromDraft(draft.deliverables),
-          usageRights: "organicOnly",
+          usageRights: draft.usageRights,
           deadline: deadlineAfterDays(14),
-          prohibitedClaims: ["의료 효능 과장", "무검수 게시"],
+          prohibitedClaims: splitList(draft.prohibitedClaims),
         },
         stableKey("promotion", draft.productUrl, draft.productName, draft.moodTags.join(",")),
       );
@@ -156,13 +159,35 @@ export function BrandPromotionWizard() {
                     className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface px-3 py-2 text-xl outline-none"
                   />
                 </label>
+                <label className="mt-4 block text-sm text-muted">
+                  카테고리
+                  <input
+                    value={draft.category}
+                    onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                    placeholder="beauty, food, tech..."
+                    className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
+                  />
+                </label>
                 <p className="mt-3 text-sm text-muted">{draft.summary}</p>
+                <p className="mt-2 text-xs text-muted">
+                  {draft.provider}
+                  {draft.fallbackReason ? ` · ${draft.fallbackReason}` : ""}
+                </p>
                 <label className="mt-4 block text-sm text-muted">
                   해야 하는 작업
                   <textarea
                     value={draft.workBrief}
                     onChange={(event) => setDraft({ ...draft, workBrief: event.target.value })}
                     className="sketch-alt ink mt-2 min-h-20 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
+                  />
+                </label>
+                <label className="mt-4 block text-sm text-muted">
+                  금지 표현
+                  <textarea
+                    value={draft.prohibitedClaims}
+                    onChange={(event) => setDraft({ ...draft, prohibitedClaims: event.target.value })}
+                    placeholder="줄바꿈 또는 쉼표로 입력"
+                    className="sketch-alt ink mt-2 min-h-16 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
                   />
                 </label>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -238,6 +263,18 @@ export function BrandPromotionWizard() {
                   </span>
                 </label>
                 <label className="mt-4 block text-sm text-muted">
+                  사용권
+                  <select
+                    value={draft.usageRights}
+                    onChange={(event) => setDraft({ ...draft, usageRights: event.target.value })}
+                    className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface-raised px-3 py-2 text-sm outline-none"
+                  >
+                    <option value="organicOnly">Organic only</option>
+                    <option value="paidBoost30d">Paid boost 30d</option>
+                    <option value="fullLicense90d">Full license 90d</option>
+                  </select>
+                </label>
+                <label className="mt-4 block text-sm text-muted">
                   딜당 한도
                   <span className="mt-2 flex items-baseline gap-2">
                     <input
@@ -272,6 +309,7 @@ export function BrandPromotionWizard() {
                 disabled={
                   busy ||
                   !draft.productName.trim() ||
+                  !draft.category.trim() ||
                   !draft.workBrief.trim() ||
                   draft.moodTags.length === 0 ||
                   deliverablesFromDraft(draft.deliverables).length === 0 ||
@@ -323,6 +361,29 @@ function stableKey(prefix: string, ...parts: string[]) {
   return `${prefix}-${(hash >>> 0).toString(16)}`;
 }
 
+function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
+  const draft = analysis.draft;
+  const product = asRecord(draft.product);
+  const keywords = fieldArray(product.keywords);
+  return {
+    analysisId: analysis.analysisId,
+    productUrl: analysis.sourceUrl,
+    productName: stringField(product.name) || "",
+    priceKrw: priceField(product.price),
+    summary: stringField(product.summary) || "",
+    category: stringField(product.category) || "",
+    moodTags: keywords.filter((item) => RECOMMENDED_MOODS.includes(item)).slice(0, 3),
+    totalUsdc: 0,
+    maxPerDealUsdc: 0,
+    workBrief: "",
+    deliverables: { reel: 0, short: 0, post: 0 },
+    prohibitedClaims: "",
+    usageRights: "organicOnly",
+    provider: analysis.provider,
+    fallbackReason: analysis.fallbackReason,
+  };
+}
+
 function deadlineAfterDays(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -360,4 +421,41 @@ function readableError(caught: unknown) {
   if (caught instanceof ProductApiError) return caught.message;
   if (caught instanceof Error) return caught.message;
   return String(caught);
+}
+
+function splitList(value: string) {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringField(value: unknown): string | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  return typeof fieldValue === "string" && fieldValue.trim() ? fieldValue : null;
+}
+
+function priceField(value: unknown): number | null {
+  const record = asRecord(value);
+  const fieldValue = record.value;
+  if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) return fieldValue;
+  if (typeof fieldValue !== "string") return null;
+  const numeric = Number(fieldValue.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function fieldArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    const fieldValue = record.value;
+    return typeof fieldValue === "string" && fieldValue.trim() ? [fieldValue] : [];
+  });
 }

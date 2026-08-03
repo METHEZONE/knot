@@ -295,7 +295,7 @@ export function SettingsScreen({ role }: { role: Role }) {
             type="button"
             onClick={() => {
               if (!mine) return;
-              router.push(role === "creator" ? "/creator/connect" : "/brand/product");
+              router.push(role === "creator" ? "/creator/connect" : "/brand/promotions/new");
             }}
             className="sketch-pill ink border border-border-subtle bg-surface px-4 py-2 text-sm text-muted"
           >

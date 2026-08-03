@@ -183,7 +183,7 @@ export function LoginScreen() {
         </p>
       </Panel>
       <div className="grid gap-4 md:grid-cols-2">
-        <RoleJumpCard role="brand" title="Brand workspace" href="/brand/product" />
+        <RoleJumpCard role="brand" title="Brand workspace" href="/brand" />
         <RoleJumpCard role="creator" title="Creator workspace" href="/creator/connect" />
       </div>
     </AuthFrame>
@@ -195,7 +195,7 @@ export function SignupScreen() {
     <AuthFrame
       eyebrow="Create account"
       title="역할을 선택하세요"
-      body="회원가입은 역할 선택 후 온보딩으로 이어지고, 온보딩 결과로 Brand 또는 Creator 프로필이 생성됩니다."
+      body="브랜드는 기본 프로필만 만든 뒤 대시보드로 이동하고, 크리에이터는 협찬 수신 조건을 먼저 설정합니다."
     >
       <div className="grid gap-5 md:grid-cols-2">
         <RoleChoiceCard
@@ -1505,7 +1505,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
   const roleSession = session ?? fallbackRoleSession(role);
   const router = useRouter();
   const { refresh } = useAuth();
-  const nextHref = role === "brand" ? "/brand/product" : "/creator/connect";
+  const nextHref = role === "brand" ? "/brand" : "/creator/connect";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState<string | null>(null);
   const configured = firebaseConfigured();
@@ -1521,7 +1521,20 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
       await createFirebaseAccount(email, password, displayName);
       const api = new ProductApiClient();
       await api.getMe();
-      const account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
+      let account = await api.selectMyRole(role.toUpperCase() as "BRAND" | "CREATOR", `signup-role-${role}-${email}`);
+      if (role === "brand") {
+        account = await api.createMyBrandProfile(
+          {
+            brandName: formString(formData, "workspace", displayName),
+            websiteUrl: formHttpUrl(formData, "websiteUrl", ""),
+            categories: splitList(formString(formData, "categories", "")),
+            targetAudience: "프로모션별로 설정",
+            description: "프로모션 생성 시 제품과 캠페인 조건을 입력합니다.",
+            restrictedClaims: [],
+          },
+          `signup-brand-profile-${email}`,
+        );
+      }
       saveCurrentAccount(account);
       await refresh();
       router.replace(nextHref);
@@ -1548,10 +1561,17 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Name" name="name" placeholder={roleSession.userLabel} required />
-            <Input label={role === "brand" ? "Company" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
+            <Input label={role === "brand" ? "Brand name" : "Creator name"} name="workspace" placeholder={roleSession.organizationLabel} required />
             <Input label="Email" name="email" placeholder="you@knot.demo" type="email" required />
             <Input label="Password" name="password" placeholder="Password, 6+ characters" type="password" minLength={6} required />
-            <Input label="Workspace handle" name="handle" placeholder={role === "brand" ? "alpha-brand" : "creator-studio"} />
+            {role === "brand" ? (
+              <>
+                <Input label="Brand website URL" name="websiteUrl" placeholder="https://yourbrand.com" required />
+                <Input label="Brand categories" name="categories" placeholder="beauty, food, tech" required />
+              </>
+            ) : (
+              <Input label="Workspace handle" name="handle" placeholder="creator-studio" />
+            )}
           </div>
           {!configured && <FormError message={authConfigurationError()} />}
           {error && <FormError message={error} />}
@@ -1561,7 +1581,7 @@ export function RoleSignupScreen({ role, session }: { role: Role; session?: Role
               disabled={status === "saving" || !configured}
               className="inline-flex rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {status === "saving" ? "저장 중..." : "온보딩 계속"}
+              {status === "saving" ? "저장 중..." : role === "brand" ? "대시보드로 이동" : "온보딩 계속"}
             </button>
           </div>
         </form>
@@ -1581,7 +1601,7 @@ export function BrandOnboardingScreen() {
     try {
       const response = await new ProductApiClient().createMyBrandProfile({
         brandName: formString(formData, "brandName", "Brand"),
-        websiteUrl: formHttpUrl(formData, "websiteUrl", "https://brand.example"),
+        websiteUrl: formHttpUrl(formData, "websiteUrl", ""),
         categories: splitList(formString(formData, "categories", "")),
         customCategory: formString(formData, "customCategory", ""),
         targetAudience: formString(formData, "targetAudience", ""),
@@ -1608,7 +1628,7 @@ export function BrandOnboardingScreen() {
           <form action={submit}>
             <SectionTitle eyebrow="Brand profile" title="안정적인 브랜드 정보만 저장합니다" />
             <Input label="Brand name" name="brandName" placeholder="Brand name" required />
-            <Input label="Brand website URL" name="websiteUrl" placeholder="https://brand.example" required />
+            <Input label="Brand website URL" name="websiteUrl" placeholder="https://yourbrand.com" required />
             <ChoiceGroup
               label="Categories"
               name="categories"

@@ -23,7 +23,7 @@ export const SESSION_EVENT = "knot:session";
 
 /** 로그인 직후 각 역할이 처음 보는 화면. */
 export const ROLE_ENTRY: Record<Role, string> = {
-  brand: "/brand/product",
+  brand: "/brand",
   creator: "/creator/connect",
 };
 

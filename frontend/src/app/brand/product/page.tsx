@@ -1,12 +1,5 @@
-"use client";
-
-import { AuthGate } from "@/auth/AuthGate";
-import { BrandProduct } from "@/features/onboard/BrandProduct";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <AuthGate expectedRole="BRAND">
-      {() => <BrandProduct />}
-    </AuthGate>
-  );
+  redirect("/brand/promotions/new");
 }

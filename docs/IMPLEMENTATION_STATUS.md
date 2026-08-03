@@ -159,3 +159,28 @@ Updated: 2026-08-02
 - `/Users/yewonchoi/Desktop/knot/.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_promotions.py -q`:
   40 passed, 1 skipped.
 - `cd frontend && npm run typecheck`: passed.
+
+## 2026-08-03 Brand Signup Simplification And Promotion Real Inputs
+
+### Changed
+
+- Brand signup now creates only the minimal Brand profile and routes directly to
+  `/brand`; product, mood, budget, and deliverable setup no longer run during
+  Brand signup.
+- Incomplete Brand accounts now resume at `/brand/onboarding`, which stores only
+  Brand profile metadata; `/brand/product` and `/brand/mood` redirect to
+  `/brand/promotions/new`.
+- Brand Promotion creation now calls `/api/v1/analyses/product` instead of the
+  frontend fixture `extractProduct`.
+- Removed the fixed demo product URL, fixed work brief, fixed mood tags, and fixed
+  budget/deliverable defaults from the active Promotion wizard. The user must
+  confirm product/category/work/mood/deliverable/budget inputs before negotiation
+  can start.
+
+### Verification
+
+- `cd frontend && npm run typecheck`: passed.
+- `cd frontend && npm run lint`: passed.
+- `cd frontend && npm run build`: passed.
+- `/Users/yewonchoi/Desktop/knot/.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_promotions.py -q`:
+  37 passed, 1 skipped.

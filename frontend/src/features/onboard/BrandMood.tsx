@@ -53,7 +53,7 @@ export function BrandMood() {
   });
 
   useEffect(() => {
-    if (!draft) router.replace("/brand/product");
+    if (!draft) router.replace("/brand/promotions/new");
   }, [draft, router]);
 
   // 좋아요한 릴스의 태그를 많이 나온 순으로 모은다.

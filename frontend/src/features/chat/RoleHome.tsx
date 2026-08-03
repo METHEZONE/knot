@@ -15,7 +15,7 @@ import type { Role } from "@/product/types";
 
 const FIRST_STEP: Record<Role, string> = {
   creator: "/creator/connect",
-  brand: "/brand/product",
+  brand: "/brand/promotions/new",
 };
 
 export function RoleHome({ role }: { role: Role }) {

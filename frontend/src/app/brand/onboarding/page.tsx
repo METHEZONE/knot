@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { AuthGate } from "@/auth/AuthGate";
+import { BrandOnboardingScreen } from "@/product/ProductScreens";
 
 export default function Page() {
-  redirect("/brand/product");
+  return (
+    <AuthGate expectedRole="BRAND" completedRedirect="/brand">
+      {() => <BrandOnboardingScreen />}
+    </AuthGate>
+  );
 }
