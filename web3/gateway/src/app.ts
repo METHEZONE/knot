@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from "express";
 import { loadConfig, type GatewayConfig } from "./config.js";
 import { EscrowLockService } from "./escrow.js";
+import { airdrop } from "./faucet.js";
 import {
   confirmAgreementMilestoneRelease,
   confirmBrandFunding,
@@ -14,6 +15,7 @@ const confirmFundingRoute = /^\/internal\/v1\/escrows:confirm-funding$/;
 const prepareReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):prepare-release$/;
 const confirmReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):confirm-release$/;
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
+const faucetRoute = /^\/internal\/v1\/faucet$/;
 
 async function handleRelease(
   config: GatewayConfig,
@@ -68,6 +70,11 @@ export function createApp(
       request.body
     );
     response.status(result.statusCode).json(result.body);
+  });
+
+  app.post(faucetRoute, async (request: Request, response: Response) => {
+    const result = await airdrop(config, request.body);
+    response.status(result.statusCode).json({ data: result.body });
   });
 
   app.post(prepareFundingRoute, async (request: Request, response: Response) => {

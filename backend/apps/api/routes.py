@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import logging
+import os
 import re
 import socket
 from collections.abc import Sequence
@@ -387,22 +388,36 @@ def build_api_router(
             brand = repository.get_raw_document(FirestorePaths.brand(brand_id))
             if brand is None:
                 raise _not_found("brandProfile", brand_id)
+            wallet_top_up = _maybe_top_up_localnet_wallet(settings, payload.wallet_address)
             updated_brand = {**brand, **wallet, "updatedAt": now}
             repository.save_raw_document(FirestorePaths.brand(brand_id), updated_brand)
             repository.save_raw_document(FirestorePaths.user(auth_user.uid), {**user, **wallet})
-            return _ok({"wallet": wallet, **_current_user_payload(repository, {**user, **wallet})})
+            return _ok(
+                {
+                    "wallet": wallet,
+                    "walletTopUp": wallet_top_up,
+                    **_current_user_payload(repository, {**user, **wallet}),
+                }
+            )
         if role == "CREATOR":
             creator_id = _require_document_str(user, "creatorId")
             creator = repository.get_raw_document(FirestorePaths.creator_profile(creator_id))
             if creator is None:
                 raise _not_found("creatorProfile", creator_id)
+            wallet_top_up = _maybe_top_up_localnet_wallet(settings, payload.wallet_address)
             updated_creator = {**creator, **wallet, "updatedAt": now}
             repository.save_raw_document(
                 FirestorePaths.creator_profile(creator_id),
                 updated_creator,
             )
             repository.save_raw_document(FirestorePaths.user(auth_user.uid), {**user, **wallet})
-            return _ok({"wallet": wallet, **_current_user_payload(repository, {**user, **wallet})})
+            return _ok(
+                {
+                    "wallet": wallet,
+                    "walletTopUp": wallet_top_up,
+                    **_current_user_payload(repository, {**user, **wallet}),
+                }
+            )
         raise _problem(
             status.HTTP_409_CONFLICT,
             "ONBOARDING_REQUIRED",
@@ -2937,10 +2952,16 @@ def build_api_router(
             milestone_id=payload.milestone_id,
         )
         if existing_evidence is not None:
-            raise _problem(
-                status.HTTP_409_CONFLICT,
-                "EVIDENCE_ALREADY_SUBMITTED",
-                "Evidence was already submitted for this milestone.",
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "type": "https://knot.example/errors/evidence-already-submitted",
+                    "title": "Evidence Already Submitted",
+                    "status": status.HTTP_409_CONFLICT,
+                    "detail": "Evidence was already submitted for this milestone.",
+                    "code": "EVIDENCE_ALREADY_SUBMITTED",
+                    "evidence": existing_evidence,
+                },
             )
 
         evidence_id = f"evidence-{uuid4()}"
@@ -4897,6 +4918,7 @@ class FetchedSourcePage:
     title: str | None
     description: str | None
     text: str
+    links: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -5145,6 +5167,7 @@ def _deterministic_creator_profile_draft(
         "proposedMoodIds": [],
         "summary": "공개 콘텐츠를 아직 가져오지 않아 사용자 확인이 필요합니다.",
         "representativeUrls": [],
+        "publicSignals": _creator_public_signals(source_url, None, fallback_reason),
         "unknownFields": ["averageViews", "followerCount", "recentPosts"],
         "safetyFlags": [],
     }
@@ -5243,6 +5266,7 @@ def _extract_source_page(final_url: str, html_text: str) -> FetchedSourcePage:
         limited,
         "og:description",
     )
+    links = _extract_public_links(final_url, limited)
     body = re.sub(r"(?is)<(script|style|noscript)\b.*?</\1>", " ", limited)
     body = re.sub(r"(?s)<!--.*?-->", " ", body)
     body = re.sub(r"(?s)<[^>]+>", " ", body)
@@ -5252,7 +5276,31 @@ def _extract_source_page(final_url: str, html_text: str) -> FetchedSourcePage:
         title=_compact_text(html_unescape(title or "")) or None,
         description=_compact_text(html_unescape(description or "")) or None,
         text=text,
+        links=links,
     )
+
+
+def _extract_public_links(final_url: str, html_text: str) -> tuple[str, ...]:
+    links: list[str] = []
+    for raw in re.findall(r"(?is)\bhref\s*=\s*['\"]([^'\"]+)['\"]", html_text):
+        href = html_unescape(raw).strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        absolute = urljoin(final_url, href)
+        parsed = urlparse(absolute)
+        if parsed.scheme != "https" or not parsed.hostname:
+            continue
+        if "instagram." in parsed.hostname.lower() and not re.search(
+            r"/(p|reel|tv)/[^/?#]+",
+            parsed.path,
+        ):
+            continue
+        clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+        if clean not in links:
+            links.append(clean)
+        if len(links) >= 8:
+            break
+    return tuple(links)
 
 
 def _tag_text(html_text: str, tag_name: str) -> str | None:
@@ -5464,6 +5512,7 @@ def _normalize_gemini_creator_draft(
         "proposedMoodIds": _string_list(data.get("proposedMoodIds")),
         "summary": summary,
         "representativeUrls": _safe_https_list(data.get("representativeUrls")),
+        "publicSignals": _creator_public_signals(source_url, fetched, None),
         "unknownFields": _string_list(data.get("unknownFields")) or [
             "averageViews",
             "followerCount",
@@ -5587,6 +5636,7 @@ def _secure_fetch_creator_profile_draft(
         "proposedMoodIds": tags[:3],
         "summary": summary[:260],
         "representativeUrls": [fetched.final_url],
+        "publicSignals": _creator_public_signals(source_url, fetched, fallback_reason),
         "unknownFields": unknown_fields,
         "safetyFlags": [],
         "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
@@ -5597,6 +5647,65 @@ def _secure_fetch_creator_profile_draft(
         model=None if settings.gemini_mode == "off" else settings.gemini_model,
         fallback_reason=fallback_reason,
     )
+
+
+def _creator_public_signals(
+    source_url: str,
+    fetched: FetchedSourcePage | None,
+    fallback_reason: str | None,
+) -> dict[str, object]:
+    if fetched is None:
+        return {
+            "fetchStatus": "LIMITED",
+            "sourceTitle": None,
+            "sourceDescription": None,
+            "contentHints": [],
+            "recentPostUrls": [],
+            "analysisNotes": [_creator_fetch_note(fallback_reason)],
+        }
+    text = f"{fetched.title or ''} {fetched.description or ''} {fetched.text[:3000]}"
+    profile_counts = _creator_profile_counts(text)
+    recent_links = list(fetched.links[:6])
+    public_reel_links = [link for link in recent_links if "/reel/" in link]
+    public_post_links = [link for link in recent_links if "/p/" in link]
+    hashtags = [
+        tag
+        for tag in re.findall(r"(?<!\w)#([0-9A-Za-z가-힣_]{2,30})", text)
+        if tag.lower() not in {"instagram", "reels"}
+    ]
+    hints = list(dict.fromkeys([*_keyword_hits(text), *_creator_mood_hints(text), *hashtags]))[:8]
+    notes = ["공개 페이지에서 확인 가능한 메타 정보와 텍스트만 반영했습니다."]
+    if fallback_reason:
+        notes.append(_creator_fetch_note(fallback_reason))
+    if not fetched.links:
+        notes.append("공개 HTML에서 게시글 링크가 노출되지 않았습니다.")
+    return {
+        "fetchStatus": "FETCHED",
+        "sourceTitle": fetched.title,
+        "sourceDescription": fetched.description,
+        "profileCounts": {
+            **profile_counts,
+            "publicPostLinkCount": len(public_post_links),
+            "publicReelLinkCount": len(public_reel_links),
+        },
+        "contentHints": hints,
+        "recentPostUrls": recent_links,
+        "analysisNotes": notes,
+    }
+
+
+def _creator_fetch_note(reason: str | None) -> str:
+    labels = {
+        "secure_fetch_disabled": "서버 fetch가 꺼져 있어 URL 기반 제한 분석만 수행했습니다.",
+        "secure_fetch_failed": "공개 페이지 요청이 실패해 URL 기반 제한 분석만 수행했습니다.",
+        "empty_source": "공개 페이지에 분석 가능한 텍스트가 거의 없었습니다.",
+        "too_many_redirects": "공개 페이지 리다이렉트가 너무 많아 fetch를 중단했습니다.",
+    }
+    if not reason:
+        return "공개 페이지에서 수집 가능한 범위 안에서 분석했습니다."
+    if reason.startswith("source_http_"):
+        return f"공개 페이지가 HTTP {reason.removeprefix('source_http_')} 응답을 반환했습니다."
+    return labels.get(reason, f"제한 사유: {reason}")
 
 
 def _host_label(source_url: str) -> str:
@@ -5695,6 +5804,16 @@ def _extract_price(text: str) -> int | None:
 
 
 def _extract_creator_count(text: str, labels: list[str]) -> int | None:
+    parsed = _extract_creator_count_value(text, labels)
+    return parsed if parsed and parsed > 0 else None
+
+
+def _extract_creator_count_allow_zero(text: str, labels: list[str]) -> int | None:
+    parsed = _extract_creator_count_value(text, labels)
+    return parsed if parsed is not None and parsed >= 0 else None
+
+
+def _extract_creator_count_value(text: str, labels: list[str]) -> int | None:
     compact = _compact_text(text)
     label_pattern = "|".join(re.escape(label) for label in labels if label)
     patterns = [
@@ -5706,9 +5825,30 @@ def _extract_creator_count(text: str, labels: list[str]) -> int | None:
         if not match:
             continue
         parsed = _parse_compact_number("".join(part or "" for part in match.groups()))
-        if parsed and parsed > 0:
+        if parsed is not None:
             return parsed
     return None
+
+
+def _creator_profile_counts(text: str) -> dict[str, int]:
+    fields = {
+        "followerCount": _extract_creator_count(text, ["followers", "follower", "팔로워"]),
+        "followingCount": _extract_creator_count_allow_zero(text, ["following", "팔로잉"]),
+        "postCount": _extract_creator_count_allow_zero(text, ["posts", "post", "게시물"]),
+    }
+    return {key: value for key, value in fields.items() if value is not None}
+
+
+def _creator_mood_hints(text: str) -> list[str]:
+    lowered = text.lower()
+    hints: list[str] = []
+    if any(token in lowered for token in ["daily", "일상", "yonsei", "campus", "university"]):
+        hints.extend(["일상", "캠퍼스"])
+    if any(token in lowered for token in ["puppy", "dog", "pet", "maru", "강아지", "반려"]):
+        hints.extend(["반려동물", "친근함"])
+    if not hints:
+        hints.extend(["일상", "솔직함"])
+    return hints
 
 
 def _extract_percent_near(text: str, labels: list[str]) -> int | None:
@@ -6859,6 +6999,23 @@ def _web3_gateway_error_code(exc: Web3GatewayError, policy_code: str) -> str:
         if _web3_gateway_http_status(exc) != status.HTTP_502_BAD_GATEWAY
         else "WEB3_GATEWAY_UNAVAILABLE"
     )
+
+
+def _maybe_top_up_localnet_wallet(
+    settings: Settings,
+    wallet_address: str,
+) -> dict[str, object] | None:
+    if settings.web3_mode != "gateway" or settings.escrow_network != "solanaLocalnet":
+        return None
+    try:
+        return Web3GatewayClient(settings.web3_gateway_base_url).local_faucet(
+            wallet_address=wallet_address,
+            sol=float(os.getenv("KNOT_LOCAL_FAUCET_SOL", "100")),
+            usdc=float(os.getenv("KNOT_LOCAL_FAUCET_USDC", "2000")),
+        )
+    except (ValueError, Web3GatewayError) as exc:
+        logger.warning("localnet wallet top-up failed wallet=%s error=%s", wallet_address, exc)
+        return {"status": "FAILED", "detail": str(exc)}
 
 
 def _require_funded_escrow_for_agreement(

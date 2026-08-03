@@ -8,11 +8,11 @@ import sys
 import urllib.error
 import urllib.request
 
-
 AUTH_BASE = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1"
 API_BASE = "http://127.0.0.1:18080/api/v1"
 API_KEY = "demo-local"
 PASSWORD = "000000"
+DEMO_CREATOR_WALLET = "63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ"
 
 
 ACCOUNTS = [
@@ -35,9 +35,139 @@ ACCOUNTS = [
             "creatorName": "KNOT Test Creator",
             "snsUrl": "https://instagram.com/ye__5o",
             "categories": ["beauty"],
-            "minimumUsdc": 1,
+            "minimumUsdc": 10,
             "blockedDomains": ["도박", "대출·코인"],
-            "preferredContent": ["reel", "short"],
+            "preferredContent": ["reel", "short", "post"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c2@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Food Shorts Studio",
+            "snsUrl": "https://instagram.com/food.shorts.demo",
+            "categories": ["food", "lifestyle", "home"],
+            "minimumUsdc": 15,
+            "blockedDomains": ["도박", "담배"],
+            "preferredContent": ["short", "reel", "post"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c3@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Tech UGC Lab",
+            "snsUrl": "https://instagram.com/tech.ugc.demo",
+            "categories": ["tech", "gadgets", "gaming"],
+            "minimumUsdc": 20,
+            "blockedDomains": ["도박"],
+            "preferredContent": ["short", "reel", "post"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c4@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Fitness Routine Maker",
+            "snsUrl": "https://instagram.com/fitness.routine.demo",
+            "categories": ["fitness", "wellness", "lifestyle"],
+            "minimumUsdc": 12,
+            "blockedDomains": ["도박", "주류"],
+            "preferredContent": ["reel", "short", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c5@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Fashion Daily Fit",
+            "snsUrl": "https://instagram.com/fashion.daily.demo",
+            "categories": ["fashion", "lifestyle"],
+            "minimumUsdc": 25,
+            "blockedDomains": ["도박"],
+            "preferredContent": ["post", "reel", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c6@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Travel Mini Review",
+            "snsUrl": "https://instagram.com/travel.mini.demo",
+            "categories": ["travel", "lifestyle", "food"],
+            "minimumUsdc": 18,
+            "blockedDomains": ["도박"],
+            "preferredContent": ["short", "reel", "post"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c7@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Budget Beauty Reel Creator",
+            "snsUrl": "https://instagram.com/budget.beauty.demo",
+            "categories": ["beauty", "skincare", "wellness"],
+            "minimumUsdc": 10,
+            "blockedDomains": ["도박"],
+            "preferredContent": ["reel", "short", "post", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c8@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "30 USDC Demo All-Rounder",
+            "snsUrl": "https://instagram.com/demo.allrounder.creator",
+            "categories": [
+                "beauty",
+                "skincare",
+                "lifestyle",
+                "food",
+                "tech",
+                "fashion",
+                "fitness",
+                "wellness",
+                "supplement",
+                "nutrition",
+                "home",
+            ],
+            "minimumUsdc": 5,
+            "blockedDomains": ["도박", "담배"],
+            "preferredContent": ["reel", "short", "post", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c9@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Micro Beauty 10 Creator",
+            "snsUrl": "https://instagram.com/micro.beauty.demo",
+            "categories": ["beauty", "skincare", "lifestyle", "wellness"],
+            "minimumUsdc": 10,
+            "blockedDomains": ["도박", "대출·코인", "담배"],
+            "preferredContent": ["reel", "short", "post", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
+        },
+    },
+    {
+        "email": "c10@knot.com",
+        "role": "CREATOR",
+        "profile": {
+            "creatorName": "Low Budget Lifestyle Creator",
+            "snsUrl": "https://instagram.com/lowbudget.life.demo",
+            "categories": ["lifestyle", "home", "food", "fashion", "fitness"],
+            "minimumUsdc": 10,
+            "blockedDomains": ["도박", "담배"],
+            "preferredContent": ["reel", "short", "post", "story"],
+            "walletAddress": DEMO_CREATOR_WALLET,
         },
     },
 ]
@@ -52,7 +182,7 @@ def main() -> int:
                 "POST",
                 "/me/role",
                 token=token,
-                idempotency_key=f"local-role-{account['role'].lower()}",
+                idempotency_key=f"local-role-{account['email']}-{account['role'].lower()}",
                 payload={"role": account["role"]},
             )
             if account["role"] == "BRAND":
@@ -68,10 +198,19 @@ def main() -> int:
                     "POST",
                     "/me/creator-profile",
                     token=token,
-                    idempotency_key="local-creator-profile",
+                    idempotency_key=f"local-creator-profile-{account['email']}-v2",
                     payload=account["profile"],
                 )
                 api("POST", "/creator/agent:publish", token=token)
+        elif account["role"] == "CREATOR":
+            api(
+                "POST",
+                "/me/creator-profile",
+                token=token,
+                idempotency_key=f"local-creator-profile-{account['email']}-v2",
+                payload=account["profile"],
+            )
+            api("POST", "/creator/agent:publish", token=token)
         print(f"  ✅ {account['email']} / {PASSWORD}")
     return 0
 
@@ -82,9 +221,8 @@ def sign_in(email: str) -> str:
             "accounts:signInWithPassword",
             {"email": email, "password": PASSWORD, "returnSecureToken": True},
         )
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        if "EMAIL_NOT_FOUND" not in body:
+    except RuntimeError as exc:
+        if "EMAIL_NOT_FOUND" not in str(exc):
             raise
         data = auth_request(
             "accounts:signUp",
@@ -128,8 +266,12 @@ def request(
 ) -> dict[str, object]:
     body = None if payload is None else json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=10) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{method} {url} failed with {exc.code}: {detail}") from exc
 
 
 if __name__ == "__main__":

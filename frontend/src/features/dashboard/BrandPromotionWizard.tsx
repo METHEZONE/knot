@@ -93,7 +93,7 @@ export function BrandPromotionWizard() {
       };
       const promotion = await client.createBrandPromotion(
         promotionPayload,
-        stableKey("promotion", JSON.stringify(promotionPayload)),
+        uniqueRequestKey("promotion"),
       );
       const flow = await client.runAgentForPromotion(promotion.promotionId);
       if (flow.negotiation) {
@@ -362,13 +362,8 @@ function normalizeSourceUrl(value: string) {
   return `https://${trimmed.replace(/^\/+/, "")}`;
 }
 
-function stableKey(prefix: string, ...parts: string[]) {
-  let hash = 0x811c9dc5;
-  for (const part of parts.join("|")) {
-    hash ^= part.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `${prefix}-${(hash >>> 0).toString(16)}`;
+function uniqueRequestKey(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {

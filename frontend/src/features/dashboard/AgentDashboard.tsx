@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
 import {
@@ -40,10 +41,30 @@ export function AgentDashboard({
 }
 
 function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
+  const router = useRouter();
   const client = useMemo(() => new ProductApiClient(), []);
   const [dashboard, setDashboard] = useState<LoadState<BrandDashboard>>(emptyLoad);
   const [agreements, setAgreements] = useState<Array<ApiAgreement & Record<string, unknown>>>([]);
   const [promotions, setPromotions] = useState<Array<ApiPromotion & Record<string, unknown>>>([]);
+  const [runningPromotionId, setRunningPromotionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
+
+  const load = useCallback(async (markLoading = false) => {
+    if (markLoading) setDashboard(emptyLoad());
+    try {
+      const [nextDashboard, nextAgreements, nextPromotions] = await Promise.all([
+        client.getBrandDashboard(),
+        client.listBrandAgreements(),
+        client.listBrandPromotions(),
+      ]);
+      setDashboard({ data: nextDashboard, loading: false, error: null });
+      setAgreements(nextAgreements);
+      setPromotions(nextPromotions);
+    } catch (caught) {
+      setDashboard({ data: null, loading: false, error: readableError(caught) });
+    }
+  }, [client]);
 
   useEffect(() => {
     let active = true;
@@ -69,6 +90,26 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
       active = false;
     };
   }, [client]);
+
+  async function runPromotion(promotionId: string) {
+    setRunningPromotionId(promotionId);
+    setActionError(null);
+    setWaitingMessage(null);
+    try {
+      const flow = await client.runAgentForPromotion(promotionId);
+      if (flow.negotiation) {
+        router.push(`/brand/negotiations/${flow.negotiation.negotiationId}`);
+        router.refresh();
+        return;
+      }
+      setWaitingMessage("조건에 맞는 Creator가 아직 없습니다. 새 Creator가 들어오면 다시 탐색할 수 있습니다.");
+      await load(false);
+    } catch (caught) {
+      setActionError(readableError(caught));
+    } finally {
+      setRunningPromotionId(null);
+    }
+  }
 
   const totalContracted = agreements.reduce(
     (sum, agreement) => sum + (agreement.terms?.compensation?.baseAmountUsdc ?? 0),
@@ -104,7 +145,12 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
           <SectionHeader eyebrow="에이전트 관리" title="협찬 제안하기" />
           {promotions.length ? (
-            <BrandProjectReview promotion={promotions[0]} />
+            <BrandProjectReview
+              promotion={promotions[0]}
+              agreement={agreements.find((agreement) => agreement.promotionId === promotions[0].promotionId)}
+              busy={runningPromotionId === promotions[0].promotionId}
+              onRun={() => runPromotion(promotions[0].promotionId)}
+            />
           ) : (
             <p className="text-sm text-muted">
               새 프로모션은 제품 URL을 읽고 무드를 추출한 뒤, 검토 화면에서 협상을 시작합니다.
@@ -115,13 +161,23 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
               프로모션 만들기
             </Link>
           </div>
+          {(waitingMessage ?? actionError) ? (
+            <p className={`mt-3 text-sm ${actionError ? "text-negative" : "text-muted"}`}>
+              {actionError ?? waitingMessage}
+            </p>
+          ) : null}
         </section>
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
         <SectionHeader eyebrow="Agent 기록" title="만든 프로모션과 협상 결과" />
         {promotions.length ? (
-          <BrandRecordList promotions={promotions} agreements={agreements} />
+          <BrandRecordList
+            promotions={promotions}
+            agreements={agreements}
+            runningPromotionId={runningPromotionId}
+            onRunPromotion={runPromotion}
+          />
         ) : (
           <EmptyState
             title="아직 만든 프로모션이 없습니다"
@@ -321,7 +377,17 @@ function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
-function BrandProjectReview({ promotion }: { promotion: ApiPromotion }) {
+function BrandProjectReview({
+  promotion,
+  agreement,
+  busy,
+  onRun,
+}: {
+  promotion: ApiPromotion;
+  agreement?: ApiAgreement | null;
+  busy: boolean;
+  onRun: () => void;
+}) {
   const prohibitedClaims = promotion.constraints?.prohibitedClaims ?? [];
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
@@ -348,6 +414,23 @@ function BrandProjectReview({ promotion }: { promotion: ApiPromotion }) {
         <p className="mt-2 text-xs text-muted">
           총 {promotion.budget.totalUsdc.toLocaleString()} USDC 안에서 협상
         </p>
+        {agreement ? (
+          <Link
+            href={`/brand/agreements/${agreement.agreementId}`}
+            className="sketch-pill mt-4 inline-flex border border-border-subtle bg-background px-4 py-2 text-sm"
+          >
+            계약 상세보기
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={busy}
+            className="sketch-pill mt-4 bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
+          >
+            {busy ? "Creator 탐색 중…" : "Creator 탐색·협상 시작"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -384,9 +467,13 @@ function SettlementOverview({
 function BrandRecordList({
   promotions,
   agreements,
+  runningPromotionId,
+  onRunPromotion,
 }: {
   promotions: Array<ApiPromotion & Record<string, unknown>>;
   agreements: Array<ApiAgreement & Record<string, unknown>>;
+  runningPromotionId: string | null;
+  onRunPromotion: (promotionId: string) => void;
 }) {
   const agreementByPromotion = new Map(agreements.map((agreement) => [agreement.promotionId, agreement]));
   return (
@@ -399,11 +486,11 @@ function BrandRecordList({
             ? `/brand/negotiations/${negotiationId}`
             : `/brand/promotions/${promotion.promotionId}`;
         return (
-          <Link
+          <div
             key={promotion.promotionId}
-            href={href}
             className="sketch-alt ink flex flex-wrap items-center justify-between gap-3 border border-border-subtle bg-surface-raised p-4"
           >
+            <Link href={href} className="min-w-0 flex-1">
               <span className="min-w-0">
                 <span className="block truncate text-xl">{promotion.title}</span>
                 <span className="font-mono text-xs text-muted">
@@ -414,13 +501,28 @@ function BrandRecordList({
                   {deliverableSummary(agreement?.terms.deliverables ?? promotion.deliverables)}
                 </span>
               </span>
+            </Link>
             <span className="flex items-center gap-3">
               {agreement ? <Money usdc={agreement.terms.compensation.baseAmountUsdc} /> : null}
-              <span className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm">
-                {agreement ? "상세보기" : "프로모션 보기"}
-              </span>
+              {agreement ? (
+                <Link
+                  href={href}
+                  className="sketch-pill ink border border-border-subtle bg-surface px-3 py-1 text-sm"
+                >
+                  상세보기
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onRunPromotion(promotion.promotionId)}
+                  disabled={runningPromotionId === promotion.promotionId}
+                  className="sketch-pill bg-accent px-3 py-1 text-sm text-background disabled:opacity-50"
+                >
+                  {runningPromotionId === promotion.promotionId ? "탐색 중…" : "다시 탐색"}
+                </button>
+              )}
             </span>
-          </Link>
+          </div>
         );
       })}
     </div>

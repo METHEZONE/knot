@@ -15,6 +15,18 @@ type CreatorDraft = Omit<CreatorSetup, "minUsdc" | "blocked"> & {
   sourceUrl: string;
   provider: string;
   fallbackReason: string | null;
+  summary: string;
+  publicSignals: CreatorPublicSignals;
+};
+
+type CreatorPublicSignals = {
+  fetchStatus: string;
+  sourceTitle: string | null;
+  sourceDescription: string | null;
+  profileCounts: Record<string, number>;
+  contentHints: string[];
+  recentPostUrls: string[];
+  analysisNotes: string[];
 };
 
 export function CreatorConnect() {
@@ -92,10 +104,9 @@ export function CreatorConnect() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="팔로워" value={unknownableNumber(found.followers)} />
-            <Stat label="평균 조회" value={unknownableNumber(found.avgViews)} />
-            <Stat label="참여율" value={found.engagementRate ? `${(found.engagementRate * 100).toFixed(1)}%` : "확인 필요"} />
-            <Stat label="릴스 비중" value={found.reelShare ? `${found.reelShare}%` : "확인 필요"} />
+            {creatorStats(found).map((stat) => (
+              <Stat key={stat.label} label={stat.label} value={stat.value} />
+            ))}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-1.5">
@@ -107,6 +118,50 @@ export function CreatorConnect() {
                 {k}
               </span>
             ))}
+          </div>
+
+          <div className="sketch-alt ink mt-4 border border-border-subtle bg-surface-raised p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-lg">공개 프로필 신호</p>
+              <span className="font-mono text-[10px] uppercase text-muted">
+                {found.publicSignals.fetchStatus}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-muted">{dedupeProfileSummary(found)}</p>
+            {found.publicSignals.contentHints.length ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {found.publicSignals.contentHints.map((hint) => (
+                  <span
+                    key={hint}
+                    className="sketch-pill ink border border-border-subtle bg-surface px-2.5 py-0.5 text-xs"
+                  >
+                    {hint}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {found.publicSignals.recentPostUrls.length ? (
+              <div className="mt-3 grid gap-1.5">
+                {found.publicSignals.recentPostUrls.map((url, index) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate font-mono text-xs text-muted underline decoration-border-subtle underline-offset-4"
+                  >
+                    게시글 {index + 1} · {url}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            {found.publicSignals.analysisNotes.length ? (
+              <div className="mt-3 grid gap-1 text-xs text-muted">
+                {found.publicSignals.analysisNotes.map((note) => (
+                  <p key={note}>{note}</p>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <p className="mt-4 text-xs text-muted">
@@ -150,6 +205,8 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
     capturedAt: new Date().toISOString().slice(0, 10),
     provider: analysis.provider,
     fallbackReason: analysis.fallbackReason,
+    summary: typeof draft.summary === "string" && draft.summary.trim() ? draft.summary : "공개 프로필 분석 결과를 확인해주세요.",
+    publicSignals: publicSignalsFromDraft(draft.publicSignals),
   };
 }
 
@@ -198,12 +255,54 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function publicSignalsFromDraft(value: unknown): CreatorPublicSignals {
+  const record = asRecord(value);
+  return {
+    fetchStatus: typeof record.fetchStatus === "string" ? record.fetchStatus : "LIMITED",
+    sourceTitle: nullableString(record.sourceTitle),
+    sourceDescription: nullableString(record.sourceDescription),
+    profileCounts: numberMap(record.profileCounts),
+    contentHints: stringArray(record.contentHints).slice(0, 8),
+    recentPostUrls: stringArray(record.recentPostUrls).slice(0, 6),
+    analysisNotes: stringArray(record.analysisNotes).slice(0, 4),
+  };
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
-function unknownableNumber(value: number) {
-  return value > 0 ? value.toLocaleString() : "확인 필요";
+function numberMap(value: unknown): Record<string, number> {
+  const record = asRecord(value);
+  return Object.fromEntries(
+    Object.entries(record).flatMap(([key, item]) =>
+      typeof item === "number" && Number.isFinite(item) && item >= 0 ? [[key, item]] : [],
+    ),
+  );
+}
+
+function creatorStats(found: CreatorDraft) {
+  const counts = found.publicSignals.profileCounts;
+  const stats = [
+    ["팔로워", counts.followerCount ?? found.followers],
+    ["팔로잉", counts.followingCount],
+    ["게시물", counts.postCount],
+    ["공개 릴스 링크", counts.publicReelLinkCount],
+    ["공개 게시글 링크", counts.publicPostLinkCount],
+  ] as const;
+  return stats.flatMap(([label, value]) =>
+    typeof value === "number" && value >= 0 ? [{ label, value: value.toLocaleString() }] : [],
+  ).slice(0, 4);
+}
+
+function dedupeProfileSummary(found: CreatorDraft) {
+  const description = found.publicSignals.sourceDescription;
+  if (description && description.trim()) return description;
+  return found.summary;
 }

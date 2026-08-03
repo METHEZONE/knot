@@ -4,7 +4,7 @@ import { firebaseAuthErrorMessage } from "../src/auth/firebaseClient";
 import { getDashboardPath, headerMenuForAuth, postLoginPath, safeRedirectPath } from "../src/auth/authState";
 import { accountRoutes, appRoutes, brandWorkspaceRoutes, creatorWorkspaceRoutes, roleHome, roleNegotiation, roleResult } from "../src/product/flow";
 import { createKnotDataSource, resolveDataMode } from "../src/product/dataSource";
-import { ProductApiClient, ProductApiError, type ApiPromotion } from "../src/product/apiClient";
+import { ProductApiClient, type ApiPromotion } from "../src/product/apiClient";
 import {
   calculateBrandEscrow,
   calculateCreatorSettlement,
@@ -517,18 +517,17 @@ test("API client does not start negotiation when matching has no eligible creato
         },
       });
     }
+    if (url.endsWith("/api/v1/promotions/promotion-no-candidate/timeline")) {
+      return Response.json({ data: { events: [] } });
+    }
     return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
   }) as typeof fetch;
 
   try {
-    await assert.rejects(
-      () => new ProductApiClient("").runAgentForPromotion("promotion-no-candidate"),
-      (error) =>
-        error instanceof ProductApiError &&
-        error.code === "NO_ELIGIBLE_CREATOR" &&
-        error.message.includes("CATEGORY_MISMATCH"),
-    );
-    assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET"]);
+    const flow = await new ProductApiClient("").runAgentForPromotion("promotion-no-candidate");
+    assert.equal(flow.waitingForCreator, true);
+    assert.equal(flow.negotiation, null);
+    assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET", "GET"]);
     assert.ok(!calls.some((call) => call.url.includes(":start-negotiation")));
   } finally {
     globalThis.fetch = previousFetch;

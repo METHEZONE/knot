@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AgentCharacter } from "@/components/AgentCharacter";
 import { Money } from "@/features/chat/Money";
 import {
@@ -20,12 +21,16 @@ type PromotionDetailState = {
 };
 
 export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
+  const router = useRouter();
   const client = useMemo(() => new ProductApiClient(), []);
   const [state, setState] = useState<{
     loading: boolean;
     error: string | null;
     data: PromotionDetailState | null;
   }>({ loading: true, error: null, data: null });
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const detail = await client.getBrandPromotionDetail(promotionId);
@@ -62,6 +67,35 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
       active = false;
     };
   }, [load]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await load();
+      setState({ loading: false, error: null, data });
+    } catch (caught) {
+      setState({ loading: false, error: readableError(caught), data: null });
+    }
+  }, [load]);
+
+  async function runPromotion() {
+    setRunning(true);
+    setRunError(null);
+    setWaitingMessage(null);
+    try {
+      const flow = await client.runAgentForPromotion(promotionId);
+      if (flow.negotiation) {
+        router.push(`/brand/negotiations/${flow.negotiation.negotiationId}`);
+        router.refresh();
+        return;
+      }
+      setWaitingMessage("조건에 맞는 Creator가 아직 없습니다. 새 Creator가 들어오면 다시 탐색할 수 있습니다.");
+      await refresh();
+    } catch (caught) {
+      setRunError(readableError(caught));
+    } finally {
+      setRunning(false);
+    }
+  }
 
   if (state.loading) {
     return <PanelMessage title="프로모션 상세 불러오는 중" body="Promotion, Agreement, Escrow 상태를 조회하고 있습니다." />;
@@ -100,7 +134,15 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
 
       <div className="grid gap-5 lg:grid-cols-3">
         <PromotionSummaryPanel promotion={promotion} />
-        <AgentRunPanel promotion={promotion} activity={detail.activity} primaryAgreement={primaryAgreement} />
+        <AgentRunPanel
+          promotion={promotion}
+          activity={detail.activity}
+          primaryAgreement={primaryAgreement}
+          running={running}
+          runError={runError}
+          waitingMessage={waitingMessage}
+          onRun={runPromotion}
+        />
         <EscrowSummaryPanel
           agreementCount={agreements.length}
           escrowSummary={escrowSummary}
@@ -167,10 +209,18 @@ function AgentRunPanel({
   promotion,
   activity,
   primaryAgreement,
+  running,
+  runError,
+  waitingMessage,
+  onRun,
 }: {
   promotion: ApiPromotion & Record<string, unknown>;
   activity: ApiTimelineEvent[];
   primaryAgreement: ApiAgreement | null;
+  running: boolean;
+  runError: string | null;
+  waitingMessage: string | null;
+  onRun: () => void;
 }) {
   const latest = activity.at(-1);
   return (
@@ -189,11 +239,18 @@ function AgentRunPanel({
             협상 상세보기
           </Link>
         ) : (
-          <Link href="/brand" className="sketch-pill bg-accent px-4 py-2 text-background">
-            대시보드에서 다시 탐색
-          </Link>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={running}
+            className="sketch-pill bg-accent px-4 py-2 text-background disabled:opacity-50"
+          >
+            {running ? "Creator 탐색 중…" : "Creator 탐색·협상 시작"}
+          </button>
         )}
       </div>
+      {waitingMessage ? <p className="mt-3 text-sm text-muted">{waitingMessage}</p> : null}
+      {runError ? <p className="mt-3 text-sm text-negative">{runError}</p> : null}
     </section>
   );
 }

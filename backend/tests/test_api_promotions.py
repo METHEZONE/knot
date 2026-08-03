@@ -503,6 +503,73 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
     assert start_response.json()["data"]["negotiation"]["status"] == "AGREED"
 
 
+def test_run_match_normalizes_korean_fashion_product_aliases() -> None:
+    client, repository = client_and_repository_with_seed()
+    creator = repository.get_creator_profile("creator-003")
+    assert creator is not None
+    repository.save_raw_document(
+        FirestorePaths.creator_profile("creator-003"),
+        {
+            **creator.model_dump(mode="json", by_alias=True),
+            "categories": ["fashion", "lifestyle"],
+            "rateCard": {"minBaseUsdc": 10, "maxBaseUsdc": 50},
+            "supportedDeliverableFormats": ["reel", "short", "post"],
+        },
+    )
+    agent = repository.get_raw_document(FirestorePaths.agent("creator-agent-003"))
+    assert agent is not None
+    repository.save_raw_document(
+        FirestorePaths.agent("creator-agent-003"),
+        {
+            **agent,
+            "publicationStatus": "PUBLISHED",
+            "acceptingOffers": True,
+            "availability": "AVAILABLE",
+        },
+    )
+    discovery = repository.get_raw_document(
+        FirestorePaths.creator_discovery_profile("creator-003")
+    )
+    assert discovery is not None
+    repository.save_raw_document(
+        FirestorePaths.creator_discovery_profile("creator-003"),
+        {
+            **discovery,
+            "categoryKeys": ["fashion", "lifestyle"],
+            "primaryCategoryKey": "fashion",
+            "formatKeys": ["reel", "short", "post"],
+            "primaryFormatKey": "reel",
+            "publicRateBand": "under_250",
+            "agentStatus": "PUBLISHED",
+            "acceptingOffers": True,
+            "availability": "AVAILABLE",
+            "capacityAvailable": True,
+        },
+    )
+    payload = {
+        "promotionId": "promotion-korean-fashion-sleeveless",
+        "title": "RX 에어 메쉬 맨즈 슬리브리스",
+        "objective": "awareness",
+        "category": "남성 슬리브리스",
+        "targetAudience": ["운동", "데일리"],
+        "budget": {"totalUsdc": 20, "maxPerCreatorUsdc": 10},
+        "deliverables": [{"format": "reel", "count": 1}],
+        "postingWindow": {"start": "2026-08-17", "end": "2026-08-17"},
+        "usageRights": "organicOnly",
+        "constraints": {"requiredCategories": ["남성 슬리브리스"]},
+    }
+    assert client.post("/api/v1/promotions", json=payload).status_code == 201
+
+    run_response = client.post(
+        "/api/v1/promotions/promotion-korean-fashion-sleeveless/matches:run"
+    )
+
+    assert run_response.status_code == 201
+    match_run = run_response.json()["data"]["matchRun"]
+    assert match_run["status"] == "COMPLETED"
+    assert match_run["selectedCreatorAgentId"] == "creator-agent-003"
+
+
 def test_start_negotiation_reports_no_eligible_creator() -> None:
     client = client_with_seed()
     payload = {

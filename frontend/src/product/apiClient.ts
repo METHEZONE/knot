@@ -381,6 +381,7 @@ export type ApiEscrow = {
   escrowId: string;
   agreementId: string;
   promotionId: string;
+  network?: string;
   lockedAmountBaseUnits: string;
   fundedAmountBaseUnits?: string;
   fundedAmountUsdc?: string;
@@ -408,6 +409,15 @@ export type ApiSettlement = {
   amountBaseUnits: string;
   status: "SIMULATED" | "SUBMITTED" | "CONFIRMED" | string;
   signature: string | null;
+};
+
+export type ApiAutoSettlement = {
+  attempted: boolean;
+  released?: boolean;
+  reason?: string;
+  fallback?: string;
+  signedBy?: string;
+  settlement?: ApiSettlement | null;
 };
 
 export type ApiReceipt = {
@@ -479,6 +489,7 @@ export type EscrowFundingPrepare = {
   transactionBase64: string;
   recentBlockhash: string;
   lastValidBlockHeight: number;
+  rpcUrl?: string;
 };
 
 export type EscrowReleasePrepare = {
@@ -499,6 +510,7 @@ export type EscrowReleasePrepare = {
   transactionBase64: string;
   recentBlockhash: string;
   lastValidBlockHeight: number;
+  rpcUrl?: string;
 };
 
 export type ApiDevAdminOverview = {
@@ -1003,11 +1015,10 @@ export class ProductApiClient {
   }
 
   async verifyEvidence(evidenceId: string) {
-    const response = await this.request<{ evidence: ApiEvidence }>(
+    return this.request<{ evidence: ApiEvidence; autoSettlement?: ApiAutoSettlement }>(
       `/api/v1/evidence/${evidenceId}:verify`,
       { method: "POST" },
     );
-    return response.evidence;
   }
 
   async lockEscrow(agreementId: string) {

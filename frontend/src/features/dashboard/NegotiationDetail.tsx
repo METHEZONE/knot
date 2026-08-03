@@ -113,7 +113,7 @@ export function NegotiationDetail({
       const idempotencySeed = `${state.detail.agreement.agreementId}-${wallet.address}`;
       const prepared = await client.prepareEscrowFunding(
         state.detail.agreement.agreementId,
-        `frontend-prepare-v2-${idempotencySeed}`,
+        uniqueRequestKey(`frontend-prepare-v3-${idempotencySeed}`),
       );
       if (!prepared.funding) {
         await refresh();
@@ -163,9 +163,13 @@ export function NegotiationDetail({
 
   async function ensureCreatorSettlementWallet(escrowDestination?: string | null) {
     setSettlementState("connecting");
-    const address = effectiveWalletAddress ?? (await connectAndSaveWalletAddress());
+    const address = await connectAndSaveWalletAddress();
     if (escrowDestination && escrowDestination !== address) {
-      throw new Error("연결된 Phantom 지갑과 이 escrow의 Creator 수령 지갑이 다릅니다.");
+      throw new Error(
+        `연결된 Phantom 지갑이 이 escrow의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
+          address,
+        )}, 필요: ${shortAddress(escrowDestination)}`,
+      );
     }
     return address;
   }
@@ -243,6 +247,21 @@ export function NegotiationDetail({
       </section>
     </div>
   );
+}
+
+function evidenceFromApiError(error: ProductApiError): ApiEvidence | null {
+  const detail = error.detail;
+  if (!detail || typeof detail !== "object" || !("evidence" in detail)) return null;
+  const evidence = (detail as { evidence?: unknown }).evidence;
+  if (!evidence || typeof evidence !== "object" || !("evidenceId" in evidence)) return null;
+  return evidence as ApiEvidence;
+}
+
+function uniqueRequestKey(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function AgreementNegotiationDetail({
@@ -477,22 +496,18 @@ function SettlementSummaryPanel({
     totalBaseUnits && releasedBaseUnits
       ? (safeBigInt(totalBaseUnits) - safeBigInt(releasedBaseUnits)).toString()
       : totalBaseUnits;
+  const settlementSignature = latestSettlement?.signature ?? null;
+  const primaryTx = role === "brand" ? signature : settlementSignature;
 
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
       <SectionHeader eyebrow="Wallet & settlement" title={role === "brand" ? "지갑과 예치" : "지갑과 정산"} />
       <div className="grid gap-3">
-        <Metric label={role === "brand" ? "Brand Phantom" : "Creator Phantom"} value={walletAddress ?? "연결 필요"} />
+        <Metric label={role === "brand" ? "Brand Phantom" : "Creator Phantom"} value={shortAddress(walletAddress) ?? "연결 필요"} />
         <Metric label="Agreement 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
         <Metric label="Escrow 상태" value={escrow ? escrow.status : agreement ? "CREATED 전" : "계약 전"} />
-        <Metric label="Escrow 총액" value={baseUnitsToUsdcLabel(totalBaseUnits)} />
-        <Metric label="지급 완료" value={baseUnitsToUsdcLabel(releasedBaseUnits)} />
-        <Metric label="Escrow 잔액" value={baseUnitsToUsdcLabel(remainingBaseUnits)} />
-        <Metric label="Escrow PDA" value={escrow?.escrowPda ?? "initialize 전"} />
-        <Metric label="Escrow Vault" value={escrow?.vaultTokenAccount ?? "funding 전"} />
-        <Metric label="Brand source" value={escrow?.brandAuthority ?? "지갑 연결 전"} />
-        <Metric label="Creator destination" value={escrow?.creatorDestination ?? "수령 지갑 연결 필요"} />
-        <Metric label={role === "brand" ? "예치 tx" : "정산 tx"} value={role === "brand" ? signature ?? "예치 전" : latestSettlement?.signature ?? "정산 전"} />
+        <Metric label={role === "brand" ? "Escrow 잔액" : "지급 완료"} value={role === "brand" ? baseUnitsToUsdcLabel(remainingBaseUnits) : baseUnitsToUsdcLabel(releasedBaseUnits)} />
+        <Metric label={role === "brand" ? "예치 tx" : "정산 tx"} value={primaryTx ? "Explorer 확인 가능" : role === "brand" ? "예치 전" : "정산 전"} />
       </div>
       {role === "brand" && onFund && !funded ? (
         <button
@@ -514,25 +529,13 @@ function SettlementSummaryPanel({
           {walletAddress ? "수령 지갑 다시 연결" : "Phantom 수령 지갑 연결"}
         </button>
       ) : null}
-      {signature ? (
-        <a
-          href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
-        >
-          Solana Explorer
-        </a>
-      ) : null}
+      {signature ? <TransactionReference signature={signature} network={escrow?.network} label="예치 tx" /> : null}
       {latestSettlement?.signature ? (
-        <a
-          href={`https://explorer.solana.com/tx/${latestSettlement.signature}?cluster=devnet`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
-        >
-          Settlement Explorer
-        </a>
+        <TransactionReference
+          signature={latestSettlement.signature}
+          network={escrow?.network}
+          label="정산 tx"
+        />
       ) : null}
     </section>
   );
@@ -603,14 +606,11 @@ function MilestonePanel({
                   : `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`}
             </p>
             {settlement?.signature ? (
-              <a
-                href={`https://explorer.solana.com/tx/${settlement.signature}?cluster=devnet`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
-              >
-                settlement tx {settlement.signature}
-              </a>
+              <TransactionReference
+                signature={settlement.signature}
+                network={escrow?.network}
+                label="settlement tx"
+              />
             ) : null}
             <WorkItemList terms={agreement.terms} compact />
             {role === "creator" && escrow && !released ? (
@@ -666,38 +666,41 @@ function EvidenceForm({
     try {
       const connectedWallet = await onEnsureCreatorWallet(escrow.creatorDestination);
       if (escrow.creatorDestination && connectedWallet !== escrow.creatorDestination) {
-        throw new Error("연결된 Phantom 지갑과 이 escrow의 Creator 수령 지갑이 다릅니다.");
+        throw new Error(
+          `연결된 Phantom 지갑이 이 escrow의 수령 지갑과 다릅니다. 연결됨: ${shortAddress(
+            connectedWallet,
+          )}, 필요: ${shortAddress(escrow.creatorDestination)}`,
+        );
       }
       onSettlementState("verifying");
-      let canRelease = false;
+      let evidenceToVerify: ApiEvidence | null = null;
       try {
-        const evidence = await client.submitEvidence(agreement, milestoneId, url);
-        const verified = await client.verifyEvidence(evidence.evidenceId);
-        setLastEvidence(verified);
-        canRelease = verified.status === "PASSED";
+        evidenceToVerify = await client.submitEvidence(agreement, milestoneId, url);
       } catch (caught) {
         if (caught instanceof ProductApiError && caught.code === "EVIDENCE_ALREADY_SUBMITTED") {
-          canRelease = true;
+          evidenceToVerify = evidenceFromApiError(caught);
         } else {
           throw caught;
         }
       }
-      if (canRelease) {
-        onSettlementState("releasing");
-        const prepareKey = `frontend-release-prepare-${escrow.escrowId}-${milestoneId}-${connectedWallet}`;
-        const prepared = await client.prepareMilestoneRelease(escrow.escrowId, milestoneId, prepareKey);
-        if (prepared.release.settlementAuthority !== connectedWallet) {
-          throw new Error("연결된 Phantom 지갑과 이 escrow의 정산 승인 지갑이 다릅니다.");
-        }
-        const signature = await sendPreparedSolanaTransaction(prepared.release);
-        const released = await client.confirmMilestoneRelease(
-          escrow.escrowId,
-          milestoneId,
-          signature,
-          prepared.release.creatorTokenAccount,
-          `frontend-release-confirm-${escrow.escrowId}-${milestoneId}-${signature}`,
+      if (!evidenceToVerify) {
+        throw new Error("기존 증빙을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+      }
+      const verified = await client.verifyEvidence(evidenceToVerify.evidenceId);
+      setLastEvidence(verified.evidence);
+      if (verified.autoSettlement?.released) {
+        const signature = verified.autoSettlement.settlement?.signature ?? null;
+        setLastSettlementSignature(signature);
+        await onRefresh();
+        onSettlementState("done");
+        return;
+      }
+      if (verified.evidence.status === "PASSED") {
+        throw new Error(
+          `증빙 검증은 통과했지만 자동 정산이 아직 완료되지 않았습니다. 사유: ${
+            verified.autoSettlement?.reason ?? "AUTO_SETTLEMENT_DEFERRED"
+          }`,
         );
-        setLastSettlementSignature(released.receipt.signature ?? released.settlement.signature ?? null);
       }
       await onRefresh();
       onSettlementState("done");
@@ -714,10 +717,8 @@ function EvidenceForm({
       <div className="sketch-alt ink border border-border-subtle bg-background p-3 text-xs">
         <p className="text-muted">정산 받을 Phantom</p>
         <p className="mt-1 break-all font-mono">
-          {walletAddress ?? "연결 필요"}
+          {shortAddress(walletAddress) ?? "연결 필요"}
         </p>
-        <p className="mt-2 text-muted">Escrow 수령 주소</p>
-        <p className="mt-1 break-all font-mono">{escrow.creatorDestination ?? "없음"}</p>
       </div>
       <input
         value={url}
@@ -735,14 +736,7 @@ function EvidenceForm({
       </button>
       {lastEvidence ? <p className="text-xs text-muted">최근 검토: {lastEvidence.status}</p> : null}
       {lastSettlementSignature ? (
-        <a
-          href={`https://explorer.solana.com/tx/${lastSettlementSignature}?cluster=devnet`}
-          target="_blank"
-          rel="noreferrer"
-          className="break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
-        >
-          release tx {lastSettlementSignature}
-        </a>
+        <TransactionReference signature={lastSettlementSignature} network={escrow.network} label="release tx" />
       ) : null}
     </div>
   );
@@ -764,6 +758,48 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-all font-mono text-sm">{value}</p>
     </div>
   );
+}
+
+function TransactionReference({
+  signature,
+  network,
+  label,
+}: {
+  signature: string;
+  network?: string | null;
+  label: string;
+}) {
+  const explorerUrl = explorerTransactionUrl(signature, network);
+  if (!explorerUrl) {
+    return (
+      <p className="mt-2 break-all font-mono text-xs text-muted">
+        {label} localnet · {signature}
+      </p>
+    );
+  }
+  return (
+    <a
+      href={explorerUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-2 block break-all font-mono text-xs underline decoration-[1px] underline-offset-4"
+    >
+      {label} {signature}
+    </a>
+  );
+}
+
+function explorerTransactionUrl(signature: string, network?: string | null) {
+  if (network === "solanaLocalnet" || network === "localnet") return null;
+  const cluster = network === "solanaMainnet" || network === "mainnet" ? null : "devnet";
+  const suffix = cluster ? `?cluster=${cluster}` : "";
+  return `https://explorer.solana.com/tx/${signature}${suffix}`;
+}
+
+function shortAddress(value: string | null | undefined) {
+  if (!value) return null;
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
 function PanelMessage({ title, body }: { title: string; body: string }) {

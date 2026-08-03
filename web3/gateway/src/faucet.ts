@@ -1,5 +1,5 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { getAccount, getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import type { GatewayConfig } from "./config.js";
@@ -58,22 +58,15 @@ export async function airdrop(config: GatewayConfig, body: unknown): Promise<Air
   try {
     const before = await connection.getBalance(pubkey, "confirmed");
     const targetLamports = Math.round(targetSol * LAMPORTS_PER_SOL);
-    // 이미 목표치를 넘겼으면 다시 주지 않는다 — 재연결마다 잔액이 불어나면 데모 숫자가 흔들린다.
-    if (before >= targetLamports) {
-      return {
-        statusCode: 200,
-        body: {
-          address: parsed.data.address,
-          skipped: true,
-          balanceSol: before / LAMPORTS_PER_SOL,
-          detail: "Balance already at or above the requested amount."
-        }
-      };
+    let signature: string | null = null;
+    let after = before;
+    // 이미 목표치를 넘겼으면 SOL 은 다시 주지 않는다 — 재연결마다 잔액이 불어나면 데모 숫자가 흔들린다.
+    if (before < targetLamports) {
+      signature = await connection.requestAirdrop(pubkey, targetLamports - before);
+      const blockhash = await connection.getLatestBlockhash("confirmed");
+      await connection.confirmTransaction({ signature, ...blockhash }, "confirmed");
+      after = await connection.getBalance(pubkey, "confirmed");
     }
-    const signature = await connection.requestAirdrop(pubkey, targetLamports - before);
-    const blockhash = await connection.getLatestBlockhash("confirmed");
-    await connection.confirmTransaction({ signature, ...blockhash }, "confirmed");
-    const after = await connection.getBalance(pubkey, "confirmed");
 
     // 유저 지갑이 딜 서명 시 에스크로에 직접 예치하려면 USDC 도 필요하다.
     // 로컬 mint 의 발행 권한은 brand 키페어(=밸리데이터 payer)라 여기서 찍어줄 수 있다.
@@ -87,7 +80,7 @@ export async function airdrop(config: GatewayConfig, body: unknown): Promise<Air
       statusCode: 200,
       body: {
         address: parsed.data.address,
-        skipped: false,
+        skipped: signature === null && usdcMinted === 0,
         signature,
         balanceSol: after / LAMPORTS_PER_SOL,
         usdcMinted,
@@ -116,7 +109,12 @@ async function mintTestUsdc(
   const brand = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw) as number[]));
   const mint = new PublicKey(config.allowedMint);
   const account = await getOrCreateAssociatedTokenAccount(connection, brand, mint, owner);
+  const current = await getAccount(connection, account.address);
+  const target = BigInt(Math.round(amount * 1_000_000));
+  if (current.amount >= target) {
+    return 0;
+  }
   // 데모 mint 는 6 decimals (USDC-SPL 과 동일)
-  await mintTo(connection, brand, mint, account.address, brand, BigInt(Math.round(amount * 1_000_000)));
-  return amount;
+  await mintTo(connection, brand, mint, account.address, brand, target - current.amount);
+  return Number(target - current.amount) / 1_000_000;
 }

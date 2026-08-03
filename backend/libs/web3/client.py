@@ -90,6 +90,13 @@ class Web3GatewayClient:
             payload=payload,
         )
 
+    def local_faucet(self, *, wallet_address: str, sol: float, usdc: float) -> dict[str, object]:
+        return self._post(
+            "/internal/v1/faucet",
+            idempotency_key=f"local-faucet-{wallet_address}",
+            payload={"address": wallet_address, "sol": sol, "usdc": usdc},
+        )
+
     def _post(
         self,
         path: str,

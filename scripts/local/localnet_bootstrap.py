@@ -6,11 +6,14 @@
   1) solana-test-validator 가 살아있는지 확인(없으면 백그라운드로 기동, 스크립트 종료 후에도 유지)
   2) knot-escrow 프로그램을 로컬넷에 배포(이미 있으면 skip)
   3) brand(=지갑 payer)/creator/agent 키페어 준비 + SOL 지급
-  4) 에스크로 config 싱글턴 초기화(수수료 0/0) — 없으면 mint + treasury 생성, 있으면 기존 mint 재사용
+  4) 에스크로 config 싱글턴 초기화(수수료 0/0)
+     — 없으면 mint + treasury 생성, 있으면 기존 mint 재사용
   5) 게이트웨이/백엔드가 쓸 환경변수를 생성 파일로 기록 → dev_stack.sh 가 자동 source
 
-왜 필요한가: Product API 는 시뮬레이션 영수증을 정산 성공으로 인정하지 않는다(CONFIRMED + 실서명 필수).
-그래서 게이트웨이를 KNOT_WEB3_SIGNING_MODE=devnet/testnet/live 로 띄우되 RPC 만 로컬넷을 향하게 한다.
+왜 필요한가: Product API 는 시뮬레이션 영수증을 정산 성공으로 인정하지 않는다
+(CONFIRMED + 실서명 필수).
+그래서 게이트웨이를 KNOT_WEB3_SIGNING_MODE=devnet/testnet/live 로 띄우되
+RPC 만 로컬넷을 향하게 한다.
 게이트웨이는 온체인 config 의 treasury 로부터 mint 를 읽어 KNOT_USDC_MINT 와 일치하는지 검사하므로
 (solana.ts), 로컬에서 만든 mint 주소를 양쪽에 주입해줘야 한다.
 
@@ -128,14 +131,14 @@ async def bootstrap_chain(program_id: str) -> dict[str, str]:
     keypair(creator_path)
     keypair(agent_path)
 
-    def load(path: Path) -> "Keypair":
+    def load(path: Path) -> Keypair:
         return Keypair.from_bytes(bytes(json.loads(path.read_text())))
 
     payer = load(payer_path)          # brand = payer = mint authority (게이트웨이의 brand 키)
     creator, agent = load(creator_path), load(agent_path)
     conn = AsyncClient(RPC, commitment=Confirmed)
 
-    async def send(ix: "Instruction", signers: list) -> None:
+    async def send(ix: Instruction, signers: list) -> None:
         bh = (await conn.get_latest_blockhash()).value.blockhash
         tx = Transaction.new_signed_with_payer([ix], payer.pubkey(), signers, bh)
         sig = (await conn.send_raw_transaction(bytes(tx))).value
@@ -191,6 +194,7 @@ async def bootstrap_chain(program_id: str) -> dict[str, str]:
         "brand": str(payer_path),
         "creator": str(creator_path),
         "agent": str(agent_path),
+        "agent_pubkey": str(agent.pubkey()),
     }
 
 
@@ -208,7 +212,9 @@ def write_env(info: dict[str, str]) -> None:
         f"KNOT_BRAND_KEYPAIR_PATH={info['brand']}\n"
         f"KNOT_CREATOR_KEYPAIR_PATH={info['creator']}\n"
         f"KNOT_AGENT_KEYPAIR_PATH={info['agent']}\n"
-        "# 게이트웨이가 agentId 기반 Secret Manager 조회를 하지 않도록 비움(현재 계정은 읽기 권한 없음)\n"
+        f"KNOT_SETTLEMENT_AUTHORITY={info['agent_pubkey']}\n"
+        "# 게이트웨이가 agentId 기반 Secret Manager 조회를 하지 않도록 비움\n"
+        "# 현재 계정은 읽기 권한 없음\n"
         "GCP_PROJECT_ID=\n"
         "# Phantom 연결 시 그 지갑에 채워줄 SOL / 테스트 USDC (루프백 RPC 에서만 동작)\n"
         "KNOT_LOCAL_FAUCET_SOL=100\n"

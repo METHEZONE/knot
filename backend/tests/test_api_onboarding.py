@@ -252,8 +252,18 @@ def test_creator_profile_analysis_extracts_public_metrics_when_present(monkeypat
             routes.FetchedSourcePage(
                 final_url=source_url,
                 title="@ye__5o profile",
-                description="12.4K Followers, 평균 조회 8,200, 참여율 4.8%, 릴스 비중 65%",
-                text="12.4K followers and average views 8,200. Engagement 4.8%. Reels 65%.",
+                description=(
+                    "12.4K Followers, 320 Following, 27 Posts, "
+                    "평균 조회 8,200, 참여율 4.8%, 릴스 비중 65%"
+                ),
+                text=(
+                    "12.4K followers, 320 following, 27 posts, and average views 8,200. "
+                    "Engagement 4.8%. Reels 65%. #skincare #daily"
+                ),
+                links=(
+                    "https://www.instagram.com/reel/demo-reel-1",
+                    "https://www.instagram.com/p/demo-post-1",
+                ),
             ),
             None,
         )
@@ -273,6 +283,17 @@ def test_creator_profile_analysis_extracts_public_metrics_when_present(monkeypat
     assert draft["averageViews"]["value"] == 8_200
     assert draft["engagementRate"]["value"] == 5
     assert draft["reelShare"]["value"] == 65
+    assert draft["publicSignals"]["fetchStatus"] == "FETCHED"
+    assert draft["publicSignals"]["profileCounts"]["followerCount"] == 12_400
+    assert draft["publicSignals"]["profileCounts"]["followingCount"] == 320
+    assert draft["publicSignals"]["profileCounts"]["postCount"] == 27
+    assert draft["publicSignals"]["profileCounts"]["publicReelLinkCount"] == 1
+    assert draft["publicSignals"]["profileCounts"]["publicPostLinkCount"] == 1
+    assert "skincare" in draft["publicSignals"]["contentHints"]
+    assert draft["publicSignals"]["recentPostUrls"] == [
+        "https://www.instagram.com/reel/demo-reel-1",
+        "https://www.instagram.com/p/demo-post-1",
+    ]
     assert "followerCount" not in draft["unknownFields"]
     assert "averageViews" not in draft["unknownFields"]
 

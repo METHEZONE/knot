@@ -86,6 +86,7 @@ export type FundingPrepareResult = {
   transactionBase64: string;
   recentBlockhash: string;
   lastValidBlockHeight: number;
+  rpcUrl: string;
 };
 
 export type FundingConfirmResult = {
@@ -152,6 +153,7 @@ export type MilestoneReleasePrepareResult = {
   transactionBase64: string;
   recentBlockhash: string;
   lastValidBlockHeight: number;
+  rpcUrl: string;
 };
 
 export type MilestoneReleaseConfirmResult = {
@@ -267,7 +269,8 @@ export async function prepareBrandFunding(
       verifySignatures: false
     }).toString("base64"),
     recentBlockhash: latest.blockhash,
-    lastValidBlockHeight: latest.lastValidBlockHeight
+    lastValidBlockHeight: latest.lastValidBlockHeight,
+    rpcUrl: config.solanaRpcUrl
   };
 }
 
@@ -529,7 +532,8 @@ export async function prepareAgreementMilestoneRelease(
       verifySignatures: false
     }).toString("base64"),
     recentBlockhash: latest.blockhash,
-    lastValidBlockHeight: latest.lastValidBlockHeight
+    lastValidBlockHeight: latest.lastValidBlockHeight,
+    rpcUrl: config.solanaRpcUrl
   };
 }
 

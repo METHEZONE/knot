@@ -2,6 +2,38 @@
 
 Updated: 2026-08-03
 
+## Promotion Retry Run and Creator Pool Seed
+
+### Changed
+
+- Brand dashboard Agent management now runs Creator discovery and A2A negotiation
+  directly for the latest Promotion instead of only navigating back to the dashboard.
+- Brand promotion detail now has a direct `Creator 탐색·협상 시작` action; when an
+  eligible Creator is found it routes to the negotiation detail page, and when none
+  exists it stays on the page with a truthful waiting message.
+- Candidate-empty `runAgentForPromotion` frontend tests now validate the waiting
+  result without starting negotiation.
+- Local demo seed now creates/publishes multiple Creator accounts:
+  `c1@knot.com` through `c7@knot.com`, all using password `000000`, across
+  beauty, food, tech, fitness, fashion, and travel with low MVP test rates.
+- Local Auth/API seed was executed against the running stack without resetting data.
+
+### Verification
+
+- `python3 scripts/local/seed_demo_accounts.py`: created/updated `t1@knot.com` and
+  `c1@knot.com` through `c7@knot.com`.
+- Local API smoke created `promotion-smoke-1a94d6a9`, ran MatchRun
+  `match-744d4ec1-8ab5-4a1f-9fa2-89d6b1063dd4`, selected
+  `creator-agent-e06L9PEAPWhuvTfe5dYOe1cdnIZu` (`Budget Beauty Reel Creator`),
+  and started A2A negotiation `negotiation-253b1027-9a67-4684-9736-7e1b006908cb`
+  with Agreement `agreement-46d00b8c-e90d-41ae-b742-035c8cfebd29`.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend test`: 19 passed.
+- `npm --prefix frontend run build`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_promotions.py tests/test_creator_discovery.py tests/test_matching.py -q`:
+  31 passed, 1 skipped.
+
 ## Real Onboarding Analysis and Local Demo Login
 
 ### Changed
@@ -390,3 +422,258 @@ Updated: 2026-08-03
 - `cd frontend && npm run build`: passed.
 - `/Users/yewonchoi/Desktop/knot/.venv/bin/pytest backend/tests/test_api_auth.py backend/tests/test_api_promotions.py -q`:
   37 passed, 1 skipped.
+
+## 2026-08-03 Creator Discovery Demo Data And Settlement Card Trim
+
+### Changed
+
+- Brand dashboard and Promotion detail retry actions now run the real
+  promotion Agent matching/A2A flow instead of only navigating back to the
+  dashboard.
+- No-eligible-creator runs return a waiting state so a Brand can keep the
+  Promotion open for future Creators instead of hitting an idempotency retry
+  error.
+- Local demo seed now creates one Brand account and seven Creator accounts
+  across beauty, food, tech, fitness, fashion, travel, and low-budget beauty
+  categories.
+- Creator URL analysis now exposes available public page signals such as title,
+  description, keyword hints, hashtags, and recent public Instagram post/reel
+  links without fabricating unavailable metrics.
+- Negotiation detail settlement cards now show only the user-facing essentials:
+  connected Phantom, Agreement amount, Escrow status, remaining or released
+  amount, and transaction availability. PDA, Vault, source token account, and
+  counterparty wallet address are hidden from the main UI.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py tests/test_api_onboarding.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_onboarding.py -q`: 9 passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_promotions.py tests/test_creator_discovery.py tests/test_matching.py -q`:
+  31 passed, 1 skipped.
+- `python3 -m py_compile scripts/local/seed_demo_accounts.py`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend test`: passed.
+- `npm --prefix frontend run build`: passed.
+
+## 2026-08-03 30 USDC Matching Demo And Creator Public Signal Cleanup
+
+### Changed
+
+- Added local demo Creator accounts `c8@knot.com`, `c9@knot.com`, and
+  `c10@knot.com` for low-budget escrow demos. `c8@knot.com` is an all-format,
+  broad-category Creator with a 5 USDC minimum so a Brand wallet with 30 USDC
+  can complete the promotion-to-agreement path.
+- Added category aliases for `supplement`, `nutrition`, `건강기능식품`, and
+  `영양제` so health supplement product pages do not miss eligible low-budget
+  Creators.
+- Brand Promotion creation now uses a click-scoped idempotency key instead of a
+  payload-stable key, allowing repeated demo attempts with the same Promotion
+  terms without idempotency conflicts.
+- Creator profile analysis now structures public Instagram counts from fetched
+  HTML: follower count, following count, post count, visible public post links,
+  and visible public reel links.
+- Creator onboarding UI no longer renders unavailable metrics as `확인 필요`.
+  It shows only metrics that were actually observed and removes duplicated
+  title/description profile text from the public-signal card.
+- Creator mood hints now include lightweight inferred mood tags from public
+  profile text, such as daily/campus/pet-friendly signals, without inventing
+  unavailable engagement metrics.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py tests/test_api_onboarding.py ../scripts/local/seed_demo_accounts.py libs/domain/categories.py`:
+  passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_onboarding.py tests/test_api_promotions.py tests/test_matching.py -q`:
+  39 passed, 1 skipped.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend test`: 19 passed.
+- `npm --prefix frontend run build`: passed.
+- Local demo seed recreated `t1@knot.com` and `c1@knot.com` through
+  `c10@knot.com`, all password `000000`.
+- Local 20 USDC promotion smoke selected `30 USDC Demo All-Rounder`, created
+  `negotiation-e85999a7-1e28-4a6e-866e-e4c1d6f8a5d7`, and created
+  `agreement-e825cd4d-f4d4-4b41-b429-1b1cbec21ab6` for 10 USDC.
+- Local Instagram smoke for `instagram.com/ye__5o` returned follower count 416,
+  following count 437, post count 0, no public post/reel links, and mood hints
+  `일상`, `캠퍼스`, `반려동물`, `친근함`.
+
+## 2026-08-03 Korean Fashion Alias Match Fix
+
+### Changed
+
+- Added fashion category aliases for Korean apparel product categories including
+  `남성 슬리브리스`, `맨즈 슬리브리스`, `슬리브리스`, `민소매`, and `나시`.
+- This fixes Promotions whose product analysis stores a literal Korean product
+  category instead of the canonical `fashion` category, which previously caused
+  creator discovery to return zero candidates.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check libs/domain/categories.py tests/test_api_promotions.py`:
+  passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_promotions.py::test_run_match_normalizes_korean_fashion_product_aliases tests/test_api_promotions.py::test_run_match_normalizes_korean_category_aliases -q`:
+  2 passed.
+- Local smoke with category `남성 슬리브리스`, max 10 USDC, and reel 1 selected
+  `30 USDC Demo All-Rounder`, created
+  `negotiation-34f4ac94-e69b-48da-83ee-f75f2a2ef2d1`, and created
+  `agreement-161a6cc3-2839-44cb-b595-786cd4bede7d` for 5 USDC.
+
+## 2026-08-03 Local Escrow Prepare Blocking Fix
+
+### Changed
+
+- Demo Creator seed profiles now include the configured Creator settlement
+  wallet `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`, so Brand escrow
+  funding can bind a real Creator destination before Phantom signing.
+- Localnet bootstrap now writes `KNOT_SETTLEMENT_AUTHORITY` from the local
+  agent/settlement keypair public key into `/tmp/knot-local/env.localnet`.
+- Current localnet profile was updated with settlement authority
+  `6hwmMX2uHrvvaWog9pQWiryrx2xvS24abiWnEUkZQB82`.
+
+### Verification
+
+- `python3 -m py_compile scripts/local/seed_demo_accounts.py scripts/local/localnet_bootstrap.py`:
+  passed.
+- `cd backend && ../.venv/bin/ruff check ../scripts/local/seed_demo_accounts.py ../scripts/local/localnet_bootstrap.py`:
+  passed.
+- Local smoke saved Brand wallet
+  `8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6`, created
+  `agreement-bb05a43a-a7ba-4907-bece-03c174f63871` for 10 USDC, and
+  `/api/v1/agreements/{agreementId}/escrow/prepare` returned 200 with
+  `escrow.status=CREATED`, a funding transaction, Brand authority, Creator
+  destination, and Settlement authority populated.
+
+## 2026-08-03 Escrow Blockhash RPC Wiring Fix
+
+### Changed
+
+- Web3 Gateway funding and milestone-release prepare responses now include the
+  exact Solana RPC URL used to build the transaction.
+- Frontend escrow prepare types now carry `rpcUrl`, and Phantom transaction
+  sending already forwards that value into `Connection`.
+- Brand funding prepare now uses a click-scoped idempotency key. This prevents a
+  failed or delayed retry from reusing an old prepared transaction with an
+  expired blockhash.
+- Creator milestone release prepare now uses the same click-scoped idempotency
+  pattern, while release confirm remains signature-scoped for settlement
+  idempotency.
+
+### Why
+
+- Local escrow transactions were prepared against localnet
+  `http://127.0.0.1:8899`, but the browser defaulted to devnet when sending or
+  confirming. That caused `Transaction simulation failed: Blockhash not found`.
+- A stable prepare idempotency key could also return an old transaction after a
+  retry, causing the same blockhash error after the blockhash expired.
+
+### Verification
+
+- `npm --prefix web3/gateway run build`: passed.
+- `npm --prefix web3/gateway run lint`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- Local dev stack restarted on `http://127.0.0.1:3000`.
+- Local smoke saved Brand wallet
+  `8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6`, created
+  `agreement-aeda2680-c7db-4d7b-a7d0-fe6650400bad` for 10 USDC, and escrow
+  prepare returned `rpcUrl=http://127.0.0.1:8899`, `has transaction=True`,
+  and `feePayer=8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6`.
+
+## 2026-08-03 Localnet Anchor Program And Faucet Repair
+
+### Changed
+
+- Rebuilt the current `programs/knot-escrow` Anchor program and deployed it to
+  localnet with generated local program ID
+  `Ax3FQuUXAqaxEHQ4mrJWLewdnNmRXVuALYjrezHjXUvH`.
+- Regenerated `/tmp/knot-local/env.localnet` so backend and Web3 Gateway use
+  that local program ID and local USDC mint
+  `3vtAPyiymfTKbQqm9tzkXAsARJxUVcob8aWfMRFnquJd`.
+- Added the missing Web3 Gateway local faucet HTTP route
+  `/internal/v1/faucet`.
+- Backend `POST /api/v1/me/wallet` now calls the gateway faucet only when
+  `KNOT_ESCROW_NETWORK=solanaLocalnet` and `KNOT_WEB3_MODE=gateway`.
+- Fixed the local faucet so SOL top-up and USDC top-up are independent. A
+  wallet that already has enough SOL now still receives/creates the local USDC
+  ATA needed for escrow funding.
+- Localnet bootstrap now writes the settlement authority public key directly
+  from the agent keypair.
+
+### Why
+
+- Phantom funding failed with Anchor `InstructionFallbackNotFound` because the
+  runtime env pointed to old local program ID `Fjb8...` while the active source
+  expected a different escrow instruction set.
+- After switching mint/program IDs, Brand Phantom prepare failed because the
+  local faucet skipped early when SOL was already present and never created the
+  Brand USDC ATA.
+
+### Verification
+
+- `anchor build`: passed.
+- `.venv/bin/python scripts/local/localnet_bootstrap.py`: deployed/initialized
+  localnet escrow wiring.
+- `solana account Ax3FQuUXAqaxEHQ4mrJWLewdnNmRXVuALYjrezHjXUvH --url http://127.0.0.1:8899`:
+  executable program account found.
+- `npm --prefix web3/gateway run build`: passed.
+- `npm --prefix web3/gateway run lint`: passed.
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py libs/web3/client.py ../scripts/local/localnet_bootstrap.py`:
+  passed.
+- Local wallet save for Brand Phantom
+  `8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6` returned local faucet top-up
+  with `usdcMinted=2000`.
+- Local prepare smoke for `agreement-6771bbf0-6d60-4b3d-af80-0f0746fa3931`
+  returned `programId=Ax3FQuUXAqaxEHQ4mrJWLewdnNmRXVuALYjrezHjXUvH`,
+  `rpcUrl=http://127.0.0.1:8899`, and `brandBalanceRaw=2000000000`.
+- Signed local funding smoke with CLI wallet
+  `GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B` confirmed escrow status
+  `FUNDED` with signature
+  `os58g9bxXB2i8oGde3NocpDofuiZU8Dc9PjNMoiDSNizjD7cbkRCUWbLzM71BYBqQyMDrfeerns5F8QuAGes77G`.
+
+## 2026-08-03 Devnet Deployment Wiring
+
+### Changed
+
+- Deployed `knot-web3:devnet-fix-181525` to Cloud Run with
+  `KNOT_WEB3_SIGNING_MODE=devnet`.
+- Created Secret Manager secret `knot-settlement-keypair-json` and granted the
+  Cloud Run runtime service account secret accessor permission.
+- Deployed `knot-api:devnet-fix-181525` with
+  `KNOT_SETTLEMENT_AUTHORITY=GX1qtkjR89HXqagZ6x53BfFt4HVnSqWEw9QYxVBKgv6B`
+  and Web3 Gateway mode enabled.
+- Seeded Firestore/Firebase Auth demo accounts `t1@knot.com / 000000` and
+  `c1@knot.com / 000000` with a 5 USDC `FUNDING_REQUIRED` devnet Agreement
+  `agreement-devnet-1usdc`.
+
+### Verification
+
+- `anchor build`: passed against devnet program ID
+  `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn`.
+- `npm --prefix web3/gateway run build`: passed.
+- `npm --prefix web3/gateway run lint`: passed.
+- Cloud Build succeeded for `knot-web3:devnet-fix-181525`.
+- Cloud Build succeeded for `knot-api:devnet-fix-181525`.
+- Cloud Run env verification confirmed Web3 Gateway uses
+  `KNOT_WEB3_SIGNING_MODE=devnet`, devnet USDC mint
+  `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, and settlement secret.
+- Firebase Auth login verification:
+  `t1@knot.com` resolves to completed Brand account with wallet
+  `8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6`; `c1@knot.com` resolves to
+  completed Creator account with wallet
+  `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`.
+- Deployed API `POST /api/v1/agreements/agreement-devnet-1usdc/escrow/prepare`
+  returned a devnet Phantom funding transaction for 5 USDC.
+- Deployed Web3 Gateway funding transaction simulation on devnet succeeded with
+  `InitializeEscrow` and `FundEscrow` logs and `err=null`.
+
+### Remaining
+
+- Program upgrade was attempted but not completed because the deployment wallet
+  had only `0.20429884 SOL`; the upgrade required about `2.781 SOL`. The
+  already deployed program `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn`
+  remains active and funding simulation against it passed.
+- A real devnet funding transaction still requires the Brand Phantom wallet to
+  sign in the browser. After funding, evidence verification should trigger
+  automatic release via the deployed Web3 Gateway settlement authority.

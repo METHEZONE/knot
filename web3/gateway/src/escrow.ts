@@ -52,7 +52,7 @@ export const lockRequestSchema = z.object({
   milestoneAmountsBaseUnits: z.array(z.string().regex(/^[0-9]+$/)).min(1).max(8).optional(),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: z.literal("solanaDevnet"),
+  network: z.enum(["solanaLocalnet", "solanaDevnet"]),
   brandAuthority: z.string().min(1),
   creatorDestination: z.string().min(1)
 });
@@ -65,7 +65,7 @@ export const releaseRequestSchema = z.object({
   expectedAmountBaseUnits: z.string().regex(/^[0-9]+$/),
   mint: z.string().min(1),
   programId: z.string().min(1),
-  network: z.literal("solanaDevnet"),
+  network: z.enum(["solanaLocalnet", "solanaDevnet"]),
   creatorDestination: z.string().min(1),
   lockContext: releaseLiveContextSchema.optional()
 });
@@ -80,7 +80,7 @@ export type GatewayReceipt = {
   releasedAmountBaseUnits?: string;
   mint: string;
   programId: string;
-  network: "solanaDevnet";
+  network: "solanaLocalnet" | "solanaDevnet";
   idempotencyKey: string;
   signature: string | null;
   explorerUrl: string | null;
@@ -290,7 +290,7 @@ export class EscrowLockService {
       };
     }
 
-    if (config.signingMode === "devnet") {
+    if (config.signingMode === "devnet" || config.solanaCluster === "localnet") {
       const context = this.liveLocks.get(escrowId) ?? (
         result.data.lockContext && !isAgreementEscrowContext(result.data.lockContext)
           ? parseLiveContext(result.data.lockContext)

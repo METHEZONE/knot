@@ -20,10 +20,14 @@ _ALIASES = {
         "wellness",
         "workout",
         "exercise",
+        "supplement",
+        "nutrition",
         "피트니스",
         "운동",
         "헬스",
         "건강",
+        "건강기능식품",
+        "영양제",
         "웰니스",
     },
     "lifestyle": {
@@ -41,9 +45,21 @@ _ALIASES = {
         "style",
         "apparel",
         "clothing",
+        "menswear",
+        "men's clothing",
+        "sleeveless",
+        "tank top",
         "패션",
         "스타일",
         "의류",
+        "남성복",
+        "남성 의류",
+        "남성 슬리브리스",
+        "맨즈 슬리브리스",
+        "슬리브리스",
+        "상의",
+        "민소매",
+        "나시",
     },
     "food": {
         "food",
@@ -92,7 +108,13 @@ _LOOKUP = {alias: category for category, aliases in _ALIASES.items() for alias i
 
 def canonical_category(value: str) -> str:
     normalized = " ".join(value.casefold().strip().replace("_", " ").replace("-", " ").split())
-    return _LOOKUP.get(normalized, normalized)
+    exact = _LOOKUP.get(normalized)
+    if exact:
+        return exact
+    for alias, category in sorted(_LOOKUP.items(), key=lambda item: len(item[0]), reverse=True):
+        if len(alias) >= 2 and alias in normalized:
+            return category
+    return normalized
 
 
 def category_set(values: Iterable[str]) -> set[str]:
