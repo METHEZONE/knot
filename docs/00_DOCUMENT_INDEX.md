@@ -34,24 +34,13 @@ When this bundle conflicts with an older KNOT v1/v2 document, this bundle wins f
 | `14_SECURITY_PRIVACY_AUTHORITY_AND_CONCURRENCY.md` | Privacy, SSRF, agent authority, service auth and locks |
 | `15_GCP_ARCHITECTURE_DEPLOYMENT_OBSERVABILITY.md` | Cloud Run/Firestore architecture and operations |
 | `16_TEST_ACCEPTANCE_AND_DEMO.md` | Test matrix, acceptance criteria and 3-minute demo |
-| `17_WBS_AND_IMPLEMENTATION_PLAN.md` | Safe phased implementation plan and commit boundaries |
 | `18_UI_COPY_AND_STATE_DICTIONARY.md` | Korean copy, labels, empty/error states |
-| `19_REPOSITORY_MIGRATION_CONFLICT_AVOIDANCE.md` | Audit, worktree, adapters, migration and rollback |
-| `20_CODEX_MASTER_PROMPT.md` | Complete Codex implementation prompt |
-| `21_IMPLEMENTATION_STATUS.md` | Evidence-based status template |
 | `22_REFERENCES.md` | Source documents and official references |
 
-## Required generated implementation artifacts
+## Maintained implementation artifact
 
-Codex must create or update the following inside the repository while executing:
-
-```text
-docs/INTEGRATION_AUDIT.md
-docs/API_COMPATIBILITY_MATRIX.md
-docs/FIRESTORE_MIGRATION_PLAN.md
-docs/IMPLEMENTATION_STATUS.md
-PLANS.md
-```
+`docs/IMPLEMENTATION_STATUS.md` is the only tracked running status note. Removed
+audit, migration, prompt, and idea documents are intentionally not kept in main.
 
 ## Non-negotiable language
 

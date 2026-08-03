@@ -92,9 +92,3 @@ pay.sh는 Creator 보상 정산에 쓰지 않습니다. 배포 환경에서 pay.
 발표용 피치 PDF를 함께 포함했습니다.
 
 [Open generated PDF](docs/assets/pitch/knotpitch.pdf)
-
-추가 제출 문서:
-
-- [Pitch deck ready Korean version](docs/PITCH_DECK_READY_KO.md)
-- [Pitch coverage and feature shells](docs/PITCH_COVERAGE_AND_FEATURE_SHELLS.md)
-- [Blockchain narrative](docs/BLOCKCHAIN_NARRATIVE.md)

@@ -6,7 +6,6 @@
 
 유저는 Phantom 설치도 시드 문구도 없이 주소를 갖는다. 지갑을 직접 소유하고 싶으면
 `POST /api/v1/me/wallet` 으로 외부 Phantom 주소를 연결해 `walletCustody: "SELF"` 로 승격한다.
-자세한 배경: `docs/WALLET_LOGIN_FEE_AND_PAYSH_DECISION.md` §1.
 
 주의: 이 지갑의 비밀키는 플랫폼이 보관한다(커스터디). devnet 데모 범위 전용이며,
 실서비스에는 키 로테이션·복구 정책이 선행돼야 한다.

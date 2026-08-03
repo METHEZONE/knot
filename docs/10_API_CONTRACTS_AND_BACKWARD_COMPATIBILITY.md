@@ -14,7 +14,7 @@ Before implementing endpoints, Codex must inventory:
 - Cloud Run ingress/service authentication;
 - deployed frontend/backend URLs and revisions.
 
-Create `docs/API_COMPATIBILITY_MATRIX.md`.
+Record compatibility changes in `docs/IMPLEMENTATION_STATUS.md` when an API surface changes.
 
 ## 2. Compatibility policy
 

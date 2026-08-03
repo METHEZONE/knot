@@ -1,6 +1,6 @@
 """에이전트 지갑 프로비저닝 — Solana 키페어 생성 + Secret Manager 보관.
 
-top-up 자금흐름 모델(docs/WALLET_AND_MONEY_FLOW.md)의 **에이전트 지갑**을 만든다.
+Agent 운영 결제와 자동 서명을 위한 **에이전트 지갑**을 만든다.
 - 비밀키(64바이트)는 Secret Manager 시크릿 `knot-agent-key-{agentId}`에 number[] JSON으로 저장
   → 게이트웨이 `web3/gateway/src/solana.ts`의 `Keypair.fromSecretKey(number[])` 포맷과 호환.
 - pubkey(base58)만 반환 → 호출부가 agent 문서에 기록.
