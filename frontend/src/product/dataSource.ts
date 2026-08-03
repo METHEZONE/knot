@@ -628,6 +628,8 @@ function runEventLabel(event: ApiTimelineEvent) {
       const selected = typeof event.data.selectedCreatorAgentId === "string" ? event.data.selectedCreatorAgentId : null;
       return selected ? `${selected}를 선택했어요.` : "조건에 맞는 후보를 찾지 못했어요.";
     }
+    case "MATCH_RUN_WAITING_FOR_CREATOR":
+      return "조건에 맞는 Creator가 들어올 때까지 대기합니다.";
     case "MATCH_RUN_CANCELED":
       return "사용자가 Match Run을 취소했어요.";
     default:

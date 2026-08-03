@@ -533,6 +533,16 @@ export type CreatorOfferDetail = {
   negotiation: ApiNegotiation & Record<string, unknown>;
 };
 
+export type AgentPromotionRunResult = {
+  promotion: ApiPromotion & Record<string, unknown>;
+  matchRun: ApiMatchRun;
+  candidates: ApiCandidate[];
+  negotiation: ApiNegotiation | null;
+  agreement: ApiAgreement | null;
+  timeline: ApiTimelineEvent[];
+  waitingForCreator: boolean;
+};
+
 export class ProductApiError extends Error {
   status: number;
   code: string;
@@ -821,12 +831,12 @@ export class ProductApiClient {
     return response.promotion;
   }
 
-  async runMatches(promotionId: string) {
+  async runMatches(promotionId: string, idempotencyKey = `frontend-match-${promotionId}-${Date.now()}`) {
     const response = await this.request<{ matchRun: ApiMatchRun }>(
       `/api/v1/promotions/${promotionId}/matches:run`,
       {
         method: "POST",
-        headers: { "Idempotency-Key": `frontend-match-${promotionId}` },
+        headers: { "Idempotency-Key": idempotencyKey },
       },
     );
     return response.matchRun;
@@ -934,19 +944,25 @@ export class ProductApiClient {
     );
   }
 
-  async runAgentForPromotion(promotionId: string) {
+  async runAgentForPromotion(promotionId: string): Promise<AgentPromotionRunResult> {
     const promotion = await this.getPromotion(promotionId);
     const matchRun = await this.runMatches(promotionId);
     const candidates = await this.listCandidates(matchRun.matchRunId);
     if (!matchRun.selectedCreatorAgentId) {
-      throw new ProductApiError(noEligibleCreatorMessage(candidates), 409, "NO_ELIGIBLE_CREATOR", {
-        matchRunId: matchRun.matchRunId,
+      const timeline = await this.getTimeline(promotionId);
+      return {
+        promotion,
+        matchRun,
         candidates,
-      });
+        negotiation: null,
+        agreement: null,
+        timeline,
+        waitingForCreator: true,
+      };
     }
     const { negotiation, agreement } = await this.startNegotiation(matchRun.matchRunId);
     const timeline = await this.getTimeline(promotionId);
-    return { promotion, matchRun, candidates, negotiation, agreement, timeline };
+    return { promotion, matchRun, candidates, negotiation, agreement, timeline, waitingForCreator: false };
   }
 
   async getPromotion(promotionId: string) {
@@ -1119,18 +1135,6 @@ function validationMessage(errors: Array<{ loc?: unknown[]; msg?: string }>) {
   if (!first) return "입력값을 확인해주세요.";
   const field = Array.isArray(first.loc) ? first.loc.filter((part) => part !== "body").join(".") : "";
   return field ? `${field}: ${first.msg ?? "입력값을 확인해주세요."}` : first.msg ?? "입력값을 확인해주세요.";
-}
-
-function noEligibleCreatorMessage(candidates: ApiCandidate[]) {
-  if (!candidates.length) {
-    return "선택 가능한 Creator가 없습니다. 협찬 받기 설정을 완료하고 매니저를 켠 Creator가 있는지 확인한 뒤 다시 실행해주세요.";
-  }
-  const reasons = candidates
-    .flatMap((candidate) => candidate.hardFilterReasons ?? [])
-    .filter((reason, index, all) => all.indexOf(reason) === index)
-    .slice(0, 3);
-  const hint = reasons.length ? ` 현재 blocker: ${reasons.join(", ")}.` : "";
-  return `선택 가능한 Creator가 없습니다. 카테고리, usage right, 일정, 최대 제안가를 조정한 뒤 다시 실행해주세요.${hint}`;
 }
 
 function withoutStatus(input: PromotionCreateInput) {

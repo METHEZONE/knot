@@ -468,9 +468,10 @@ function BrandAgentControlRoom({
         const selected = projection.candidates.find(
           (candidate) => candidate.creatorAgentId === projection.matchRun?.selectedCreatorAgentId,
         );
+        const waitingForCreator = projection.matchRun?.status === "WAITING_FOR_CREATOR";
         const exhausted = Boolean(projection.matchRun) && !projection.matchRun?.selectedCreatorAgentId;
         const completed = projection.matchRun?.status === "COMPLETED" && Boolean(selected);
-        const running = Boolean(projection.matchRun) && !["COMPLETED", "FAILED", "CANCELED"].includes(String(projection.matchRun?.status));
+        const running = Boolean(projection.matchRun) && !["COMPLETED", "FAILED", "CANCELED", "WAITING_FOR_CREATOR"].includes(String(projection.matchRun?.status));
         return (
           <Panel>
             <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
@@ -482,8 +483,10 @@ function BrandAgentControlRoom({
                       ? "준비할 Promotion이 없습니다"
                       : completed
                         ? "협상 결과를 불러왔습니다"
-                        : exhausted
-                          ? "조건에 맞는 후보가 없습니다"
+                        : waitingForCreator
+                          ? "Creator를 기다리고 있습니다"
+                          : exhausted
+                            ? "조건에 맞는 후보가 없습니다"
                           : running
                             ? "탐색이 진행 중입니다"
                             : "준비 완료"
@@ -498,6 +501,12 @@ function BrandAgentControlRoom({
                     {projection.matchRun && <InfoBox label="Match Run" value={`${projection.matchRun.matchRunId} · ${projection.matchRun.status}`} />}
                     {selected && <InfoBox label="Selected Creator" value={selected.creatorAgentId} />}
                     {projection.events.at(-1) && <InfoBox label="Last event" value={projection.events.at(-1)?.createdAt ?? ""} />}
+                    {waitingForCreator && (
+                      <InfoBox
+                        label="대기 상태"
+                        value="조건에 맞는 신규 Creator가 들어오면 다시 탐색할 수 있습니다"
+                      />
+                    )}
                     {exhausted && (
                       <InfoBox
                         label="Attempted candidates"
@@ -511,7 +520,7 @@ function BrandAgentControlRoom({
                         disabled={action.status === "submitting" || completed || running}
                         className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
                       >
-                        {action.status === "submitting" ? "실행 중..." : completed ? "협상 완료" : "탐색·협상 시작"}
+                        {action.status === "submitting" ? "실행 중..." : completed ? "협상 완료" : waitingForCreator ? "다시 탐색" : "탐색·협상 시작"}
                       </button>
                       <button
                         type="button"
@@ -860,6 +869,8 @@ function controlEventLabel(event: ApiTimelineEvent) {
       const selected = typeof event.data.selectedCreatorAgentId === "string" ? event.data.selectedCreatorAgentId : null;
       return selected ? `${selected}를 선택했어요.` : "조건에 맞는 후보를 찾지 못했어요.";
     }
+    case "MATCH_RUN_WAITING_FOR_CREATOR":
+      return "조건에 맞는 Creator가 들어올 때까지 대기합니다.";
     case "MATCH_RUN_CANCELED":
       return "사용자가 Match Run을 취소했어요.";
     default:
@@ -2390,6 +2401,12 @@ function AgentNegotiationPanel({ view, promotionId }: { view: NegotiationView; p
     try {
       const flow = await new ProductApiClient().runAgentForPromotion(promotionId);
       const agreementId = flow.agreement?.agreementId;
+      if (!flow.negotiation) {
+        setError("현재 조건에 맞는 Creator가 없어 대기 상태로 저장했습니다. 신규 Creator가 들어오면 다시 탐색할 수 있습니다.");
+        setStatus("idle");
+        router.refresh();
+        return;
+      }
       const params = new URLSearchParams({
         promotionId,
         negotiationId: flow.negotiation.negotiationId,

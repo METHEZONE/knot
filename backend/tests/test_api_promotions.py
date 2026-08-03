@@ -521,6 +521,19 @@ def test_start_negotiation_reports_no_eligible_creator() -> None:
     match_run = client.post("/api/v1/promotions/promotion-no-eligible/matches:run").json()[
         "data"
     ]["matchRun"]
+    assert match_run["status"] == "WAITING_FOR_CREATOR"
+    assert match_run["selectedCreatorAgentId"] is None
+    assert match_run["stateHistory"] == [
+        "READY",
+        "DISCOVERING",
+        "RANKING",
+        "SELECTING",
+        "WAITING_FOR_CREATOR",
+    ]
+
+    timeline_response = client.get("/api/v1/promotions/promotion-no-eligible/timeline")
+    event_types = [event["type"] for event in timeline_response.json()["data"]["events"]]
+    assert "MATCH_RUN_WAITING_FOR_CREATOR" in event_types
 
     response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
 

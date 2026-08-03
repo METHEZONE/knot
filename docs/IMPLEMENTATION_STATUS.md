@@ -265,6 +265,36 @@ Updated: 2026-08-03
   40 passed, 1 skipped.
 - `cd frontend && npm run typecheck`: passed.
 
+## 2026-08-03 Match Waiting State And Retry-Safe Creator Discovery
+
+### Changed
+
+- Match runs with no selected Creator now persist as `WAITING_FOR_CREATOR`
+  instead of being shown as a failed negotiation.
+- Promotion timelines record `MATCH_RUN_WAITING_FOR_CREATOR` so Brand dashboards
+  can keep the Promotion active while waiting for newly published Creator Agents.
+- The frontend Product API client no longer throws `NO_ELIGIBLE_CREATOR` for this
+  state; Promotion creation returns to the Brand dashboard and shows a waiting
+  state with a retry action.
+- Match-run retries from the UI now use a fresh idempotency key per execution,
+  while backend idempotency still returns the same run for the same key.
+- Candidate explanation generation defaults to deterministic policy facts during
+  match execution. `KNOT_GEMINI_MATCH_EXPLANATIONS=1` can opt into Vertex-generated
+  explanation text without making the core match/negotiation path depend on it.
+
+### Verification
+
+- `cd backend && ../.venv/bin/ruff check apps/api/routes.py tests/test_api_promotions.py`: passed.
+- `cd backend && ../.venv/bin/pytest tests/test_api_promotions.py::test_start_negotiation_reports_no_eligible_creator tests/test_api_promotions.py::test_run_match_uses_any_supported_format_not_only_primary_format tests/test_api_promotions.py::test_run_match_persists_run_candidates_and_timeline_event tests/test_api_promotions.py::test_match_run_start_is_idempotent_and_records_canonical_events -q`: 4 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- Local HTTP smoke against `http://127.0.0.1:18080` passed:
+  `c1@knot.com` Creator min `10 USDC` + `t1@knot.com` Brand max `20 USDC`
+  produced `COMPLETED` match run selecting `creator-agent-user-creator-1`.
+- Local HTTP no-match smoke passed: unmatched category/usage produced
+  `WAITING_FOR_CREATOR` with `selectedCreatorAgentId=null`.
+
 ## 2026-08-03 Brand Signup Simplification And Promotion Real Inputs
 
 ### Changed

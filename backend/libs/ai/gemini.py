@@ -31,6 +31,11 @@ def candidate_explanation(
     candidate: dict[str, object],
     fallback: str,
 ) -> AnalysisText:
+    if settings.gemini_mode != "vertex":
+        return _fallback(settings, fallback, reason="gemini_mode_off")
+    if not settings.gemini_match_explanations:
+        return _fallback(settings, fallback, reason="gemini_match_explanations_disabled")
+
     prompt: dict[str, object] = {
         "task": "Explain why this creator candidate was ranked or filtered for a brand promotion.",
         "rules": [

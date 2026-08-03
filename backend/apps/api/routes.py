@@ -1731,14 +1731,27 @@ def build_api_router(
         )
         selected = selected_pair[0] if selected_pair else None
         selected_creator = selected_pair[1] if selected_pair else None
+        final_status = "COMPLETED" if selected is not None else "WAITING_FOR_CREATOR"
+        final_event_type = (
+            "MATCH_RUN_COMPLETED"
+            if selected is not None
+            else "MATCH_RUN_WAITING_FOR_CREATOR"
+        )
+        final_history = [
+            "READY",
+            "DISCOVERING",
+            "RANKING",
+            "SELECTING",
+            final_status,
+        ]
         match_run_id = f"match-{uuid4()}"
         now = _now()
         match_run: dict[str, object] = {
             "matchRunId": match_run_id,
             "promotionId": promotion.promotion_id,
             "brandAgentId": promotion.brand_agent_id,
-            "status": "COMPLETED",
-            "stateHistory": ["READY", "DISCOVERING", "RANKING", "SELECTING", "COMPLETED"],
+            "status": final_status,
+            "stateHistory": final_history,
             "weightsVersion": MATCHING_WEIGHTS_VERSION,
             "rankingVersion": DISCOVERY_RANKING_VERSION,
             "discoveryLimit": search_result.metrics.query_limit,
@@ -1820,8 +1833,8 @@ def build_api_router(
         _append_match_run_event(
             repository,
             match_run_id=match_run_id,
-            event_type="MATCH_RUN_COMPLETED",
-            status_value="COMPLETED",
+            event_type=final_event_type,
+            status_value=final_status,
             data={"selectedCreatorAgentId": selected.creator_agent_id if selected else None},
         )
         _append_promotion_event(
@@ -1833,7 +1846,7 @@ def build_api_router(
         _append_promotion_event(
             repository,
             promotion_id=promotion_id,
-            event_type="MATCH_RUN_COMPLETED",
+            event_type=final_event_type,
             data={
                 "matchRunId": match_run_id,
                 "selectedCreatorAgentId": selected.creator_agent_id if selected else None,

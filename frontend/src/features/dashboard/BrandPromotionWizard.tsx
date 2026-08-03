@@ -99,7 +99,11 @@ export function BrandPromotionWizard() {
         stableKey("promotion", JSON.stringify(promotionPayload)),
       );
       const flow = await client.runAgentForPromotion(promotion.promotionId);
-      router.push(`/brand/negotiations/${flow.negotiation.negotiationId}`);
+      if (flow.negotiation) {
+        router.push(`/brand/negotiations/${flow.negotiation.negotiationId}`);
+      } else {
+        router.push("/brand?agent=waiting");
+      }
     } catch (caught) {
       setStep("review");
       setError(readableError(caught));
