@@ -4,8 +4,6 @@
 
 KNOT은 브랜드 에이전트와 크리에이터 에이전트가 협찬 조건을 협상하고, 합의된 작업이 검증되면 Solana USDC 에스크로에서 자동 정산하는 Agent-native Creator Contracting & Settlement 프로덕트입니다.
 
-[Pitch Deck PDF](docs/assets/pitch/knotpitch.pdf)
-
 ![KNOT product home](docs/assets/readme/01-product-home.png)
 
 ## What KNOT Does
@@ -78,17 +76,3 @@ Solana는 소액·고빈도 결제에 필요한 낮은 수수료와 빠른 확�
 | Agent Payment | pay.sh / x402 |
 | Web3 | Solana, Anchor, USDC, Web3 Gateway |
 | Deployment | Google Cloud Run |
-
-## Current Boundary
-
-KNOT MVP는 Solana test network 전용입니다. mainnet 자산은 사용하지 않습니다.
-
-성공으로 표시되는 에스크로와 정산은 confirmed network signature가 있어야만 기록됩니다. 시뮬레이션 영수증, 가짜 Explorer 링크, mock payment success는 제품 경로에서 성공 처리하지 않습니다.
-
-pay.sh는 Creator 보상 정산에 쓰지 않습니다. 배포 환경에서 pay.sh resource가 설정되지 않은 경우 Agent operational payment event는 `SKIPPED`로 기록되며, 이를 `PAID`처럼 표시하지 않습니다.
-
-## Pitch
-
-발표용 피치 PDF를 함께 포함했습니다.
-
-[Open generated PDF](docs/assets/pitch/knotpitch.pdf)
