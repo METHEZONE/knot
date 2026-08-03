@@ -4,7 +4,8 @@
 
 KNOT은 브랜드 에이전트와 크리에이터 에이전트가 협찬 조건을 협상하고, 합의된 작업이 검증되면 Solana USDC 에스크로에서 자동 정산하는 Agent-native Creator Contracting & Settlement 프로덕트입니다.
 
-![KNOT product home](docs/assets/readme/01-product-home.png)
+![KNOT pitch cover](docs/assets/readme/02-pitch-cover.png)
+
 
 ## What KNOT Does
 
@@ -21,7 +22,8 @@ KNOT은 크리에이터 협찬을 DM, 스프레드시트, 수동 송금이 아�
 
 ## Product Screens
 
-![KNOT pitch cover](docs/assets/readme/02-pitch-cover.png)
+<img width="1214" height="801" alt="스크린샷 2026-08-03 오후 11 56 47" src="https://github.com/user-attachments/assets/71080bb8-0f01-451c-a006-1fdb23d432a6" />
+<img width="1191" height="852" alt="스크린샷 2026-08-03 오후 11 56 29" src="https://github.com/user-attachments/assets/82783e78-498b-482f-9e14-b4cf6e4c05de" />
 
 ## Architecture
 
