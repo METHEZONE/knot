@@ -103,8 +103,9 @@ test("post-login redirect sends completed brands to dashboard instead of creatio
 
 test("Firebase auth errors map to user-facing messages", () => {
   assert.equal(
+    // 443aaf6 에서 내부 기술 용어(Firebase 허용 목록)를 유저 문구로 바꿨다.
     firebaseAuthErrorMessage({ code: "auth/unauthorized-domain" }),
-    "현재 접속한 도메인이 Firebase 로그인 허용 목록에 등록되지 않았습니다.",
+    "현재 접속한 주소에서는 로그인을 사용할 수 없습니다.",
   );
   assert.equal(
     firebaseAuthErrorMessage({ code: "auth/popup-blocked" }),
@@ -116,7 +117,7 @@ test("Firebase auth errors map to user-facing messages", () => {
   );
   assert.equal(
     firebaseAuthErrorMessage({ code: "auth/operation-not-allowed" }),
-    "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.",
+    "현재 사용할 수 없는 로그인 방식입니다. 다른 방식으로 시도해주세요.",
   );
 });
 
@@ -452,7 +453,8 @@ test("API data source projects canonical match run replay and technical proof", 
       "MATCH_RUN_COMPLETED",
     ]);
     assert.ok(view.technicalProof.some((item) => item.label === "Data source" && item.value === "LIVE"));
-    assert.ok(view.technicalProof.some((item) => item.label === "A2A Task ID" && item.value === "task-api-live"));
+    // 라벨이 "A2A Task ID" -> "협상 기록" 으로 바뀌었다(443aaf6, 내부 기술 용어 제거).
+    assert.ok(view.technicalProof.some((item) => item.label === "협상 기록" && item.value === "task-api-live"));
     assert.ok(calls.some((url) => url.endsWith("/api/v1/match-runs/match-api-live/events")));
     assert.ok(calls.some((url) => url.endsWith("/api/v1/negotiations/negotiation-api-live/events")));
   } finally {

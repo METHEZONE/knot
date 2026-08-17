@@ -1,5 +1,7 @@
 import json
+import re
 from collections.abc import Mapping
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from libs.a2a.registry import creator_agent_registry_entry
@@ -7,6 +9,47 @@ from libs.domain.discovery import build_creator_discovery_projection
 from libs.domain.models import AgentPolicy, CreatorProfile, Promotion
 from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.store import KnotRepository
+
+# 데모 픽스처가 작성된 기준일. 픽스처 안의 날짜는 모두 이 날짜를 "오늘"로 가정한 상대값이다.
+FIXTURE_ANCHOR_DATE = date(2026, 7, 24)
+
+_DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
+
+
+def fixture_date_shift(today: date | None = None) -> timedelta:
+    """픽스처 기준일부터 오늘까지의 간격. 기준일 이전이면 0."""
+    delta = (today or date.today()) - FIXTURE_ANCHOR_DATE
+    return delta if delta > timedelta(0) else timedelta(0)
+
+
+def rebase_fixture_document(
+    document: Mapping[str, object],
+    shift: timedelta,
+) -> dict[str, object]:
+    """픽스처 문서 안의 ISO 날짜/시각을 shift 만큼 미룬다.
+
+    Promotion 의 postingWindow 가 과거로 밀리면 creator 정책의 minDaysToPost 가 항상
+    걸려서(CREATOR_LEAD_TIME_TOO_SHORT) 데모 협상이 ESCALATED 로 끝난다. 픽스처 날짜를
+    고정값으로 두면 작성 시점이 지나는 순간 데모와 테스트가 같이 죽으므로 상대값으로 되돌린다.
+    """
+    return {key: _rebase_value(value, shift) for key, value in document.items()}
+
+
+def _rebase_value(value: object, shift: timedelta) -> object:
+    if shift == timedelta(0):
+        return value
+    if isinstance(value, Mapping):
+        return {key: _rebase_value(item, shift) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rebase_value(item, shift) for item in value]
+    if isinstance(value, str):
+        if _DATE_ONLY.match(value):
+            return (date.fromisoformat(value) + shift).isoformat()
+        if _DATE_TIME.match(value):
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00")) + shift
+            return moment.isoformat().replace("+00:00", "Z")
+    return value
 
 
 def backend_root() -> Path:
@@ -80,7 +123,9 @@ def seed_demo_repository(
     for payload in load_json_array(fixture_root / "agent_policies.json"):
         repository.save_agent_policy(AgentPolicy.model_validate(payload))
 
-    for payload in load_json_array(fixture_root / "promotions.json"):
+    shift = fixture_date_shift()
+    for raw_payload in load_json_array(fixture_root / "promotions.json"):
+        payload = rebase_fixture_document(raw_payload, shift)
         promotion = Promotion.model_validate(payload)
         repository.save_promotion(promotion)
         repository.save_raw_document(FirestorePaths.promotion(promotion.promotion_id), payload)

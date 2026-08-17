@@ -77,7 +77,9 @@ def test_product_api_runs_real_http_a2a_counter_accept_golden_path() -> None:
         assert negotiation["status"] == "AGREED"
         assert negotiation["contextId"].startswith("context-")
         assert negotiation["taskId"].startswith("task-")
-        assert negotiation["currentRound"] == 2
+        # 골든 패스는 OFFER(1) -> COUNTER(2) -> ACCEPT(3) 이다.
+        # 844a2ac 에서 A2A 턴이 늘어나 라운드가 2 -> 3 이 됐는데 기대값이 안 따라왔었다.
+        assert negotiation["currentRound"] == 3
         assert negotiation["creatorPolicySnapshot"] == {"redacted": True}
         assert agreement["agreementId"].startswith("agreement-")
         assert agreement["terms"]["compensation"]["baseAmountUsdc"] == 750
@@ -85,8 +87,14 @@ def test_product_api_runs_real_http_a2a_counter_accept_golden_path() -> None:
         messages = api_client.get(
             f"/api/v1/negotiations/{negotiation['negotiationId']}/messages"
         ).json()["data"]["messages"]
+        # 브랜드가 수락 전에 예산 안에서 한 번 더 브리지 카운터를 넣는다
+        # (routes._brand_bridge_counter_terms). 그래서 순서는
+        # OFFER -> creator COUNTER -> brand bridge COUNTER
+        # -> creator COUNTER -> brand ACCEPT -> creator ACCEPT.
         assert [message["payload"]["type"] for message in messages] == [
             "OFFER",
+            "COUNTER",
+            "COUNTER",
             "COUNTER",
             "ACCEPT",
             "ACCEPT",
