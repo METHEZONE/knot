@@ -1,4 +1,5 @@
 import shutil
+from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -479,6 +480,9 @@ def test_run_match_idempotency_does_not_double_pay(monkeypatch) -> None:
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
     client = client_with_seed()
+    # 협상까지 가는 테스트라 postingWindow 는 오늘 기준 상대값이어야 한다.
+    # 고정 날짜는 지나는 순간 creator 정책의 minDaysToPost 에 걸려 ESCALATED 가 된다.
+    window_start = date.today() + timedelta(days=17)
     payload = {
         "promotionId": "promotion-korean-beauty",
         "title": "Korean skincare launch",
@@ -487,7 +491,10 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
         "targetAudience": ["20s"],
         "budget": {"totalUsdc": 1500, "maxPerCreatorUsdc": 800},
         "deliverables": [{"format": "reel", "count": 1}],
-        "postingWindow": {"start": "2026-08-10", "end": "2026-08-15"},
+        "postingWindow": {
+            "start": window_start.isoformat(),
+            "end": (window_start + timedelta(days=5)).isoformat(),
+        },
         "usageRights": "paidBoost30d",
         "constraints": {"requiredCategories": ["뷰티"], "requiredDisclosures": ["ad"]},
     }

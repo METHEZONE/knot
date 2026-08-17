@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from libs.domain.models import CreatorProfile, Promotion
@@ -11,7 +13,7 @@ from libs.repositories import (
     document_to_model,
     model_to_document,
 )
-from libs.repositories.seed import seed_demo_repository
+from libs.repositories.seed import fixture_date_shift, seed_demo_repository
 
 
 def test_firestore_paths_match_documented_collections() -> None:
@@ -66,7 +68,11 @@ def test_model_serialization_round_trips_with_camel_case() -> None:
 
     assert document["promotionId"] == "promotion-001"
     assert "promotion_id" not in document
-    assert document["postingWindow"] == {"start": "2026-08-05", "end": "2026-08-10"}
+    shift = fixture_date_shift()
+    assert document["postingWindow"] == {
+        "start": (date(2026, 8, 5) + shift).isoformat(),
+        "end": (date(2026, 8, 10) + shift).isoformat(),
+    }
 
     restored = document_to_model(Promotion, document)
     assert restored == promotion

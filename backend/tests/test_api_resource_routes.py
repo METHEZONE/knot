@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi.testclient import TestClient
 
 from apps.api.main import create_app
@@ -92,9 +94,10 @@ def test_brand_can_create_and_read_only_owned_promotions() -> None:
     created_promotion = created.json()["data"]["promotion"]
     promotion_id = created_promotion["promotionId"]
     other_id = other_created.json()["data"]["promotion"]["promotionId"]
+    deadline = promotion_deadline().isoformat()
     assert created_promotion["postingWindow"] == {
-        "start": "2026-08-10",
-        "end": "2026-08-10",
+        "start": deadline,
+        "end": deadline,
     }
 
     listed = client.get(
@@ -235,6 +238,14 @@ def test_creator_offer_and_agreement_routes_are_participation_scoped() -> None:
     assert agreement.status_code == 200
 
 
+def promotion_deadline() -> date:
+    """`POST /brand/promotions` 는 deadline 이 오늘보다 뒤여야 201 을 준다.
+
+    고정 날짜를 쓰면 그 날짜가 지나는 순간 테스트가 422 로 죽으므로 오늘 기준 상대값을 쓴다.
+    """
+    return date.today() + timedelta(days=30)
+
+
 def promotion_payload(title: str) -> dict[str, object]:
     return {
         "productName": "Product",
@@ -249,6 +260,6 @@ def promotion_payload(title: str) -> dict[str, object]:
         "maximumRounds": 3,
         "deliverables": [{"format": "reel", "count": 1}],
         "usageRights": "organicOnly",
-        "deadline": "2026-08-10",
+        "deadline": promotion_deadline().isoformat(),
         "prohibitedClaims": [],
     }
