@@ -2,12 +2,14 @@ import base64
 import json
 
 from fastapi.testclient import TestClient
+from solders.keypair import Keypair
 
 from apps.api.main import create_app
 from apps.api.repository_factory import build_repository
 from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
+from tests.wallet_test_helpers import connect_wallet
 
 
 def client_and_repository() -> tuple[TestClient, KnotRepository]:
@@ -136,7 +138,8 @@ def test_brand_profile_uses_verified_uid_as_owner() -> None:
 def test_wallet_save_is_returned_in_current_user_context() -> None:
     client, repository = client_and_repository()
     headers = auth_headers(uid="brand-wallet-owner", email="brand-wallet@example.com")
-    wallet_address = "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
+    wallet_keypair = Keypair()
+    wallet_address = str(wallet_keypair.pubkey())
     client.get("/api/v1/me", headers=headers)
     client.post(
         "/api/v1/me/role",
@@ -155,11 +158,7 @@ def test_wallet_save_is_returned_in_current_user_context() -> None:
         },
     ).json()["data"]
 
-    response = client.post(
-        "/api/v1/me/wallet",
-        headers=headers,
-        json={"walletAddress": wallet_address, "network": "devnet"},
-    )
+    _, response = connect_wallet(client, headers, wallet_keypair)
     current = client.get("/api/v1/me", headers=headers).json()["data"]
 
     assert response.status_code == 200
@@ -241,7 +240,12 @@ def test_wallet_save_rejects_non_base58_demo_value() -> None:
     response = client.post(
         "/api/v1/me/wallet",
         headers=headers,
-        json={"walletAddress": "DemoWallet111111111111111111111111111111111", "network": "devnet"},
+        json={
+            "walletAddress": "DemoWallet111111111111111111111111111111111",
+            "network": "devnet",
+            "challengeId": "walletchal-unused",
+            "signature": "unused",
+        },
     )
 
     assert response.status_code == 422

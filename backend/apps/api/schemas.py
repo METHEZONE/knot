@@ -129,9 +129,23 @@ class CurrentUserCreatorProfileRequest(DomainModel):
         return validate_solana_pubkey(value)
 
 
+class WalletChallengeRequest(DomainModel):
+    wallet_address: str = Field(alias="walletAddress", min_length=32, max_length=64)
+
+    @field_validator("wallet_address")
+    @classmethod
+    def validate_wallet_address(cls, value: str) -> str:
+        return validate_solana_pubkey(value)
+
+
 class CurrentWalletRequest(DomainModel):
     wallet_address: str = Field(alias="walletAddress", min_length=32, max_length=64)
     network: str = "devnet"
+    # 소유 증명 — 플랫폼이 유저 키를 보관하지 않으므로(docs/17 D7) 등록 주소의 개인키를
+    # 유저가 실제로 가졌는지 서명으로 확인한다. 없으면 아무도 통제하지 못하는 주소가
+    # 정산 수령처로 들어와 지급된 USDC 가 영구히 잠긴다.
+    challenge_id: str = Field(alias="challengeId", min_length=1)
+    signature: str = Field(alias="signature", min_length=1)
 
     @field_validator("wallet_address")
     @classmethod

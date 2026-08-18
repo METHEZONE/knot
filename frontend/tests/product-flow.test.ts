@@ -536,6 +536,52 @@ test("API client does not start negotiation when matching has no eligible creato
   }
 });
 
+test("wallet registration sends the ownership proof signature", async () => {
+  // 플랫폼이 유저 키를 보관하지 않으므로(docs/17 D7) 주소만 보내는 등록은 있어서는 안 된다.
+  const previousFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: unknown }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (url.endsWith("/api/v1/me/wallet/challenge")) {
+      return Response.json({
+        data: {
+          challenge: {
+            challengeId: "walletchal-1",
+            walletAddress: "WalletAddress1",
+            message: "knot-wallet-ownership:walletchal-1",
+            expiresInSeconds: 600,
+          },
+        },
+      });
+    }
+    return Response.json({ data: { wallet: { walletAddress: "WalletAddress1", walletNetwork: "devnet" } } });
+  }) as typeof fetch;
+
+  try {
+    const client = new ProductApiClient("");
+    const { challenge } = await client.createWalletChallenge("WalletAddress1");
+    await client.saveWalletAddress("WalletAddress1", {
+      challengeId: challenge.challengeId,
+      signature: "test-signature",
+    });
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].url.endsWith("/api/v1/me/wallet/challenge"));
+    assert.deepEqual(calls[0].body, { walletAddress: "WalletAddress1" });
+    assert.ok(calls[1].url.endsWith("/api/v1/me/wallet"));
+    assert.deepEqual(calls[1].body, {
+      walletAddress: "WalletAddress1",
+      network: "devnet",
+      challengeId: "walletchal-1",
+      signature: "test-signature",
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("API client forwards Firebase bearer token when configured", async () => {
   const previousFetch = globalThis.fetch;
   let observedAuthorization: string | null = null;

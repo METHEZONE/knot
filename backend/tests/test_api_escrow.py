@@ -9,6 +9,7 @@ from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
 from libs.web3.client import Web3GatewayError
+from tests.wallet_test_helpers import connect_wallet
 
 CLEAN_EVIDENCE_URL = "https://social.example/post/with-brand-and-ad"
 BRAND_WALLET = "8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6"
@@ -613,12 +614,9 @@ def test_authenticated_creator_release_requires_connected_wallet_match(
             "status": "ACTIVE",
         },
     )
-    wallet = client.post(
-        "/api/v1/me/wallet",
-        headers=creator_headers,
-        json={"walletAddress": BRAND_WALLET, "network": "devnet"},
-    )
-    assert wallet.status_code == 200
+    # 에스크로의 creator_destination 과 다른 지갑을 연결해 불일치를 만든다.
+    _, wallet = connect_wallet(client, creator_headers)
+    assert wallet.status_code == 200, wallet.text
 
     release = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",

@@ -64,6 +64,7 @@ class FirestoreCollection:
     idempotency_records: str = "idempotencyRecords"
     admin_jobs: str = "adminJobs"
     deletion_jobs: str = "deletionJobs"
+    wallet_challenges: str = "walletChallenges"
 
 
 COLLECTIONS = FirestoreCollection()
@@ -73,6 +74,10 @@ class FirestorePaths:
     @staticmethod
     def user(user_id: str) -> str:
         return document_path(COLLECTIONS.users, user_id)
+
+    @staticmethod
+    def wallet_challenge(challenge_id: str) -> str:
+        return document_path(COLLECTIONS.wallet_challenges, challenge_id)
 
     @staticmethod
     def user_notifications(user_id: str) -> str:

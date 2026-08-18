@@ -38,6 +38,7 @@ from apps.api.schemas import (
     ProductAnalysisRequest,
     PromotionCreateRequest,
     UserBootstrapRequest,
+    WalletChallengeRequest,
     validate_solana_pubkey,
 )
 from libs.a2a.client import CreatorA2AClient, CreatorA2AClientError, first_part_data
@@ -98,6 +99,12 @@ from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictErro
 from libs.settings.config import Settings, get_settings
 from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
 from libs.web3.user_wallet import CUSTODY_SELF
+from libs.web3.wallet_proof import (
+    CHALLENGE_TTL_SECONDS,
+    WalletProofError,
+    challenge_message,
+    verify_wallet_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +374,43 @@ def build_api_router(
         )
         return _ok(_current_user_payload(repository, updated))
 
+    @router.post("/me/wallet/challenge", status_code=status.HTTP_201_CREATED)
+    def create_wallet_ownership_challenge(
+        payload: WalletChallengeRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """지갑 소유 증명용 nonce 를 발급한다. 유저는 이 문구를 지갑으로 서명한다."""
+        auth_user = _require_auth_user(token_verifier, authorization)
+        _bootstrap_authenticated_user(repository, auth_user)
+        now = _now()
+        challenge_id = f"walletchal-{uuid4()}"
+        message = challenge_message(
+            challenge_id=challenge_id,
+            wallet_address=payload.wallet_address,
+            issued_at=now,
+        )
+        repository.save_raw_document(
+            FirestorePaths.wallet_challenge(challenge_id),
+            {
+                "challengeId": challenge_id,
+                "uid": auth_user.uid,
+                "walletAddress": payload.wallet_address,
+                "message": message,
+                "consumedAt": None,
+                "createdAt": now,
+            },
+        )
+        return _ok(
+            {
+                "challenge": {
+                    "challengeId": challenge_id,
+                    "walletAddress": payload.wallet_address,
+                    "message": message,
+                    "expiresInSeconds": CHALLENGE_TTL_SECONDS,
+                }
+            }
+        )
+
     @router.post("/me/wallet")
     def save_current_user_wallet(
         payload: CurrentWalletRequest,
@@ -374,13 +418,21 @@ def build_api_router(
     ) -> dict[str, object]:
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _bootstrap_authenticated_user(repository, auth_user)
+        _consume_wallet_challenge(
+            repository,
+            uid=auth_user.uid,
+            challenge_id=payload.challenge_id,
+            wallet_address=payload.wallet_address,
+            signature=payload.signature,
+        )
         now = _now()
-        # 외부 지갑을 직접 연결하면 자동 생성된 커스터디 지갑보다 우선한다(SELF 로 승격).
+        # 소유 증명을 통과한 주소만 등록된다. 플랫폼은 이 주소의 키를 갖지 않는다.
         wallet = {
             "walletAddress": payload.wallet_address,
             "walletNetwork": payload.network,
             "walletCustody": CUSTODY_SELF,
             "walletUpdatedAt": now,
+            "walletOwnershipProvenAt": now,
         }
         role = user.get("role")
         if role == "BRAND":
@@ -3815,6 +3867,86 @@ def _brand_negotiation_display(
             "publicReason": "사용자 승인 없이 처리 가능한 공개 조건 범위입니다.",
         },
     }
+
+
+def _consume_wallet_challenge(
+    repository: KnotRepository,
+    *,
+    uid: str,
+    challenge_id: str,
+    wallet_address: str,
+    signature: str,
+) -> None:
+    """지갑 소유 증명을 검증하고 챌린지를 1회용으로 소진한다.
+
+    실패는 모두 422 로 낸다. 여기서 통과하지 못한 주소는 정산 수령처가 되지 않는다.
+    """
+    path = FirestorePaths.wallet_challenge(challenge_id)
+    challenge = repository.get_raw_document(path)
+    if challenge is None:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_NOT_FOUND",
+            "Wallet ownership challenge does not exist. Request a new challenge.",
+        )
+    if challenge.get("uid") != uid:
+        # 남의 챌린지를 가져다 쓰는 것을 막는다.
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_MISMATCH",
+            "Wallet ownership challenge does not belong to the current user.",
+        )
+    if challenge.get("walletAddress") != wallet_address:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_MISMATCH",
+            "Wallet ownership challenge was issued for a different address.",
+        )
+    if challenge.get("consumedAt"):
+        # 재사용 방지 — 한 번 쓴 서명으로 다시 등록할 수 없다.
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_ALREADY_USED",
+            "Wallet ownership challenge was already used. Request a new challenge.",
+        )
+    created_at = challenge.get("createdAt")
+    if isinstance(created_at, str) and _seconds_since(created_at) > CHALLENGE_TTL_SECONDS:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_EXPIRED",
+            "Wallet ownership challenge expired. Request a new challenge.",
+        )
+    message = challenge.get("message")
+    if not isinstance(message, str) or not message:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_INVALID",
+            "Wallet ownership challenge is missing its message.",
+        )
+    try:
+        verify_wallet_signature(
+            wallet_address=wallet_address,
+            message=message,
+            signature=signature,
+        )
+    except WalletProofError as exc:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_OWNERSHIP_NOT_PROVEN",
+            str(exc),
+        ) from exc
+    repository.save_raw_document(path, {**challenge, "consumedAt": _now()})
+
+
+def _seconds_since(timestamp: str) -> float:
+    """ISO8601 시각으로부터 지난 초. 파싱 불가면 0(만료 아님)으로 본다."""
+    try:
+        moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - moment).total_seconds()
 
 
 def _current_negotiation_round(messages: list[dict[str, object]]) -> int:
