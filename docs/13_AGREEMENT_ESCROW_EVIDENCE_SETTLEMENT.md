@@ -35,15 +35,14 @@ Canonical term fields:
 
 A mismatch is a hard failure.
 
-## 3. Settlement Schedule (Updated with Mentoring Feedback)
+## 3. Settlement Schedule (Updated - Main Branch Integration)
 
-**3-Stage Milestone System** (환불 방지 + 분쟁 해결):
+**2-Stage Milestone System with 72-Hour Timelock**:
 
 ```python
 milestones = [
-    Milestone(id="contract", trigger="contractSigned", releasePct=30),
-    Milestone(id="verification", trigger="contentVerified", releasePct=50),
-    Milestone(id="timelock", trigger="timelockExpired", releasePct=20),
+    Milestone(id=DEPOSIT_MILESTONE_ID, trigger="creatorAccepted", releasePct=20),
+    Milestone(id=CONTENT_MILESTONE_ID, trigger="contentLiveVerified", releasePct=80),
 ]
 ```
 
@@ -51,19 +50,27 @@ milestones = [
 
 | Milestone | % | Trigger | Purpose |
 |-----------|---|---------|---------|
-| Contract | 30% | Agreement 생성 시 | 브랜드 환불 방지, 크리에이터 최소 보장 |
-| Verification | 50% | pay.sh 콘텐츠 검증 통과 | 크리에이터 80% 확보 |
-| Timelock | 20% | 72시간 경과 + 분쟁 없음 | 이의 제기 기간 제공 |
+| Deposit | 20% | 크리에이터 수락 시 | 크리에이터 최소 보장, 계약금 확보 |
+| Content | 80% | pay.sh 콘텐츠 검증 통과 + 72시간 타임락 | 최종 정산 + 분쟁 기간 제공 |
 
 ### Rationale
 
-**Problem**: 브랜드가 콘텐츠 받고 일방적 환불 요구
+**Problem**: 브랜드-크리에이터 간 지급/품질 분쟁
 **Solution**:
-- 계약 체결 시 30% 즉시 릴리즈 → 브랜드 환불 불가
-- 검증 통과 시 50% 추가 릴리즈 → 크리에이터 80% 확보
-- 72시간 대기 후 20% 최종 릴리즈 → 분쟁 제기 기간
+- 크리에이터 수락 시 20% 즉시 릴리즈 (계약금)
+- 콘텐츠 검증 통과 후 72시간 타임락 (분쟁 제기 기간)
+- 타임락 만료 시 80% 자동 릴리즈 (분쟁 없는 경우)
 
-**Note**: 기존 단일 마일스톤(100%) 방식은 deprecated.
+### Timelock Integration
+
+The 72-hour timelock is applied to the content milestone:
+1. Deposit (20%) released immediately on creator acceptance
+2. Content milestone enters TIMELOCK_ACTIVE state
+3. Creator submits and verifies content during timelock period
+4. After 72 hours + verification, content milestone (80%) auto-releases
+5. If dispute raised during timelock → milestone frozen until resolution
+
+**Note**: Timelock provides dispute window without requiring a separate 3rd milestone.
 
 ## 4. Escrow authority
 
@@ -333,10 +340,10 @@ if automation_level != AutomationLevel.FULL_AUTO:
 - evidence ambiguity does not pay;
 - settlement updates both role projections from same canonical event.
 
-**New** (3-stage milestone):
-- 30% released on agreement creation;
-- 50% released after content verification;
-- 20% released after 72h timelock expiration;
-- dispute freezes milestone;
-- timelock prevents release during dispute;
-- automation level blocks auto-release for high amounts.
+**New** (2-stage milestone + timelock):
+- 20% deposit released on creator acceptance;
+- Content milestone gets 72h timelock after deposit release;
+- 80% content released after verification + timelock expiration;
+- Dispute freezes milestone;
+- Timelock prevents release during active dispute;
+- Automation level blocks auto-release for high amounts.

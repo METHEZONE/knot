@@ -1,8 +1,10 @@
 # KNOT 개선 기획서 - 멘토링 피드백 반영
 
-> **Updated:** 2026-08-04
+> **Updated:** 2026-08-19 (Main branch integration)
 > **Purpose:** 멘토링 피드백 기반 수상 가능한 완전한 제품 설계
 > **Status:** 해커톤 최종 제출용
+
+> **Implementation Note:** 실제 구현은 main 브랜치의 2단계 마일스톤 시스템(20% deposit + 80% content)과 통합되었습니다. 72시간 타임락과 분쟁 시스템은 content 마일스톤에 적용됩니다.
 
 ---
 

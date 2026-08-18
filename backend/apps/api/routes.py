@@ -7916,41 +7916,42 @@ def _set_timelock_for_next_milestone(
     released_at: datetime,
 ) -> None:
     """
-    Set 72-hour timelock on the next milestone after verification milestone is released
+    Set 72-hour timelock on content milestone after deposit is released (2-stage system)
     This provides dispute window before final payment
+
+    In 2-stage milestone system:
+    - deposit (20%) released on creator acceptance
+    - content (80%) gets 72h timelock before release
     """
     from datetime import timedelta
+    from libs.payments.settlement import DEPOSIT_MILESTONE_ID, CONTENT_MILESTONE_ID
+
+    # Only set timelock if deposit milestone was just released
+    if released_milestone_id != DEPOSIT_MILESTONE_ID:
+        return
 
     # Get all milestones for this agreement
     all_milestones = repository.list_raw_documents(
         f"{COLLECTIONS.agreements}/{agreement_id}/{COLLECTIONS.milestones}"
     )
 
-    # Find timelock milestone (should be the one with trigger="timelockExpired")
-    timelock_milestone = None
+    # Find content milestone (final 80% payment)
+    content_milestone = None
     for ms in all_milestones:
-        if ms.get("trigger") == "timelockExpired":
-            timelock_milestone = ms
+        if ms.get("milestoneId") == CONTENT_MILESTONE_ID:
+            content_milestone = ms
             break
 
-    if not timelock_milestone:
-        # No timelock milestone defined, skip
+    if not content_milestone:
+        # No content milestone defined, skip
         return
 
-    timelock_milestone_id = timelock_milestone.get("milestoneId")
-    if not timelock_milestone_id:
-        return
-
-    # Only set timelock if the released milestone was "verification"
-    if released_milestone_id != "verification":
-        return
-
-    # Set timelock expiry to 72 hours from now
+    # Set timelock expiry to 72 hours from deposit release
     timelock_expires_at = released_at + timedelta(hours=72)
 
-    # Update timelock milestone
-    updated_timelock_milestone = {
-        **timelock_milestone,
+    # Update content milestone with timelock fields
+    updated_content_milestone = {
+        **content_milestone,
         "timelockStartedAt": released_at.isoformat(),
         "timelockExpiresAt": timelock_expires_at.isoformat(),
         "status": "TIMELOCK_ACTIVE",
@@ -7958,8 +7959,8 @@ def _set_timelock_for_next_milestone(
     }
 
     repository.save_raw_document(
-        FirestorePaths.milestone(agreement_id, timelock_milestone_id),
-        updated_timelock_milestone,
+        FirestorePaths.milestone(agreement_id, CONTENT_MILESTONE_ID),
+        updated_content_milestone,
     )
 
     logger.info(

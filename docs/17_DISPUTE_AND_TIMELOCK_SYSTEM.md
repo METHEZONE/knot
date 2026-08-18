@@ -1,24 +1,27 @@
 # Dispute and Timelock System
 
-Updated: 2026-08-19
+Updated: 2026-08-19 (Integrated with main branch 2-stage milestone system)
 
 ## 1. Overview
 
-The Dispute and Timelock system addresses refund prevention and provides a dispute resolution mechanism for creator-brand agreements. This system was implemented based on mentoring feedback to prevent unilateral refunds and ensure fair resolution.
+The Dispute and Timelock system provides a dispute resolution mechanism for creator-brand agreements. This system was implemented based on mentoring feedback to ensure fair resolution and prevent payment disputes.
+
+**Integration Note**: This system works with the main branch's 2-stage milestone structure (20% deposit + 80% content) and adds dispute handling + 72-hour timelock protection.
 
 ## 2. Purpose
 
 ### Problems Addressed
 
-1. **Brand Refund Issue**: Brands could receive content and request refund unilaterally
+1. **Payment Disputes**: Either party may have concerns about agreement fulfillment
 2. **Creator Payment Delays**: Creators had no recourse for delayed or withheld payments
-3. **Trust Gap**: No mechanism to handle disagreements between parties
+3. **Brand Quality Concerns**: Brands need mechanism to address content issues
+4. **Trust Gap**: No mechanism to handle disagreements between parties
 
 ### Solutions
 
-1. **3-Stage Milestones**: Prevent refunds by distributing payment across stages
+1. **2-Stage Milestones** (from main): 20% deposit on acceptance + 80% on content verification
 2. **Dispute System**: Allow either party to raise concerns
-3. **72-Hour Timelock**: Provide dispute window before final payment
+3. **72-Hour Timelock**: Provide dispute window on content milestone before final 80% release
 4. **Auto-Resolution**: Use Gemini for small-amount disputes
 
 ---
@@ -125,29 +128,38 @@ When a dispute is raised:
 
 ### 4.1 Purpose
 
-Provides a 72-hour dispute window after content verification before releasing the final 20% payment. This allows either party to raise concerns before the agreement is fully settled.
+Provides a 72-hour dispute window on the content milestone (80% payment) before automatic release. This allows either party to raise concerns before the final payment is processed.
+
+**Integration with 2-Stage Milestones**:
+- Deposit (20%) - Released immediately on creator acceptance (no timelock)
+- Content (80%) - Gets 72-hour timelock after deposit release, then auto-releases after verification + timelock expiry
 
 ### 4.2 Timelock Flow
 
 ```text
-1. Verification Milestone Released (50%)
+1. Deposit Milestone Released (20%)
    ↓
 2. _set_timelock_for_next_milestone() called
    ↓
-3. Timelock milestone updated:
+3. Content milestone updated with timelock:
    {
+     "milestoneId": "content",
      "timelockStartedAt": "2026-08-19T12:00:00Z",
      "timelockExpiresAt": "2026-08-22T12:00:00Z",  // +72 hours
      "status": "TIMELOCK_ACTIVE"
    }
    ↓
-4. Wait 72 hours
+4. Creator submits content for verification
    ↓
-5. POST /milestones/timelock:check (periodic job)
+5. Content passes verification
    ↓
-6. Check expired timelocks:
+6. Wait for timelock expiry (72 hours from deposit release)
+   ↓
+7. POST /milestones/timelock:check (periodic job)
+   ↓
+8. Check expired timelocks:
    - Has active disputes? → Keep frozen
-   - No disputes? → Auto-release
+   - No disputes? → Auto-release content milestone (80%)
 ```
 
 ### 4.3 Timelock Check API
@@ -296,9 +308,9 @@ class Dispute(DomainModel):
 **milestones** (`/agreements/{agreementId}/milestones/{milestoneId}`):
 ```json
 {
-  "milestoneId": "timelock",
-  "trigger": "timelockExpired",
-  "releasePct": 20,
+  "milestoneId": "content",
+  "trigger": "contentLiveVerified",
+  "releasePct": 80,
   "status": "TIMELOCK_ACTIVE",
   "timelockStartedAt": "2026-08-19T12:00:00Z",
   "timelockExpiresAt": "2026-08-22T12:00:00Z",
@@ -310,6 +322,8 @@ class Dispute(DomainModel):
 }
 ```
 
+**Note**: In 2-stage system, the content milestone (80%) receives the timelock after deposit (20%) is released.
+
 ### 6.3 Code Locations
 
 **Dispute APIs**: `backend/apps/api/routes.py`
@@ -320,9 +334,9 @@ class Dispute(DomainModel):
 - `_auto_resolve_dispute_with_gemini()` - Line ~3420
 
 **Timelock Logic**:
-- `_set_timelock_for_next_milestone()` - `apps/api/routes.py` Line ~7430
-- `POST /milestones/timelock:check` - Line ~3470
-- `_has_active_dispute_for_milestone()` - Line ~3580
+- `_set_timelock_for_next_milestone()` - `apps/api/routes.py` Line ~7912 (sets timelock on content milestone after deposit release)
+- `POST /milestones/timelock:check` - Line ~3560 (periodic check for expired timelocks)
+- `_has_active_dispute_for_milestone()` - Line ~3680 (checks for active disputes before auto-release)
 
 ---
 
@@ -340,10 +354,11 @@ class Dispute(DomainModel):
 ### 7.2 Timelock Tests
 
 **Manual Test Scenarios**:
-1. Timelock set after verification release
-2. Timelock expires without disputes → auto-release
-3. Dispute raised during timelock → blocks release
+1. Timelock set on content milestone after deposit (20%) release
+2. Timelock expires without disputes → auto-release content (80%)
+3. Dispute raised during timelock → blocks content release
 4. Multiple timelocks checked in single run
+5. Content verification completes during active timelock → waits for expiry
 
 ### 7.3 Test Commands
 
