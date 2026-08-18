@@ -1,29 +1,47 @@
-# pay.sh / x402 Paid Candidate Verification
+# pay.sh / x402 Paid Verification (Updated with Mentoring Feedback)
 
 ## 1. Product purpose
 
-pay.sh/x402 is used for an Agent to buy external analysis data during matching. It is not the creator compensation escrow.
+pay.sh/x402 is used for an Agent to buy external verification APIs. It has TWO distinct use cases:
 
 ```text
-pay.sh/x402
-= machine-to-machine API spend
+Use Case 1: Creator Authenticity Verification (Discovery Phase)
+→ Nansen/HypeAuditor API
+→ ~$0.10 USDC per call
+→ Filters fake influencers (bot_percentage > 25%)
+
+Use Case 2: Content Quality Verification (Evidence Phase)
+→ Brandwatch API
+→ ~$0.50 USDC per call
+→ Validates brand mention, sentiment, quality
 
 Promotion Escrow
-= human service compensation
+= human service compensation (separate ledger)
 ```
 
 The UI and code must keep these ledgers and terms separate.
 
-## 2. Trigger
+**Key Distinction**: pay.sh is for **Agent operational costs** (buying external APIs), NOT for creator compensation (which uses Solana escrow).
 
-The Brand Agent considers a paid tool only when:
+## 2. Triggers
 
-- the Brand enabled paid verification;
-- the quoted price is within remaining spend cap;
-- the tool is allowlisted;
-- the current evidence is insufficient or top candidates are close;
-- the data is relevant to a documented ranking component;
-- authority permits autonomous API payment.
+### 2.1 Creator Verification Trigger (Discovery)
+
+Triggered when:
+- Discovery finds creator candidates
+- `PAYSH_CREATOR_VERIFICATION_ENABLED=true` (default)
+- Budget allows ($0.10 per candidate)
+- Top 20 candidates need authenticity check
+
+### 2.2 Content Verification Trigger (Evidence)
+
+Triggered when:
+- Creator submits content URL
+- `PAYSH_CONTENT_VERIFICATION_ENABLED=true` (default)
+- Budget allows ($0.50 per content)
+- Brand keywords extracted from terms
+
+Both use sandbox mode by default (`PAYSH_MODE=sandbox`).
 
 ## 3. Reasoning loop
 
@@ -103,12 +121,69 @@ No silent fallback.
 
 The core product must work without paid verification using confirmed internal data. For hackathon scoring, one real paid verification call is strongly preferred when the current pay.sh environment is stable. It must not block the entire creator negotiation demo if the external provider is unavailable; the fallback policy must be explicit and visible.
 
-## 8. Tests
+## 8. Implementation
 
+### 8.1 Code Location
+
+```python
+# backend/libs/payments/paysh.py
+from libs.payments import verify_creator, verify_content
+
+# Creator verification
+receipt = verify_creator(
+    profile_url="https://instagram.com/creator_handle",
+    sandbox=True,  # or False for real API
+    max_price_usdc=0.10,
+    provider="nansen",
+)
+# Returns: bot_percentage, engagement_quality, follower_count
+
+# Content verification
+receipt = verify_content(
+    content_url="https://instagram.com/p/abc123",
+    brand_keywords=["product_name", "brand"],
+    sandbox=True,
+    max_price_usdc=0.50,
+)
+# Returns: sentiment_score, brand_mention_found, estimated_reach, quality_score
+```
+
+### 8.2 Integration Points
+
+**Discovery Flow** (`backend/libs/agents/discovery.py`):
+```python
+verified_candidates = verify_candidates(
+    detailed=detailed_candidates,
+    sandbox=(settings.paysh_mode == "sandbox"),
+    bot_threshold=0.25,
+)
+# Filters candidates with bot_percentage > 25%
+```
+
+**Evidence Verification** (`backend/apps/api/routes.py`):
+```python
+def _evidence_observations(...):
+    if settings.paysh_content_verification_enabled:
+        receipt = verify_content(
+            content_url=url,
+            brand_keywords=extract_keywords(terms),
+            sandbox=(settings.paysh_mode == "sandbox"),
+        )
+        # Uses verification result for brand_mention, quality checks
+```
+
+## 9. Tests
+
+**Sandbox Mode** (`backend/tests/test_paysh_sandbox.py`):
+- `test_sandbox_creator_verification()` - deterministic fake data
+- `test_sandbox_content_verification()` - simulated analysis
+- `test_sandbox_creator_verification_deterministic()` - same URL → same result
+
+**Live Mode Checks**:
 - cap exceeded blocks payment;
 - duplicate request does not double pay;
 - tool quote changes are revalidated;
 - external failure follows configured continue/stop policy;
-- receipt belongs to current Match Run;
+- receipt belongs to current operation;
 - result cannot inject arbitrary ranking weight;
 - fake receipt is impossible in live mode.

@@ -35,15 +35,35 @@ Canonical term fields:
 
 A mismatch is a hard failure.
 
-## 3. MVP settlement schedule
+## 3. Settlement Schedule (Updated with Mentoring Feedback)
 
-One milestone only:
+**3-Stage Milestone System** (환불 방지 + 분쟁 해결):
 
-```text
-POST_VERIFIED = 100%
+```python
+milestones = [
+    Milestone(id="contract", trigger="contractSigned", releasePct=30),
+    Milestone(id="verification", trigger="contentVerified", releasePct=50),
+    Milestone(id="timelock", trigger="timelockExpired", releasePct=20),
+]
 ```
 
-This matches the MVP’s one content deliverable and keeps the demo clear. Do not retain a legacy 30/70 UI if the actual contract releases 100% after verification.
+### Purpose
+
+| Milestone | % | Trigger | Purpose |
+|-----------|---|---------|---------|
+| Contract | 30% | Agreement 생성 시 | 브랜드 환불 방지, 크리에이터 최소 보장 |
+| Verification | 50% | pay.sh 콘텐츠 검증 통과 | 크리에이터 80% 확보 |
+| Timelock | 20% | 72시간 경과 + 분쟁 없음 | 이의 제기 기간 제공 |
+
+### Rationale
+
+**Problem**: 브랜드가 콘텐츠 받고 일방적 환불 요구
+**Solution**:
+- 계약 체결 시 30% 즉시 릴리즈 → 브랜드 환불 불가
+- 검증 통과 시 50% 추가 릴리즈 → 크리에이터 80% 확보
+- 72시간 대기 후 20% 최종 릴리즈 → 분쟁 제기 기간
+
+**Note**: 기존 단일 마일스톤(100%) 방식은 deprecated.
 
 ## 4. Escrow authority
 
@@ -191,8 +211,119 @@ The creator receives funds directly at the configured settlement wallet in the a
 
 MVP does not silently re-open a settled Agreement. Record the source digest used at verification.
 
-## 12. Tests
+## 12. Dispute System (New)
 
+### 12.1 Dispute Triggers
+
+Either party can raise a dispute:
+- Brand: Content quality issues, missing disclosure, late delivery
+- Creator: Payment delays, unfair rejection
+
+### 12.2 Dispute Flow
+
+```text
+POST /disputes
+→ Freeze milestone (frozen=true)
+→ If amount < $100 && Gemini available:
+  → Auto-resolve with Gemini
+→ Else:
+  → Manual review required
+→ POST /disputes/{id}:resolve
+→ Unfreeze milestone
+```
+
+### 12.3 Implementation
+
+```python
+# Raise dispute
+POST /disputes
+{
+  "agreementId": "agreement-123",
+  "milestoneId": "verification",
+  "reason": "CONTENT_QUALITY",
+  "description": "Brand mention missing",
+  "evidenceUrl": "optional screenshot"
+}
+
+# Auto-resolution (< $100)
+if dispute_amount < 100.0 and settings.gemini_mode != "off":
+    resolution = _auto_resolve_dispute_with_gemini(
+        dispute, agreement, milestone
+    )
+    # Returns: decision ("brand" | "creator" | "partial")
+```
+
+## 13. Timelock System (New)
+
+### 13.1 Purpose
+
+72-hour dispute window after content verification before final 20% release.
+
+### 13.2 Flow
+
+```text
+verification milestone released
+→ _set_timelock_for_next_milestone()
+→ timelock.timelockExpiresAt = now + 72h
+→ timelock.status = "TIMELOCK_ACTIVE"
+
+[72 hours later]
+
+POST /milestones/timelock:check
+→ Check all active timelocks
+→ If expired && no active disputes:
+  → Auto-release timelock milestone
+→ Else:
+  → Keep frozen
+```
+
+### 13.3 Implementation
+
+```python
+# Set timelock (called after verification release)
+def _set_timelock_for_next_milestone(
+    repository, agreement_id, released_milestone_id, released_at
+):
+    if released_milestone_id == "verification":
+        timelock_expires_at = released_at + timedelta(hours=72)
+        # Update timelock milestone with expiry
+
+# Check and release (periodic job)
+POST /milestones/timelock:check
+→ Scans all TIMELOCK_ACTIVE milestones
+→ Releases expired ones with no disputes
+```
+
+## 14. Amount-Based Automation (New)
+
+### 14.1 Policy Levels
+
+| Amount | Level | Behavior |
+|--------|-------|----------|
+| < $100 | FULL_AUTO | 완전 자동, 사람 개입 없음 |
+| $100-500 | HUMAN_REVIEW | 검토 필요, 수동 승인 |
+| >= $500 | HUMAN_SIGNATURE | 사람 서명 필수 |
+
+### 14.2 Implementation
+
+```python
+def _determine_automation_level(amount_usdc: float) -> AutomationLevel:
+    if amount_usdc < 100.0:
+        return AutomationLevel.FULL_AUTO
+    elif amount_usdc < 500.0:
+        return AutomationLevel.HUMAN_REVIEW
+    else:
+        return AutomationLevel.HUMAN_SIGNATURE
+
+# Check before auto-release
+automation_level = _determine_automation_level(total_amount_usdc)
+if automation_level != AutomationLevel.FULL_AUTO:
+    raise HUMAN_APPROVAL_REQUIRED
+```
+
+## 15. Tests
+
+**Existing**:
 - canonical hash stable across equivalent inputs;
 - duplicate Artifact creates one Agreement;
 - duplicate lock/release returns same operation;
@@ -201,3 +332,11 @@ MVP does not silently re-open a settled Agreement. Record the source digest used
 - devnet smoke produces real signature;
 - evidence ambiguity does not pay;
 - settlement updates both role projections from same canonical event.
+
+**New** (3-stage milestone):
+- 30% released on agreement creation;
+- 50% released after content verification;
+- 20% released after 72h timelock expiration;
+- dispute freezes milestone;
+- timelock prevents release during dispute;
+- automation level blocks auto-release for high amounts.
