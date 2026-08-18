@@ -678,6 +678,9 @@ function EvidenceForm({
   const [busy, setBusy] = useState(false);
   const [lastEvidence, setLastEvidence] = useState<ApiEvidence | null>(null);
   const [lastSettlementSignature, setLastSettlementSignature] = useState<string | null>(null);
+  // 4단 판정 중 "오류가 아닌 상태"(재제출 요구 / 사람 검토)를 담는다. onError 로 내면
+  // 화면이 실패로 보여서 크리에이터가 다시 올릴 수 있다는 걸 놓친다.
+  const [outcomeNotice, setOutcomeNotice] = useState<string | null>(null);
 
   async function submit() {
     setBusy(true);
@@ -707,11 +710,19 @@ function EvidenceForm({
       }
       const verified = await client.verifyEvidence(evidenceToVerify.evidenceId);
       setLastEvidence(verified.evidence);
+      setOutcomeNotice(null);
       if (verified.autoSettlement?.released) {
         const signature = verified.autoSettlement.settlement?.signature ?? null;
         setLastSettlementSignature(signature);
         await onRefresh();
         onSettlementState("done");
+        return;
+      }
+      // 통과하지 못했지만 계약이 살아 있는 두 상태는 안내로 표시하고 끝낸다.
+      if (verified.outcome === "REVISION_REQUIRED" || verified.outcome === "MANUAL_REVIEW") {
+        setOutcomeNotice(evidenceOutcomeNotice(verified));
+        await onRefresh();
+        onSettlementState("idle");
         return;
       }
       if (verified.evidence.status === "PASSED") {
@@ -753,12 +764,41 @@ function EvidenceForm({
       >
         {settlementButtonLabel(settlementState, walletAddress)}
       </button>
+      {outcomeNotice ? (
+        <p className="sketch-alt ink border border-border-subtle bg-surface p-3 text-xs">
+          {outcomeNotice}
+        </p>
+      ) : null}
       {lastEvidence ? <p className="text-xs text-muted">최근 검토: {lastEvidence.status}</p> : null}
       {lastSettlementSignature ? (
         <TransactionReference signature={lastSettlementSignature} network={escrow.network} label="정산 기록" />
       ) : null}
     </div>
   );
+}
+
+const EVIDENCE_REASON_COPY: Record<string, string> = {
+  EVIDENCE_DISCLOSURE_MISSING: "광고 표시(#광고 등)가 확인되지 않았습니다.",
+  EVIDENCE_URL_UNREACHABLE: "게시물에 접근할 수 없었습니다.",
+  EVIDENCE_BRAND_MENTION_MISSING: "브랜드/제품 언급이 확인되지 않았습니다.",
+  EVIDENCE_PROHIBITED_CLAIM_FOUND: "사용할 수 없는 표현이 발견됐습니다.",
+  EVIDENCE_LOW_CONFIDENCE: "자동 판정 신뢰도가 낮습니다.",
+};
+
+/** 4단 판정을 크리에이터가 무엇을 해야 하는지로 번역한다. */
+function evidenceOutcomeNotice(verified: {
+  outcome?: string;
+  reasonCodes?: string[];
+  revisionsRemaining?: number;
+}): string {
+  const reasons = (verified.reasonCodes ?? [])
+    .map((code) => EVIDENCE_REASON_COPY[code] ?? code)
+    .join(" ");
+  if (verified.outcome === "REVISION_REQUIRED") {
+    const remaining = verified.revisionsRemaining ?? 0;
+    return `수정이 필요합니다. ${reasons} 고쳐서 다시 올려주세요. (남은 재제출 ${remaining}회)`;
+  }
+  return `자동 판정이 어려워 검토 중입니다. ${reasons} 결과가 정해지면 알려드립니다.`;
 }
 
 function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {

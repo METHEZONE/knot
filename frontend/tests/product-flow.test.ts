@@ -536,6 +536,33 @@ test("API client does not start negotiation when matching has no eligible creato
   }
 });
 
+test("evidence verification surfaces the four-way outcome", async () => {
+  // REVISION_REQUIRED / MANUAL_REVIEW 는 200 으로 오므로 클라이언트가 오류로 만들지 않아야
+  // 한다 — 오류로 내면 화면이 "실패" 로 보여서 재제출 경로를 덮는다 (docs/17 P1).
+  const previousFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    Response.json({
+      data: {
+        evidence: { evidenceId: "evidence-1", status: "FAILED" },
+        outcome: "REVISION_REQUIRED",
+        reasonCodes: ["EVIDENCE_DISCLOSURE_MISSING"],
+        revisionsRemaining: 1,
+        autoSettlement: { attempted: false, reason: "REVISION_REQUIRED" },
+      },
+    })) as typeof fetch;
+
+  try {
+    const result = await new ProductApiClient("").verifyEvidence("evidence-1");
+    assert.equal(result.outcome, "REVISION_REQUIRED");
+    assert.deepEqual(result.reasonCodes, ["EVIDENCE_DISCLOSURE_MISSING"]);
+    assert.equal(result.revisionsRemaining, 1);
+    assert.equal(result.autoSettlement?.released, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("wallet registration sends the ownership proof signature", async () => {
   // 플랫폼이 유저 키를 보관하지 않으므로(docs/17 D7) 주소만 보내는 등록은 있어서는 안 된다.
   const previousFetch = globalThis.fetch;

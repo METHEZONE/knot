@@ -1031,11 +1031,21 @@ export class ProductApiClient {
     return response.evidence;
   }
 
+  /**
+   * 증빙 검증. 판정은 4단이다 (docs/17 P1).
+   *
+   * VERIFIED 만 정산으로 이어진다. REVISION_REQUIRED / MANUAL_REVIEW 는 오류가 아니라
+   * 계약이 살아 있는 상태이므로 200 으로 온다 — "실패" 로 표시하면 재제출 경로를 덮는다.
+   * REJECTED 만 409 로 온다.
+   */
   async verifyEvidence(evidenceId: string) {
-    return this.request<{ evidence: ApiEvidence; autoSettlement?: ApiAutoSettlement }>(
-      `/api/v1/evidence/${evidenceId}:verify`,
-      { method: "POST" },
-    );
+    return this.request<{
+      evidence: ApiEvidence;
+      outcome?: "VERIFIED" | "REVISION_REQUIRED" | "MANUAL_REVIEW" | "REJECTED";
+      reasonCodes?: string[];
+      revisionsRemaining?: number;
+      autoSettlement?: ApiAutoSettlement;
+    }>(`/api/v1/evidence/${evidenceId}:verify`, { method: "POST" });
   }
 
   async lockEscrow(agreementId: string) {
