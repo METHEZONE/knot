@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-knot_escrow = "9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn"
+knot_escrow = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
 
 [provider]
 cluster = "devnet"

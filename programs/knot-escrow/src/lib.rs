@@ -9,10 +9,22 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, TransferChecked};
 
-declare_id!("9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn");
+declare_id!("Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj");
 
 pub const MAX_MILESTONES: usize = 8;
 pub const BPS_DENOM: u64 = 10_000;
+
+/// Agreement 에스크로 중개 수수료 상한 (10%).
+///
+/// 수수료율은 에이전트가 계약별로 협상하지만(docs/17 D1), 브랜드 에이전트가 상한 없이
+/// 올리는 것을 온체인에서 막는다. 오프체인 정책 엔진과 이 상한이 이중 방어다.
+pub const MAX_AGREEMENT_FEE_BPS: u16 = 1_000;
+
+/// 환불 타임락 하한 (1일).
+///
+/// 타임락을 0 으로 협상하면 크리에이터가 작업할 시간도 없이 브랜드가 환불을 트리거할 수
+/// 있다. 협상 가능하되 이 하한은 온체인에서 강제한다.
+pub const MIN_REFUND_TIMELOCK_SECS: i64 = 86_400;
 
 /// amount * bps / 10000 (u128 중간연산으로 오버플로 회피)
 fn apply_bps(amount: u64, bps: u16) -> Result<u64> {
@@ -274,6 +286,8 @@ pub mod knot_escrow {
         milestone_amounts: Vec<u64>,
         total_amount: u64,
         terms_hash: [u8; 32],
+        fee_bps: u16,
+        refund_timelock_secs: i64,
     ) -> Result<()> {
         require!(!milestone_amounts.is_empty(), EscrowError::NoMilestones);
         require!(
@@ -284,6 +298,19 @@ pub mod knot_escrow {
             acc.checked_add(*amount).ok_or(EscrowError::Overflow)
         })?;
         require!(sum == total_amount, EscrowError::AmountMismatch);
+        // 협상된 값이지만 온체인 상한·하한을 넘을 수 없다 (docs/17 D1).
+        require!(fee_bps <= MAX_AGREEMENT_FEE_BPS, EscrowError::BadFee);
+        require!(
+            refund_timelock_secs >= MIN_REFUND_TIMELOCK_SECS,
+            EscrowError::TimelockActive
+        );
+        // 수수료는 마일스톤별로 계산해 합산한다. 총액에 한 번 적용하면 릴리즈 시점의
+        // 마일스톤별 합과 반올림 때문에 어긋나 vault 에 먼지가 남거나 부족해진다.
+        let mut fee_total: u64 = 0;
+        for amount in milestone_amounts.iter() {
+            let fee = apply_bps(*amount, fee_bps)?;
+            fee_total = fee_total.checked_add(fee).ok_or(EscrowError::Overflow)?;
+        }
 
         let escrow = &mut ctx.accounts.escrow;
         escrow.agreement_hash = agreement_hash;
@@ -292,10 +319,19 @@ pub mod knot_escrow {
         escrow.settlement_authority = ctx.accounts.settlement_authority.key();
         escrow.usdc_mint = ctx.accounts.mint.key();
         escrow.vault_token_account = ctx.accounts.vault.key();
+        escrow.platform_treasury = ctx.accounts.platform_treasury.key();
         escrow.total_amount = total_amount;
         escrow.funded_amount = 0;
         escrow.released_amount = 0;
         escrow.refunded_amount = 0;
+        escrow.fee_total_amount = fee_total;
+        escrow.fee_paid_amount = 0;
+        escrow.fee_bps = fee_bps;
+        escrow.refund_approved = false;
+        escrow.refund_available_at = Clock::get()?
+            .unix_timestamp
+            .checked_add(refund_timelock_secs)
+            .ok_or(EscrowError::Overflow)?;
         escrow.terms_hash = terms_hash;
         escrow.status = AgreementEscrowStatus::Created;
         escrow.bump = ctx.bumps.escrow;
@@ -330,7 +366,13 @@ pub mod knot_escrow {
         require!(ctx.accounts.brand_token.mint == escrow.usdc_mint, EscrowError::MintMismatch);
         require!(ctx.accounts.vault.mint == escrow.usdc_mint, EscrowError::MintMismatch);
         require!(ctx.accounts.vault.owner == escrow.key(), EscrowError::BadVault);
-        require!(amount == escrow.total_amount, EscrowError::AmountMismatch);
+        // N2: 수수료는 브랜드 부담이다. 크리에이터는 협상액을 그대로 받으므로 브랜드가
+        // 협상액 + 수수료를 예치한다.
+        let required = escrow
+            .total_amount
+            .checked_add(escrow.fee_total_amount)
+            .ok_or(EscrowError::Overflow)?;
+        require!(amount == required, EscrowError::AmountMismatch);
         require!(escrow.funded_amount == 0, EscrowError::BadState);
         require!(
             escrow.status == AgreementEscrowStatus::Created,
@@ -411,6 +453,21 @@ pub mod knot_escrow {
             EscrowError::MintMismatch
         );
 
+        // 트레저리 토큰계정이 저장된 수취 주소의 것인지 확인한다. 수취인 고정이 깨지면
+        // 커스터디 해당성 논거도 함께 무너진다 (docs/17 P9.1).
+        require!(
+            ctx.accounts.platform_treasury.key() == escrow.platform_treasury,
+            EscrowError::BadTreasury
+        );
+        require!(
+            ctx.accounts.treasury_token.owner == escrow.platform_treasury,
+            EscrowError::BadTreasury
+        );
+        require!(
+            ctx.accounts.treasury_token.mint == escrow.usdc_mint,
+            EscrowError::MintMismatch
+        );
+
         let amount = {
             let milestone = escrow
                 .milestones
@@ -422,6 +479,10 @@ pub mod knot_escrow {
             );
             milestone.amount
         };
+        // N2: 수수료는 브랜드가 예치에 얹어 냈으므로 크리에이터는 협상액을 그대로 받는다.
+        // 수수료를 크리에이터 몫에서 빼면 "합의한 금액보다 덜 받았다" 가 되어 협상 신뢰가
+        // 깨진다.
+        let fee = apply_bps(amount, escrow.fee_bps)?;
         let agreement_hash = escrow.agreement_hash;
         let escrow_bump = escrow.bump;
         let creator_destination = escrow.creator_destination;
@@ -435,20 +496,47 @@ pub mod knot_escrow {
                     from: ctx.accounts.vault.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.creator_token.to_account_info(),
-                    authority: escrow_info,
+                    authority: escrow_info.clone(),
                 },
                 signer_seeds,
             ),
             amount,
             ctx.accounts.mint.decimals,
         )?;
+        // 수수료는 릴리즈 시점에만 나간다. 그래서 환불되는 금액에는 수수료가 붙지 않고,
+        // 별도 환불 로직이 필요 없다 (docs/17 §0.5).
+        if fee > 0 {
+            token::transfer_checked(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.key(),
+                    TransferChecked {
+                        from: ctx.accounts.vault.to_account_info(),
+                        mint: ctx.accounts.mint.to_account_info(),
+                        to: ctx.accounts.treasury_token.to_account_info(),
+                        authority: escrow_info,
+                    },
+                    signer_seeds,
+                ),
+                fee,
+                ctx.accounts.mint.decimals,
+            )?;
+        }
 
         escrow.milestones[index as usize].status = AgreementMilestoneStatus::Released;
         escrow.released_amount = escrow
             .released_amount
             .checked_add(amount)
             .ok_or(EscrowError::Overflow)?;
-        escrow.status = if escrow.released_amount >= escrow.funded_amount {
+        escrow.fee_paid_amount = escrow
+            .fee_paid_amount
+            .checked_add(fee)
+            .ok_or(EscrowError::Overflow)?;
+        // 완료 판정은 vault 에서 나간 총액(크리에이터 몫 + 수수료)으로 한다.
+        let spent = escrow
+            .released_amount
+            .checked_add(escrow.fee_paid_amount)
+            .ok_or(EscrowError::Overflow)?;
+        escrow.status = if spent >= escrow.funded_amount {
             AgreementEscrowStatus::Released
         } else {
             AgreementEscrowStatus::PartiallyReleased
@@ -463,28 +551,58 @@ pub mod knot_escrow {
         Ok(())
     }
 
-    /// 취소 정책이 통과한 경우 미지급 잔액만 Brand에게 환불한다.
-    pub fn refund_remaining(ctx: Context<RefundAgreementEscrowRemaining>) -> Result<()> {
-        let escrow_key = ctx.accounts.escrow.key();
-        let escrow_info = ctx.accounts.escrow.to_account_info();
+    /// 브랜드가 환불을 명시 승인한다 — 타임락을 기다리지 않는 빠른 경로 (docs/17 P0).
+    ///
+    /// 플랫폼이 단독으로 환불하지 못하게 하는 장치다. 실제 환불은 settlement_authority 가
+    /// 실행하지만, 타임락 이전에는 이 플래그 없이는 실행할 수 없다.
+    pub fn approve_refund(ctx: Context<ApproveAgreementRefund>) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(
             ctx.accounts.brand_authority.key() == escrow.brand_authority,
             EscrowError::Unauthorized
         );
+        require!(
+            escrow.status == AgreementEscrowStatus::Funded
+                || escrow.status == AgreementEscrowStatus::PartiallyReleased,
+            EscrowError::BadState
+        );
+        escrow.refund_approved = true;
+        Ok(())
+    }
+
+    /// 미지급 잔액을 브랜드 지갑으로 환불한다 (docs/17 D2).
+    ///
+    /// 서명자는 settlement_authority 다. 브랜드 키로 서명하게 두면, 브랜드 지갑이 플랫폼
+    /// 커스터디일 때 플랫폼이 환불권을 쥐고 SELF 일 때는 "사람 승인 0회" 전제가 깨진다
+    /// (docs/17 P0). 대신 온체인 선행조건 둘 중 하나를 반드시 만족해야 한다:
+    ///
+    ///   1. 브랜드가 approve_refund 로 명시 승인했다 (빠른 경로)
+    ///   2. refund_available_at 타임락이 지났다 (백스톱)
+    ///
+    /// 타임락 백스톱이 있어서 자금이 영구히 묶이는 상태가 구조적으로 없다.
+    pub fn refund_remaining(ctx: Context<RefundAgreementEscrowRemaining>) -> Result<()> {
+        let escrow_key = ctx.accounts.escrow.key();
+        let escrow_info = ctx.accounts.escrow.to_account_info();
+        let escrow = &mut ctx.accounts.escrow;
+        require!(
+            ctx.accounts.settlement_authority.key() == escrow.settlement_authority,
+            EscrowError::Unauthorized
+        );
+        require!(
+            escrow.refund_approved
+                || Clock::get()?.unix_timestamp >= escrow.refund_available_at,
+            EscrowError::TimelockActive
+        );
         require!(ctx.accounts.vault.mint == escrow.usdc_mint, EscrowError::MintMismatch);
         require!(ctx.accounts.vault.owner == escrow_key, EscrowError::BadVault);
+        // 수취인은 계정에 고정된 브랜드 주소다. 임의 주소로 보낼 수 없다 (docs/17 P9.1).
         require!(
             ctx.accounts.brand_token.owner == escrow.brand_authority,
             EscrowError::Unauthorized
         );
         require!(ctx.accounts.brand_token.mint == escrow.usdc_mint, EscrowError::MintMismatch);
-        let remaining = escrow
-            .funded_amount
-            .checked_sub(escrow.released_amount)
-            .ok_or(EscrowError::Overflow)?
-            .checked_sub(escrow.refunded_amount)
-            .ok_or(EscrowError::Overflow)?;
+        // 이미 나간 수수료도 빼야 한다. 안 그러면 vault 잔액보다 많이 환불하려 해서 실패한다.
+        let remaining = escrow.remaining_amount()?;
         require!(remaining > 0, EscrowError::NothingToRefund);
 
         let agreement_hash = escrow.agreement_hash;
@@ -679,6 +797,9 @@ pub struct InitializeEscrow<'info> {
     /// CHECK: Backend/settlement signer authorized by the Agreement verification policy.
     pub settlement_authority: UncheckedAccount<'info>,
 
+    /// CHECK: 중개 수수료 수취 주소. 지출하지 않는 수취 전용 지갑이다 (docs/17 D4).
+    pub platform_treasury: UncheckedAccount<'info>,
+
     pub mint: Account<'info, Mint>,
 
     #[account(
@@ -767,15 +888,36 @@ pub struct ReleaseAgreementMilestone<'info> {
     )]
     pub creator_token: Account<'info, TokenAccount>,
 
+    /// CHECK: 저장된 트레저리 주소와 대조한다.
+    pub platform_treasury: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = settlement_authority,
+        associated_token::mint = mint,
+        associated_token::authority = platform_treasury,
+    )]
+    pub treasury_token: Account<'info, TokenAccount>,
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
+/// 브랜드가 환불을 명시 승인한다. 자금을 이동시키지 않는다.
+#[derive(Accounts)]
+pub struct ApproveAgreementRefund<'info> {
+    pub brand_authority: Signer<'info>,
+
+    #[account(mut)]
+    pub escrow: Account<'info, AgreementEscrow>,
+}
+
 #[derive(Accounts)]
 pub struct RefundAgreementEscrowRemaining<'info> {
+    /// 환불 실행자. 브랜드 키가 아니다 (docs/17 P0) — 온체인 선행조건이 임의성을 막는다.
     #[account(mut)]
-    pub brand_authority: Signer<'info>,
+    pub settlement_authority: Signer<'info>,
 
     pub mint: Account<'info, Mint>,
 
@@ -792,7 +934,7 @@ pub struct RefundAgreementEscrowRemaining<'info> {
 
     #[account(
         mut,
-        constraint = brand_token.owner == brand_authority.key() @ EscrowError::Unauthorized,
+        constraint = brand_token.owner == escrow.brand_authority @ EscrowError::Unauthorized,
         constraint = brand_token.mint == mint.key() @ EscrowError::MintMismatch,
     )]
     pub brand_token: Account<'info, TokenAccount>,
@@ -885,10 +1027,24 @@ pub struct AgreementEscrow {
     pub settlement_authority: Pubkey,
     pub usdc_mint: Pubkey,
     pub vault_token_account: Pubkey,
+    /// 중개 수수료 수취 주소. 지출하지 않는 수취 전용 지갑이다 (docs/17 D4).
+    pub platform_treasury: Pubkey,
+    /// 크리에이터가 받을 금액의 합. 수수료는 포함하지 않는다.
     pub total_amount: u64,
     pub funded_amount: u64,
+    /// 크리에이터에게 나간 누적액.
     pub released_amount: u64,
     pub refunded_amount: u64,
+    /// 트레저리로 나갈 수수료 총액 (init 에서 마일스톤별로 계산해 합산).
+    pub fee_total_amount: u64,
+    /// 트레저리로 나간 누적 수수료.
+    pub fee_paid_amount: u64,
+    /// 이 시점 이후에는 브랜드 승인 없이도 환불을 트리거할 수 있다 (docs/17 D1·P0).
+    pub refund_available_at: i64,
+    /// 협상된 중개 수수료율. MAX_AGREEMENT_FEE_BPS 이내 (docs/17 D5).
+    pub fee_bps: u16,
+    /// 브랜드가 켜는 빠른 환불 경로 (docs/17 P0).
+    pub refund_approved: bool,
     pub terms_hash: [u8; 32],
     pub status: AgreementEscrowStatus,
     pub bump: u8,
@@ -896,8 +1052,33 @@ pub struct AgreementEscrow {
 }
 
 impl AgreementEscrow {
-    pub const MAX_SIZE: usize =
-        32 + 32 * 5 + 8 * 4 + 32 + 1 + 1 + 4 + MAX_MILESTONES * AgreementEscrowMilestone::SIZE;
+    // pubkey 6 + u64 6 + i64 1 + u16 1 + bool 1 + hash 2 + status/bump 2 + vec len 4
+    pub const MAX_SIZE: usize = 32
+        + 32 * 6
+        + 8 * 6
+        + 8
+        + 2
+        + 1
+        + 32
+        + 1
+        + 1
+        + 4
+        + MAX_MILESTONES * AgreementEscrowMilestone::SIZE;
+
+    /// vault 에 남아 있어야 하는 잔액. 크리에이터 몫 + 아직 안 낸 수수료.
+    pub fn remaining_amount(&self) -> Result<u64> {
+        let after_release = self
+            .funded_amount
+            .checked_sub(self.released_amount)
+            .ok_or(EscrowError::Overflow)?;
+        let after_fee = after_release
+            .checked_sub(self.fee_paid_amount)
+            .ok_or(EscrowError::Overflow)?;
+        let remaining = after_fee
+            .checked_sub(self.refunded_amount)
+            .ok_or(EscrowError::Overflow)?;
+        Ok(remaining)
+    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
