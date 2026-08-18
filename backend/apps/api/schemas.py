@@ -353,6 +353,9 @@ class EvidenceObservations(DomainModel):
     brand_mentioned: bool = Field(default=True, alias="brandMentioned")
     disclosure_present: bool = Field(default=True, alias="disclosurePresent")
     prohibited_claims_found: list[str] = Field(default_factory=list, alias="prohibitedClaimsFound")
+    # 판정이 확실하지 않다는 신호. 켜지면 통과든 위반이든 MANUAL_REVIEW 로 보낸다 —
+    # 저신뢰를 자동으로 릴리즈하거나 거절하면 안 된다(docs/13 §9).
+    low_confidence: bool = Field(default=False, alias="lowConfidence")
 
 
 class EvidenceVerificationRequest(DomainModel):

@@ -653,8 +653,11 @@ def test_release_blocked_after_failed_evidence_without_settlement(monkeypatch) -
             "milestoneId": "content",
         },
     ).json()["data"]["evidence"]
+    # 공시 누락은 고칠 수 있는 결함이라 REVISION_REQUIRED 다 — 오류가 아니고 계약도 살아
+    # 있지만, 검증을 통과하지 않았으므로 릴리즈는 여전히 막혀야 한다(docs/17 P1).
     verify = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
-    assert verify.status_code == 409
+    assert verify.status_code == 200, verify.text
+    assert verify.json()["data"]["outcome"] == "REVISION_REQUIRED"
 
     response = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",

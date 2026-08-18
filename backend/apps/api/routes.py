@@ -16,6 +16,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, status
+from pydantic import ValidationError
 
 from apps.api.schemas import (
     AnalysisConfirmRequest,
@@ -93,7 +94,13 @@ from libs.payments.settlement import (
     milestone_amounts_base_units,
 )
 from libs.policies.brand import validate_brand_terms
-from libs.policies.evidence import validate_evidence_observations
+from libs.policies.evidence import (
+    REJECTED as EVIDENCE_REJECTED,
+)
+from libs.policies.evidence import (
+    classify_evidence_outcome,
+    validate_evidence_observations,
+)
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictError, KnotRepository
@@ -3079,10 +3086,24 @@ def build_api_router(
             payload=payload,
         )
         policy_decision = validate_evidence_observations(observations)
-        verification_status = "PASSED" if policy_decision.allowed else "FAILED"
+        # 2단(통과/거절) 이 아니라 4단으로 판정한다 (docs/13 §9, docs/17 P1).
+        # 재제출 허용 횟수는 협상 결과(terms.deliverables[].revisionRounds)에 이미 들어
+        # 있으므로 새 정책을 발명하지 않는다.
+        revisions_used = int(evidence.get("revisionCount") or 0)
+        outcome = classify_evidence_outcome(
+            policy_decision,
+            revisions_used=revisions_used,
+            max_revision_rounds=_max_revision_rounds(agreement),
+            low_confidence=bool(observations.get("lowConfidence")),
+        )
+        verification_status = "PASSED" if outcome.releasable else "FAILED"
         verified = {
             **evidence,
             "status": verification_status,
+            "outcome": outcome.status,
+            "outcomeReasonCodes": outcome.reason_codes,
+            "revisionCount": revisions_used,
+            "revisionsRemaining": outcome.revisions_remaining,
             "observations": observations,
             "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
             "verifiedAt": _now(),
@@ -3097,7 +3118,8 @@ def build_api_router(
             "sourceDigest": verified.get("sourceDigest"),
             "provider": "deterministic-url-policy",
             "model": None,
-            "status": "VERIFIED" if policy_decision.allowed else "REJECTED",
+            "status": outcome.status,
+            "reasonCodes": outcome.reason_codes,
             "observations": observations,
             "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
             "createdAt": verified["verifiedAt"],
@@ -3117,12 +3139,14 @@ def build_api_router(
                 "milestoneId": verified["milestoneId"],
                 "evidenceId": evidence_id,
                 "status": verified["status"],
+                "outcome": outcome.status,
                 "violationCodes": [
                     violation.code for violation in policy_decision.violations
                 ],
             },
         )
-        if not policy_decision.allowed:
+        if outcome.status == EVIDENCE_REJECTED:
+            # 확정 거절만 오류다. 이 판정이 환불 경로의 트리거가 된다(docs/17 P2 트리거 3).
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -3131,15 +3155,36 @@ def build_api_router(
                     "status": status.HTTP_409_CONFLICT,
                     "detail": "Evidence does not satisfy verification policy.",
                     "code": "EVIDENCE_VERIFICATION_FAILED",
+                    "outcome": outcome.status,
+                    "reasonCodes": outcome.reason_codes,
                     "evidence": verified,
                 },
+            )
+        if not outcome.releasable:
+            # REVISION_REQUIRED / MANUAL_REVIEW 는 오류가 아니다 — 계약이 아직 살아 있고
+            # 자금도 그대로다. 오류로 내면 프론트가 "실패" 로 표시해 재제출 경로를 덮는다.
+            return _ok(
+                {
+                    "evidence": verified,
+                    "outcome": outcome.status,
+                    "reasonCodes": outcome.reason_codes,
+                    "revisionsRemaining": outcome.revisions_remaining,
+                    "autoSettlement": {"attempted": False, "reason": outcome.status},
+                }
             )
         auto_settlement = _try_auto_settlement(
             agreement_id=_require_document_str(verified, "agreementId"),
             milestone_id=_require_document_str(verified, "milestoneId"),
             promotion_id=str(verified["promotionId"]),
         )
-        return _ok({"evidence": verified, "autoSettlement": auto_settlement})
+        return _ok(
+            {
+                "evidence": verified,
+                "outcome": outcome.status,
+                "reasonCodes": outcome.reason_codes,
+                "autoSettlement": auto_settlement,
+            }
+        )
 
     def _try_auto_settlement(
         *,
@@ -6208,6 +6253,20 @@ def _require_negotiation(repository: KnotRepository, negotiation_id: str) -> dic
     if negotiation is None:
         raise _not_found("negotiation", negotiation_id)
     return negotiation
+
+
+def _max_revision_rounds(agreement: dict[str, object]) -> int:
+    """협상된 재제출 허용 횟수. 산출물이 여러 개면 가장 관대한 값을 쓴다.
+
+    새 정책을 발명하지 않는다 — terms.deliverables[].revisionRounds 가 이미 협상 결과다.
+    """
+    try:
+        terms = AgreementTerms.model_validate(agreement["terms"])
+    except (KeyError, ValidationError):
+        return 0
+    if not terms.deliverables:
+        return 0
+    return max(deliverable.revision_rounds for deliverable in terms.deliverables)
 
 
 def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> dict[str, object]:

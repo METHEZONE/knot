@@ -1207,7 +1207,8 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     assert "EVIDENCE_VERIFIED" in event_types
 
 
-def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
+def test_verify_evidence_missing_disclosure_asks_for_revision_instead_of_rejecting() -> None:
+    """공시 누락은 고칠 수 있으므로 재제출을 요구한다 — 태그 하나로 전액을 잃지 않는다."""
     client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
     fund_agreement_for_evidence(repository, agreement)
@@ -1222,13 +1223,41 @@ def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
 
     response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
 
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["outcome"] == "REVISION_REQUIRED"
+    assert data["reasonCodes"] == ["EVIDENCE_DISCLOSURE_MISSING"]
+    assert data["revisionsRemaining"] == 1
+    # 릴리즈되지 않았으므로 status 는 여전히 통과가 아니다.
+    assert data["evidence"]["status"] == "FAILED"
+    assert data["autoSettlement"]["attempted"] is False
+
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert verification_results[0]["status"] == "REVISION_REQUIRED"
+
+
+def test_verify_evidence_hard_violation_returns_problem() -> None:
+    """브랜드 언급 자체가 없으면 확정 위반이다 → 409, 환불 경로 진입 대상."""
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+    evidence = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/missing-brand",
+            "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
+        },
+    ).json()["data"]["evidence"]
+
+    response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert detail["code"] == "EVIDENCE_VERIFICATION_FAILED"
+    assert detail["outcome"] == "REJECTED"
+    assert detail["reasonCodes"] == ["EVIDENCE_BRAND_MENTION_MISSING"]
     assert detail["evidence"]["status"] == "FAILED"
-    assert detail["evidence"]["policyDecision"]["violations"][0]["code"] == (
-        "EVIDENCE_DISCLOSURE_MISSING"
-    )
 
     get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
     assert get_response.json()["data"]["evidence"]["status"] == "FAILED"
