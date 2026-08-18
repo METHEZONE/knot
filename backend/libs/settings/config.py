@@ -59,6 +59,13 @@ class Settings(BaseModel):
     paysh_daily_spend_cap_usdc: float = 1.0
     paysh_allowed_resource_prefixes: list[str] = ["https://debugger.pay.sh/mpp/quote/"]
     paysh_failure_policy: str = "continue"
+    # Creator verification via pay.sh
+    paysh_creator_verification_enabled: bool = True
+    paysh_creator_verification_max_price: float = 0.10
+    paysh_creator_verification_bot_threshold: float = 0.25
+    # Content verification via pay.sh
+    paysh_content_verification_enabled: bool = True
+    paysh_content_verification_max_price: float = 0.50
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
     usdc_mint: str = DEFAULT_USDC_MINT
@@ -115,6 +122,21 @@ def get_settings(service_name: str | None = None) -> Settings:
             os.getenv("PAYSH_ALLOWED_RESOURCE_PREFIXES", "https://debugger.pay.sh/mpp/quote/")
         ),
         paysh_failure_policy=os.getenv("PAYSH_FAILURE_POLICY", "continue"),
+        paysh_creator_verification_enabled=_truthy_default_true(
+            os.getenv("PAYSH_CREATOR_VERIFICATION_ENABLED")
+        ),
+        paysh_creator_verification_max_price=float(
+            os.getenv("PAYSH_CREATOR_VERIFICATION_MAX_PRICE", "0.10")
+        ),
+        paysh_creator_verification_bot_threshold=float(
+            os.getenv("PAYSH_CREATOR_VERIFICATION_BOT_THRESHOLD", "0.25")
+        ),
+        paysh_content_verification_enabled=_truthy_default_true(
+            os.getenv("PAYSH_CONTENT_VERIFICATION_ENABLED")
+        ),
+        paysh_content_verification_max_price=float(
+            os.getenv("PAYSH_CONTENT_VERIFICATION_MAX_PRICE", "0.50")
+        ),
         escrow_network=os.getenv("KNOT_ESCROW_NETWORK", "solanaDevnet"),
         escrow_program_id=os.getenv("KNOT_ESCROW_PROGRAM_ID", DEFAULT_ESCROW_PROGRAM_ID),
         usdc_mint=os.getenv("KNOT_USDC_MINT", DEFAULT_USDC_MINT),

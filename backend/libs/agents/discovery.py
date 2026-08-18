@@ -3,12 +3,16 @@ from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 from typing import Protocol
+import logging
 
 from libs.domain.categories import category_set
 from libs.domain.models import CreatorProfile, Promotion
+from libs.payments import verify_creator, PayShError, PaymentReceipt
 from libs.repositories.firestore_paths import COLLECTIONS
 from libs.repositories.serialization import DocumentData
 from libs.repositories.store import DocumentQueryFilter, KnotRepository
+
+logger = logging.getLogger(__name__)
 
 DISCOVERY_LIMIT = 100
 DETAIL_READ_LIMIT = 20
@@ -127,6 +131,114 @@ def detail_candidates(
         if creator is not None:
             results.append((candidate, creator))
     return results, len(bounded)
+
+
+@dataclass(frozen=True)
+class VerifiedCandidate:
+    """Creator candidate with pay.sh authenticity verification"""
+    candidate: RankedDiscoveryCandidate
+    profile: CreatorProfile
+    verification_receipt: PaymentReceipt | None
+    bot_percentage: float
+    engagement_quality: str
+    verification_passed: bool
+
+
+def verify_candidates(
+    detailed: Sequence[tuple[RankedDiscoveryCandidate, CreatorProfile]],
+    *,
+    sandbox: bool = True,
+    bot_threshold: float = 0.25,
+) -> list[VerifiedCandidate]:
+    """
+    Verify creator authenticity using pay.sh verification API
+
+    Args:
+        detailed: Ranked candidates with full profiles
+        sandbox: If True, simulate verification without real payment
+        bot_threshold: Maximum acceptable bot percentage (0.0 to 1.0)
+
+    Returns:
+        List of VerifiedCandidate with verification results
+        Candidates with bot_percentage > threshold will have verification_passed=False
+    """
+    verified_list: list[VerifiedCandidate] = []
+
+    for candidate, profile in detailed:
+        # Get profile URL from social links
+        profile_url = _get_primary_social_url(profile)
+
+        if not profile_url:
+            # No social URL to verify - mark as failed verification
+            logger.warning(f"Creator {profile.creator_id} has no social profile URL")
+            verified_list.append(VerifiedCandidate(
+                candidate=candidate,
+                profile=profile,
+                verification_receipt=None,
+                bot_percentage=1.0,  # Assume worst case
+                engagement_quality="unknown",
+                verification_passed=False,
+            ))
+            continue
+
+        try:
+            # Call pay.sh verification API
+            receipt = verify_creator(
+                profile_url=profile_url,
+                sandbox=sandbox,
+                max_price_usdc=0.10,
+                provider="nansen",
+            )
+
+            result = receipt.verification_result
+            bot_pct = result.get("bot_percentage", 1.0)
+            engagement = result.get("engagement_quality", "unknown")
+            passed = bot_pct <= bot_threshold
+
+            logger.info(
+                f"Creator {profile.creator_id} verified: "
+                f"bot={bot_pct:.2%}, engagement={engagement}, passed={passed}"
+            )
+
+            verified_list.append(VerifiedCandidate(
+                candidate=candidate,
+                profile=profile,
+                verification_receipt=receipt,
+                bot_percentage=bot_pct,
+                engagement_quality=engagement,
+                verification_passed=passed,
+            ))
+
+        except PayShError as e:
+            # Verification failed - treat as suspicious
+            logger.error(f"pay.sh verification failed for {profile.creator_id}: {e}")
+            verified_list.append(VerifiedCandidate(
+                candidate=candidate,
+                profile=profile,
+                verification_receipt=None,
+                bot_percentage=1.0,
+                engagement_quality="unknown",
+                verification_passed=False,
+            ))
+
+    return verified_list
+
+
+def _get_primary_social_url(profile: CreatorProfile) -> str | None:
+    """Extract primary social media profile URL from creator profile"""
+    # Try Instagram first (most common for creators)
+    if profile.social_accounts.instagram:
+        return f"https://instagram.com/{profile.social_accounts.instagram}"
+
+    # Try YouTube
+    if profile.social_accounts.youtube:
+        return f"https://youtube.com/@{profile.social_accounts.youtube}"
+
+    # Try TikTok
+    if profile.social_accounts.tiktok:
+        return f"https://tiktok.com/@{profile.social_accounts.tiktok}"
+
+    return None
 
 
 def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:

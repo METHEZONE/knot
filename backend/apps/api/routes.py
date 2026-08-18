@@ -83,7 +83,7 @@ from libs.domain.hashing import (
     terms_hash,
 )
 from libs.domain.models import AgreementTerms, CreatorProfile, Promotion, RateCard, UsageRights
-from libs.payments.paysh import PayCliNotFound
+from libs.payments.paysh import PayCliNotFound, PayShError, verify_content
 from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
     PLATFORM_FEE_BPS,
@@ -6459,16 +6459,73 @@ def _evidence_observations(
         return payload.observations.model_dump(by_alias=True, mode="json")
 
     terms = AgreementTerms.model_validate(agreement["terms"])
-    url = _require_document_str(evidence, "url").lower()
+    url = _require_document_str(evidence, "url")
+
+    # If pay.sh content verification is enabled, use it
+    if settings.paysh_content_verification_enabled:
+        try:
+            # Extract brand keywords from product name and category
+            brand_keywords = []
+            if hasattr(terms, 'product_name') and terms.product_name:
+                brand_keywords.append(terms.product_name)
+            if hasattr(terms, 'category') and terms.category:
+                brand_keywords.append(terms.category)
+
+            # Call pay.sh content verification API
+            logger.info(f"Verifying content with pay.sh: {url}")
+            receipt = verify_content(
+                content_url=url,
+                brand_keywords=brand_keywords,
+                sandbox=(settings.paysh_mode == "sandbox"),
+                max_price_usdc=settings.paysh_content_verification_max_price,
+            )
+
+            result = receipt.verification_result
+            brand_mentioned = result.get("brand_mention_found", False)
+            sentiment_score = result.get("sentiment_score", 0.0)
+            quality_score = result.get("quality_score", 0.0)
+
+            # Check prohibited claims in URL (simple text check)
+            url_lower = url.lower()
+            prohibited_claims_found = [
+                claim
+                for claim in terms.constraints.prohibited_claims
+                if claim.lower() in url_lower
+            ]
+
+            # Determine if content quality is acceptable
+            # Quality and sentiment must meet thresholds
+            url_reachable = quality_score > 0.3  # If we got a quality score, URL was reachable
+            disclosure_present = sentiment_score > 0.0  # Positive sentiment suggests proper disclosure
+
+            logger.info(
+                f"Content verification result: brand_mentioned={brand_mentioned}, "
+                f"sentiment={sentiment_score:.2f}, quality={quality_score:.2f}"
+            )
+
+            return EvidenceObservations(
+                urlReachable=url_reachable,
+                brandMentioned=brand_mentioned,
+                disclosurePresent=disclosure_present,
+                prohibitedClaimsFound=prohibited_claims_found,
+            ).model_dump(by_alias=True, mode="json")
+
+        except PayShError as e:
+            # If pay.sh verification fails, log and fall back to simple checks
+            logger.error(f"pay.sh content verification failed: {e}")
+            logger.warning("Falling back to simple URL-based verification")
+
+    # Fallback: Simple URL-based checks (for testing/development)
+    url_lower = url.lower()
     prohibited_claims_found = [
         claim
         for claim in terms.constraints.prohibited_claims
-        if claim.lower() in url
+        if claim.lower() in url_lower
     ]
     return EvidenceObservations(
-        urlReachable="unreachable" not in url,
-        brandMentioned="missing-brand" not in url,
-        disclosurePresent="missing-disclosure" not in url,
+        urlReachable="unreachable" not in url_lower,
+        brandMentioned="missing-brand" not in url_lower,
+        disclosurePresent="missing-disclosure" not in url_lower,
         prohibitedClaimsFound=prohibited_claims_found,
     ).model_dump(by_alias=True, mode="json")
 

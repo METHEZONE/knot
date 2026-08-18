@@ -57,7 +57,10 @@ def build_initial_terms(
         ],
         usageRights=promotion.usage_rights,
         milestones=[
-            Milestone(id="content", trigger="contentLiveVerified", releasePct=100),
+            # 3-stage milestone system (mentoring feedback integration)
+            Milestone(id="contract", trigger="contractSigned", releasePct=30),
+            Milestone(id="verification", trigger="contentVerified", releasePct=50),
+            Milestone(id="timelock", trigger="timelockExpired", releasePct=20),
         ],
         constraints=TermConstraints(
             requiredDisclosures=promotion.constraints.required_disclosures,
