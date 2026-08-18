@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from knot.payments import paysh
+from libs.payments import paysh
 
 pytestmark = pytest.mark.integration
 
