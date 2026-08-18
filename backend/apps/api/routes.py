@@ -100,6 +100,8 @@ from libs.domain.models import (
 from libs.payments.paysh import PayCliNotFound, PayShError, verify_content
 from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
+    CONTENT_MILESTONE_ID,
+    DEPOSIT_MILESTONE_ID,
     DEPOSIT_MILESTONE_TRIGGER,
     PLATFORM_FEE_BPS,
     lock_amount_base_units,
@@ -7924,7 +7926,6 @@ def _set_timelock_for_next_milestone(
     - content (80%) gets 72h timelock before release
     """
     from datetime import timedelta
-    from libs.payments.settlement import DEPOSIT_MILESTONE_ID, CONTENT_MILESTONE_ID
 
     # Only set timelock if deposit milestone was just released
     if released_milestone_id != DEPOSIT_MILESTONE_ID:

@@ -18,6 +18,8 @@ from .paysh import (
     verify_content,
 )
 from .settlement import (
+    CONTENT_MILESTONE_ID,
+    DEPOSIT_MILESTONE_ID,
     PLATFORM_FEE_BPS,
     USDC_BASE_UNIT,
     USDC_DECIMALS,
@@ -35,6 +37,8 @@ __all__ = [
     "verify_creator",
     "verify_content",
     # Settlement math
+    "CONTENT_MILESTONE_ID",
+    "DEPOSIT_MILESTONE_ID",
     "PLATFORM_FEE_BPS",
     "USDC_BASE_UNIT",
     "USDC_DECIMALS",
