@@ -213,9 +213,23 @@ export async function prepareBrandFunding(
   if (!brandToken.mint.equals(mint)) {
     throw new Error("Brand USDC token account mint does not match configured USDC mint");
   }
-  if (brandToken.amount < totalAmount) {
-    throw new Error("Brand USDC balance is below the Agreement total amount");
+  // N2: 수수료는 브랜드 부담이라 예치액 = 협상액 + 수수료다. 크리에이터는 협상액을 그대로
+  // 받는다. 수수료는 마일스톤별로 계산해 합산해야 릴리즈 시점 합과 반올림까지 일치한다
+  // (프로그램의 initialize_escrow 와 같은 방식).
+  const feeBps = config.feeBps;
+  const feeTotal = milestoneAmounts.reduce(
+    (acc, amount) => acc + applyBps(amount, feeBps),
+    0n
+  );
+  const requiredFunding = totalAmount + feeTotal;
+  if (brandToken.amount < requiredFunding) {
+    throw new Error(
+      "Brand USDC balance is below the Agreement total amount plus the platform fee"
+    );
   }
+  const platformTreasury = new PublicKey(
+    config.platformTreasury ?? settlementAuthority.toBase58()
+  );
 
   const transaction = new Transaction();
   transaction.add(
@@ -224,13 +238,16 @@ export async function prepareBrandFunding(
       brandAuthority,
       creatorDestination,
       settlementAuthority,
+      platformTreasury,
       mint,
       agreementHash,
       escrowPda,
       vaultTokenAccount,
       milestoneAmounts,
       totalAmount,
-      termsHash: input.termsHash
+      termsHash: input.termsHash,
+      feeBps,
+      refundTimelockSecs: BigInt(config.refundTimelockSecs)
     }),
     fundEscrowIx({
       programId,
@@ -239,7 +256,7 @@ export async function prepareBrandFunding(
       brandTokenAccount,
       escrowPda,
       vaultTokenAccount,
-      totalAmount
+      totalAmount: requiredFunding
     })
   );
   const latest = await connection.getLatestBlockhash("confirmed");
@@ -388,6 +405,117 @@ export async function confirmBrandFunding(
   };
 }
 
+const refundApprovalPrepareRequestSchema = z.object({
+  agreementId: z.string().min(1),
+  escrowId: z.string().min(1),
+  escrowPda: z.string().min(1),
+  brandAuthority: z.string().min(1),
+  programId: z.string().min(1),
+  network: z.string().min(1)
+});
+
+export type RefundApprovalPrepareResult = {
+  status: "PREPARED";
+  agreementId: string;
+  escrowId: string;
+  escrowPda: string;
+  brandAuthority: string;
+  feePayer: string;
+  gasSponsored: boolean;
+  transactionBase64: string;
+  recentBlockhash: string;
+  lastValidBlockHeight: number;
+  rpcUrl: string;
+};
+
+/**
+ * 브랜드가 서명할 환불 승인 tx 를 만든다 (docs/17 P0 빠른 경로).
+ *
+ * 자금을 이동시키지 않는다 — 플래그만 켠다. 실제 환불은 settlement_authority 가 실행한다.
+ */
+export async function prepareEscrowRefundApproval(
+  config: GatewayConfig,
+  body: unknown
+): Promise<RefundApprovalPrepareResult> {
+  const input = refundApprovalPrepareRequestSchema.parse(body);
+  if (input.programId !== config.allowedProgramId) {
+    throw new Error("programId is not allowlisted for this gateway");
+  }
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const brandAuthority = new PublicKey(input.brandAuthority);
+  const transaction = new Transaction().add(
+    approveRefundIx({
+      programId: new PublicKey(input.programId),
+      brandAuthority,
+      escrowPda: new PublicKey(input.escrowPda)
+    })
+  );
+  const latest = await connection.getLatestBlockhash("confirmed");
+  const sponsor = sponsorFeePayer(config, transaction, brandAuthority, latest.blockhash);
+  return {
+    status: "PREPARED",
+    agreementId: input.agreementId,
+    escrowId: input.escrowId,
+    escrowPda: input.escrowPda,
+    brandAuthority: brandAuthority.toBase58(),
+    feePayer: sponsor.feePayer,
+    gasSponsored: sponsor.gasSponsored,
+    transactionBase64: transaction
+      .serialize({ requireAllSignatures: false, verifySignatures: false })
+      .toString("base64"),
+    recentBlockhash: latest.blockhash,
+    lastValidBlockHeight: latest.lastValidBlockHeight,
+    rpcUrl: config.solanaRpcUrl
+  };
+}
+
+/**
+ * 미지급 잔액을 브랜드 지갑으로 환불한다 (docs/17 D2).
+ *
+ * settlement_authority 가 서명하지만 온체인 선행조건(브랜드 승인 또는 타임락 경과)을
+ * 만족하지 않으면 프로그램이 거부한다. 즉 플랫폼이 임의로 환불할 수 없다.
+ */
+export async function submitAgreementRefund(
+  config: GatewayConfig,
+  context: AgreementEscrowLiveContext,
+  input: { escrowId: string; brandTokenAccount: string }
+): Promise<AgreementReleaseReceipt> {
+  if (context.agreementEscrowVersion !== "v1") {
+    throw new Error("Unsupported Agreement escrow context");
+  }
+  if (context.escrowId !== input.escrowId) {
+    throw new Error("Escrow context does not match requested escrowId");
+  }
+  const settlement = loadKeypair(
+    config.settlementKeypairJson,
+    config.settlementKeypairPath,
+    "settlement"
+  );
+  if (settlement.publicKey.toBase58() !== context.settlementAuthority) {
+    throw new Error("Settlement keypair public key does not match escrow settlementAuthority");
+  }
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const transaction = new Transaction().add(
+    refundRemainingIx({
+      programId: new PublicKey(config.allowedProgramId),
+      settlementAuthority: settlement.publicKey,
+      mint: new PublicKey(context.mint),
+      escrowPda: new PublicKey(context.escrowPda),
+      vaultTokenAccount: new PublicKey(context.vaultTokenAccount),
+      brandTokenAccount: new PublicKey(input.brandTokenAccount)
+    })
+  );
+  const signature = await sendAndConfirmTransaction(connection, transaction, [settlement], {
+    commitment: "confirmed"
+  });
+  return {
+    status: "CONFIRMED",
+    signature,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${config.solanaCluster}`,
+    slot: null
+  };
+}
+
 export async function submitAgreementMilestoneRelease(
   config: GatewayConfig,
   context: AgreementEscrowLiveContext,
@@ -425,31 +553,22 @@ export async function submitAgreementMilestoneRelease(
     creatorDestination,
     false
   );
-  const transaction = new Transaction().add(
-    new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: settlement.publicKey, isSigner: true, isWritable: false },
-        { pubkey: escrowPda, isSigner: false, isWritable: true }
-      ],
-      data: Buffer.concat([disc("verify_milestone"), Buffer.from([index])])
-    }),
-    new TransactionInstruction({
-      programId,
-      keys: [
-        { pubkey: settlement.publicKey, isSigner: true, isWritable: true },
-        { pubkey: mint, isSigner: false, isWritable: false },
-        { pubkey: escrowPda, isSigner: false, isWritable: true },
-        { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
-        { pubkey: creatorDestination, isSigner: false, isWritable: false },
-        { pubkey: creatorTokenAccount, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
-      ],
-      data: Buffer.concat([disc("release_milestone"), Buffer.from([index])])
-    })
+  const platformTreasury = new PublicKey(
+    config.platformTreasury ?? settlement.publicKey.toBase58()
   );
+  const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, platformTreasury, true);
+  const transaction = releaseMilestoneTransaction({
+    programId,
+    settlementAuthority: settlement.publicKey,
+    mint,
+    escrowPda,
+    vaultTokenAccount,
+    creatorDestination,
+    creatorTokenAccount,
+    platformTreasury,
+    treasuryTokenAccount,
+    index
+  });
   const signature = await sendAndConfirmTransaction(connection, transaction, [settlement], {
     commitment: "confirmed"
   });
@@ -496,6 +615,12 @@ export async function prepareAgreementMilestoneRelease(
     throw new Error("Vault balance is below the milestone release amount");
   }
 
+  // 트레저리 주소가 설정되지 않았으면 정산 키를 수취처로 쓴다 — 프로그램이 저장된 주소와
+  // 대조하므로 init 시점과 동일해야 한다.
+  const platformTreasury = new PublicKey(
+    config.platformTreasury ?? settlementAuthority.toBase58()
+  );
+  const treasuryTokenAccount = getAssociatedTokenAddressSync(mint, platformTreasury, true);
   const transaction = releaseMilestoneTransaction({
     programId,
     settlementAuthority,
@@ -504,6 +629,8 @@ export async function prepareAgreementMilestoneRelease(
     vaultTokenAccount,
     creatorDestination,
     creatorTokenAccount,
+    platformTreasury,
+    treasuryTokenAccount,
     index
   });
   const latest = await connection.getLatestBlockhash("confirmed");
@@ -699,6 +826,7 @@ function initializeEscrowIx(input: {
   brandAuthority: PublicKey;
   creatorDestination: PublicKey;
   settlementAuthority: PublicKey;
+  platformTreasury: PublicKey;
   mint: PublicKey;
   agreementHash: Buffer;
   escrowPda: PublicKey;
@@ -706,13 +834,17 @@ function initializeEscrowIx(input: {
   milestoneAmounts: bigint[];
   totalAmount: bigint;
   termsHash: string;
+  feeBps: number;
+  refundTimelockSecs: bigint;
 }): TransactionInstruction {
+  // 계정 순서는 Rust 의 InitializeEscrow 필드 순서와 정확히 같아야 한다.
   return new TransactionInstruction({
     programId: input.programId,
     keys: [
       { pubkey: input.brandAuthority, isSigner: true, isWritable: true },
       { pubkey: input.creatorDestination, isSigner: false, isWritable: false },
       { pubkey: input.settlementAuthority, isSigner: false, isWritable: false },
+      { pubkey: input.platformTreasury, isSigner: false, isWritable: false },
       { pubkey: input.mint, isSigner: false, isWritable: false },
       { pubkey: input.escrowPda, isSigner: false, isWritable: true },
       { pubkey: input.vaultTokenAccount, isSigner: false, isWritable: true },
@@ -725,8 +857,54 @@ function initializeEscrowIx(input: {
       input.agreementHash,
       vecU64(input.milestoneAmounts),
       u64(input.totalAmount),
-      termsHashBytes(input.termsHash)
+      termsHashBytes(input.termsHash),
+      u16(input.feeBps),
+      i64(input.refundTimelockSecs)
     ])
+  });
+}
+
+/** 브랜드가 환불을 명시 승인한다. 자금을 이동시키지 않는다. */
+function approveRefundIx(input: {
+  programId: PublicKey;
+  brandAuthority: PublicKey;
+  escrowPda: PublicKey;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: input.programId,
+    keys: [
+      { pubkey: input.brandAuthority, isSigner: true, isWritable: false },
+      { pubkey: input.escrowPda, isSigner: false, isWritable: true }
+    ],
+    data: disc("approve_refund")
+  });
+}
+
+/**
+ * 미지급 잔액을 브랜드 지갑으로 환불한다.
+ *
+ * 서명자가 settlement_authority 다 — 브랜드 키가 아니다. 온체인 선행조건(브랜드 승인 또는
+ * 타임락 경과)이 플랫폼의 임의 환불을 막는다.
+ */
+function refundRemainingIx(input: {
+  programId: PublicKey;
+  settlementAuthority: PublicKey;
+  mint: PublicKey;
+  escrowPda: PublicKey;
+  vaultTokenAccount: PublicKey;
+  brandTokenAccount: PublicKey;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: input.programId,
+    keys: [
+      { pubkey: input.settlementAuthority, isSigner: true, isWritable: true },
+      { pubkey: input.mint, isSigner: false, isWritable: false },
+      { pubkey: input.escrowPda, isSigner: false, isWritable: true },
+      { pubkey: input.vaultTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: input.brandTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
+    ],
+    data: disc("refund_remaining")
   });
 }
 
@@ -761,6 +939,8 @@ function releaseMilestoneTransaction(input: {
   vaultTokenAccount: PublicKey;
   creatorDestination: PublicKey;
   creatorTokenAccount: PublicKey;
+  platformTreasury: PublicKey;
+  treasuryTokenAccount: PublicKey;
   index: number;
 }): Transaction {
   return new Transaction().add(
@@ -781,6 +961,8 @@ function releaseMilestoneTransaction(input: {
         { pubkey: input.vaultTokenAccount, isSigner: false, isWritable: true },
         { pubkey: input.creatorDestination, isSigner: false, isWritable: false },
         { pubkey: input.creatorTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: input.platformTreasury, isSigner: false, isWritable: false },
+        { pubkey: input.treasuryTokenAccount, isSigner: false, isWritable: true },
         { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
         { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
@@ -827,6 +1009,23 @@ function disc(name: string): Buffer {
 function u64(value: bigint): Buffer {
   const buffer = Buffer.alloc(8);
   buffer.writeBigUInt64LE(value);
+  return buffer;
+}
+
+/** 프로그램의 apply_bps 와 같은 계산 (floor). 어긋나면 예치액이 부족해 릴리즈가 실패한다. */
+function applyBps(amount: bigint, bps: number): bigint {
+  return (amount * BigInt(bps)) / 10_000n;
+}
+
+function u16(value: number): Buffer {
+  const buffer = Buffer.alloc(2);
+  buffer.writeUInt16LE(value);
+  return buffer;
+}
+
+function i64(value: bigint): Buffer {
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigInt64LE(value);
   return buffer;
 }
 

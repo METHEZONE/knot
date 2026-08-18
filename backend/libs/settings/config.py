@@ -24,7 +24,7 @@ def _load_dotenv() -> None:
 # Real devnet knot-escrow program id and USDC-SPL mint (see programs/knot-escrow
 # and backend/.env.example). Used to stamp escrow/receipt records so they stay
 # consistent when on-chain signing is wired.
-DEFAULT_ESCROW_PROGRAM_ID = "9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn"
+DEFAULT_ESCROW_PROGRAM_ID = "Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj"
 DEFAULT_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 

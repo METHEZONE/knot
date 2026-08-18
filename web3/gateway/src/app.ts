@@ -6,7 +6,9 @@ import {
   confirmAgreementMilestoneRelease,
   confirmBrandFunding,
   prepareAgreementMilestoneRelease,
-  prepareBrandFunding
+  prepareBrandFunding,
+  prepareEscrowRefundApproval,
+  submitAgreementRefund
 } from "./funding.js";
 
 const lockRoute = /^\/internal\/v1\/escrows:lock$/;
@@ -16,6 +18,8 @@ const prepareReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/
 const confirmReleaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):confirm-release$/;
 const releaseRoute = /^\/internal\/v1\/escrows\/([^/]+)\/milestones\/([^/]+):release$/;
 const faucetRoute = /^\/internal\/v1\/faucet$/;
+const prepareRefundApprovalRoute = /^\/internal\/v1\/escrows:prepare-refund-approval$/;
+const refundRoute = /^\/internal\/v1\/escrows:refund$/;
 
 async function handleRelease(
   config: GatewayConfig,
@@ -86,6 +90,57 @@ export function createApp(
         detail: {
           code: "FUNDING_PREPARE_FAILED",
           title: "Funding prepare failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  });
+
+  // 브랜드가 서명할 환불 승인 tx (자금 이동 없음, 플래그만 켠다).
+  app.post(prepareRefundApprovalRoute, async (request: Request, response: Response) => {
+    try {
+      const result = await prepareEscrowRefundApproval(config, request.body);
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "REFUND_APPROVAL_PREPARE_FAILED",
+          title: "Refund approval prepare failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  });
+
+  // 실제 환불 실행. 온체인 선행조건(브랜드 승인 또는 타임락)을 프로그램이 검사한다.
+  app.post(refundRoute, async (request: Request, response: Response) => {
+    try {
+      const body = request.body as {
+        liveContext?: unknown;
+        escrowId?: string;
+        brandTokenAccount?: string;
+      };
+      if (!body.liveContext || !body.escrowId || !body.brandTokenAccount) {
+        response.status(422).json({
+          detail: {
+            code: "REFUND_REQUEST_INVALID",
+            title: "Refund request invalid",
+            detail: "liveContext, escrowId and brandTokenAccount are required"
+          }
+        });
+        return;
+      }
+      const result = await submitAgreementRefund(
+        config,
+        body.liveContext as Parameters<typeof submitAgreementRefund>[1],
+        { escrowId: body.escrowId, brandTokenAccount: body.brandTokenAccount }
+      );
+      response.json({ data: result });
+    } catch (error) {
+      response.status(409).json({
+        detail: {
+          code: "REFUND_FAILED",
+          title: "Refund failed",
           detail: error instanceof Error ? error.message : String(error)
         }
       });

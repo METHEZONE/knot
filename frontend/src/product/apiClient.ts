@@ -923,12 +923,29 @@ export class ProductApiClient {
     return this.request<ApiAgreementEscrowBundle>(`/api/v1/agreements/${agreementId}/escrow`);
   }
 
-  async saveWalletAddress(walletAddress: string, network = "devnet") {
+  async createWalletChallenge(walletAddress: string) {
+    return this.request<{
+      challenge: { challengeId: string; walletAddress: string; message: string; expiresInSeconds: number };
+    }>("/api/v1/me/wallet/challenge", {
+      method: "POST",
+      body: JSON.stringify({ walletAddress }),
+    });
+  }
+
+  /**
+   * 지갑 주소 등록. 소유 증명 서명이 필수다 — 플랫폼이 유저 키를 보관하지 않으므로
+   * 이 서명만이 "이 주소가 이 유저 것" 을 보장한다(docs/17 D7).
+   */
+  async saveWalletAddress(
+    walletAddress: string,
+    proof: { challengeId: string; signature: string },
+    network = "devnet",
+  ) {
     return this.request<{ wallet: { walletAddress: string; walletNetwork: string } } & CurrentUserContext>(
       "/api/v1/me/wallet",
       {
         method: "POST",
-        body: JSON.stringify({ walletAddress, network }),
+        body: JSON.stringify({ walletAddress, network, ...proof }),
       },
     );
   }
@@ -1014,11 +1031,21 @@ export class ProductApiClient {
     return response.evidence;
   }
 
+  /**
+   * 증빙 검증. 판정은 4단이다 (docs/17 P1).
+   *
+   * VERIFIED 만 정산으로 이어진다. REVISION_REQUIRED / MANUAL_REVIEW 는 오류가 아니라
+   * 계약이 살아 있는 상태이므로 200 으로 온다 — "실패" 로 표시하면 재제출 경로를 덮는다.
+   * REJECTED 만 409 로 온다.
+   */
   async verifyEvidence(evidenceId: string) {
-    return this.request<{ evidence: ApiEvidence; autoSettlement?: ApiAutoSettlement }>(
-      `/api/v1/evidence/${evidenceId}:verify`,
-      { method: "POST" },
-    );
+    return this.request<{
+      evidence: ApiEvidence;
+      outcome?: "VERIFIED" | "REVISION_REQUIRED" | "MANUAL_REVIEW" | "REJECTED";
+      reasonCodes?: string[];
+      revisionsRemaining?: number;
+      autoSettlement?: ApiAutoSettlement;
+    }>(`/api/v1/evidence/${evidenceId}:verify`, { method: "POST" });
   }
 
   async lockEscrow(agreementId: string) {

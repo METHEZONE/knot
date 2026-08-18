@@ -15,6 +15,19 @@ USDC_BASE_UNIT: int = 10**USDC_DECIMALS
 # PRD 11: v1 does not define a protocol/platform fee. Do not invent one.
 PLATFORM_FEE_BPS = 0
 
+# 계약금 비율 기본값 (docs/17 N1). 협상으로 계약별 조정이 가능해질 예정이므로
+# 여기 값은 "합의된 조건이 없을 때의 출발점" 이다.
+DEFAULT_DEPOSIT_PCT = 20
+
+# 마일스톤 식별자. 온체인 마일스톤 인덱스와 순서가 대응하므로 순서를 바꾸면 안 된다.
+DEPOSIT_MILESTONE_ID = "deposit"
+CONTENT_MILESTONE_ID = "content"
+
+# 릴리즈 게이트가 트리거마다 다르다. 계약금은 검증할 콘텐츠가 없으므로 증빙을 요구하면
+# 정상 완료 시에도 영구히 잠긴다.
+DEPOSIT_MILESTONE_TRIGGER = "creatorAccepted"
+CONTENT_MILESTONE_TRIGGER = "contentLiveVerified"
+
 
 def lock_amount_base_units(terms: AgreementTerms) -> int:
     """USDC base units to escrow at lock time.

@@ -1,4 +1,5 @@
 import shutil
+from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -479,6 +480,9 @@ def test_run_match_idempotency_does_not_double_pay(monkeypatch) -> None:
 
 def test_run_match_normalizes_korean_category_aliases() -> None:
     client = client_with_seed()
+    # 협상까지 가는 테스트라 postingWindow 는 오늘 기준 상대값이어야 한다.
+    # 고정 날짜는 지나는 순간 creator 정책의 minDaysToPost 에 걸려 ESCALATED 가 된다.
+    window_start = date.today() + timedelta(days=17)
     payload = {
         "promotionId": "promotion-korean-beauty",
         "title": "Korean skincare launch",
@@ -487,7 +491,10 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
         "targetAudience": ["20s"],
         "budget": {"totalUsdc": 1500, "maxPerCreatorUsdc": 800},
         "deliverables": [{"format": "reel", "count": 1}],
-        "postingWindow": {"start": "2026-08-10", "end": "2026-08-15"},
+        "postingWindow": {
+            "start": window_start.isoformat(),
+            "end": (window_start + timedelta(days=5)).isoformat(),
+        },
         "usageRights": "paidBoost30d",
         "constraints": {"requiredCategories": ["뷰티"], "requiredDisclosures": ["ad"]},
     }
@@ -656,8 +663,10 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert agreement["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
     assert agreement["creatorSnapshot"]["completedDealCount"] == 12
     assert agreement["promotionSnapshot"]["productName"] == "Summer skincare launch"
+    # 계약금 20% + 잔금 80% 2분할 (docs/17 D3·N1)
     assert agreement["terms"]["milestones"] == [
-        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+        {"id": "deposit", "trigger": "creatorAccepted", "releasePct": 20},
+        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 80},
     ]
 
     negotiation_id = negotiation["negotiationId"]
@@ -688,8 +697,13 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     milestones = repository.list_raw_documents(
         f"{COLLECTIONS.agreements}/{agreement['agreementId']}/{COLLECTIONS.milestones}"
     )
-    assert [milestone["milestoneId"] for milestone in milestones] == ["content"]
-    assert milestones[0]["releasePct"] == 100
+    assert sorted(milestone["milestoneId"] for milestone in milestones) == ["content", "deposit"]
+    release_pct_by_id = {item["milestoneId"]: item["releasePct"] for item in milestones}
+    assert release_pct_by_id == {"deposit": 20, "content": 80}
+    # 두 마일스톤 금액의 합이 락 금액과 같아야 한다 (release 가 locked 를 넘을 수 없다).
+    assert sum(int(item["amountBaseUnits"]) for item in milestones) == int(
+        lock_amount_base_units(AgreementTerms.model_validate(agreement["terms"]))
+    )
 
     negotiation_agreement_response = client.get(
         f"/api/v1/negotiations/{negotiation_id}/agreement"
@@ -1165,7 +1179,7 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     evidence = submit_response.json()["data"]["evidence"]
     assert evidence["status"] == "SUBMITTED"
     assert evidence["milestoneId"] == "content"
-    assert evidence["milestoneSnapshot"]["releasePct"] == 100
+    assert evidence["milestoneSnapshot"]["releasePct"] == 80
     assert evidence["escrowId"] == escrow["escrowId"]
     assert evidence["url"] == "https://social.example/post/with-brand-and-ad"
     assert str(evidence["sourceDigest"]).startswith("sha256:")
@@ -1193,7 +1207,8 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     assert "EVIDENCE_VERIFIED" in event_types
 
 
-def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
+def test_verify_evidence_missing_disclosure_asks_for_revision_instead_of_rejecting() -> None:
+    """공시 누락은 고칠 수 있으므로 재제출을 요구한다 — 태그 하나로 전액을 잃지 않는다."""
     client, repository = client_and_repository_with_seed()
     agreement = accepted_agreement(client)
     fund_agreement_for_evidence(repository, agreement)
@@ -1208,13 +1223,41 @@ def test_verify_evidence_failure_is_persisted_and_returns_problem() -> None:
 
     response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
 
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["outcome"] == "REVISION_REQUIRED"
+    assert data["reasonCodes"] == ["EVIDENCE_DISCLOSURE_MISSING"]
+    assert data["revisionsRemaining"] == 1
+    # 릴리즈되지 않았으므로 status 는 여전히 통과가 아니다.
+    assert data["evidence"]["status"] == "FAILED"
+    assert data["autoSettlement"]["attempted"] is False
+
+    verification_results = repository.list_raw_documents(COLLECTIONS.verification_results)
+    assert verification_results[0]["status"] == "REVISION_REQUIRED"
+
+
+def test_verify_evidence_hard_violation_returns_problem() -> None:
+    """브랜드 언급 자체가 없으면 확정 위반이다 → 409, 환불 경로 진입 대상."""
+    client, repository = client_and_repository_with_seed()
+    agreement = accepted_agreement(client)
+    fund_agreement_for_evidence(repository, agreement)
+    evidence = client.post(
+        f"/api/v1/agreements/{agreement['agreementId']}/evidence",
+        json={
+            "url": "https://social.example/post/missing-brand",
+            "submittedByAgentId": agreement["creatorAgentId"],
+            "milestoneId": "content",
+        },
+    ).json()["data"]["evidence"]
+
+    response = client.post(f"/api/v1/evidence/{evidence['evidenceId']}:verify")
+
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert detail["code"] == "EVIDENCE_VERIFICATION_FAILED"
+    assert detail["outcome"] == "REJECTED"
+    assert detail["reasonCodes"] == ["EVIDENCE_BRAND_MENTION_MISSING"]
     assert detail["evidence"]["status"] == "FAILED"
-    assert detail["evidence"]["policyDecision"]["violations"][0]["code"] == (
-        "EVIDENCE_DISCLOSURE_MISSING"
-    )
 
     get_response = client.get(f"/api/v1/evidence/{evidence['evidenceId']}")
     assert get_response.json()["data"]["evidence"]["status"] == "FAILED"

@@ -16,6 +16,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, status
+from pydantic import ValidationError
 
 from apps.api.schemas import (
     AnalysisConfirmRequest,
@@ -40,6 +41,7 @@ from apps.api.schemas import (
     ProductAnalysisRequest,
     PromotionCreateRequest,
     UserBootstrapRequest,
+    WalletChallengeRequest,
     validate_solana_pubkey,
 )
 from libs.a2a.client import CreatorA2AClient, CreatorA2AClientError, first_part_data
@@ -98,18 +100,31 @@ from libs.domain.models import (
 from libs.payments.paysh import PayCliNotFound, PayShError, verify_content
 from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
+    DEPOSIT_MILESTONE_TRIGGER,
     PLATFORM_FEE_BPS,
     lock_amount_base_units,
     milestone_amounts_base_units,
 )
 from libs.policies.brand import validate_brand_terms
-from libs.policies.evidence import validate_evidence_observations
+from libs.policies.evidence import (
+    REJECTED as EVIDENCE_REJECTED,
+)
+from libs.policies.evidence import (
+    classify_evidence_outcome,
+    validate_evidence_observations,
+)
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictError, KnotRepository
 from libs.settings.config import Settings, get_settings
 from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
 from libs.web3.user_wallet import CUSTODY_SELF
+from libs.web3.wallet_proof import (
+    CHALLENGE_TTL_SECONDS,
+    WalletProofError,
+    challenge_message,
+    verify_wallet_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +394,43 @@ def build_api_router(
         )
         return _ok(_current_user_payload(repository, updated))
 
+    @router.post("/me/wallet/challenge", status_code=status.HTTP_201_CREATED)
+    def create_wallet_ownership_challenge(
+        payload: WalletChallengeRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """지갑 소유 증명용 nonce 를 발급한다. 유저는 이 문구를 지갑으로 서명한다."""
+        auth_user = _require_auth_user(token_verifier, authorization)
+        _bootstrap_authenticated_user(repository, auth_user)
+        now = _now()
+        challenge_id = f"walletchal-{uuid4()}"
+        message = challenge_message(
+            challenge_id=challenge_id,
+            wallet_address=payload.wallet_address,
+            issued_at=now,
+        )
+        repository.save_raw_document(
+            FirestorePaths.wallet_challenge(challenge_id),
+            {
+                "challengeId": challenge_id,
+                "uid": auth_user.uid,
+                "walletAddress": payload.wallet_address,
+                "message": message,
+                "consumedAt": None,
+                "createdAt": now,
+            },
+        )
+        return _ok(
+            {
+                "challenge": {
+                    "challengeId": challenge_id,
+                    "walletAddress": payload.wallet_address,
+                    "message": message,
+                    "expiresInSeconds": CHALLENGE_TTL_SECONDS,
+                }
+            }
+        )
+
     @router.post("/me/wallet")
     def save_current_user_wallet(
         payload: CurrentWalletRequest,
@@ -386,13 +438,21 @@ def build_api_router(
     ) -> dict[str, object]:
         auth_user = _require_auth_user(token_verifier, authorization)
         user = _bootstrap_authenticated_user(repository, auth_user)
+        _consume_wallet_challenge(
+            repository,
+            uid=auth_user.uid,
+            challenge_id=payload.challenge_id,
+            wallet_address=payload.wallet_address,
+            signature=payload.signature,
+        )
         now = _now()
-        # 외부 지갑을 직접 연결하면 자동 생성된 커스터디 지갑보다 우선한다(SELF 로 승격).
+        # 소유 증명을 통과한 주소만 등록된다. 플랫폼은 이 주소의 키를 갖지 않는다.
         wallet = {
             "walletAddress": payload.wallet_address,
             "walletNetwork": payload.network,
             "walletCustody": CUSTODY_SELF,
             "walletUpdatedAt": now,
+            "walletOwnershipProvenAt": now,
         }
         role = user.get("role")
         if role == "BRAND":
@@ -3038,10 +3098,24 @@ def build_api_router(
             payload=payload,
         )
         policy_decision = validate_evidence_observations(observations)
-        verification_status = "PASSED" if policy_decision.allowed else "FAILED"
+        # 2단(통과/거절) 이 아니라 4단으로 판정한다 (docs/13 §9, docs/17 P1).
+        # 재제출 허용 횟수는 협상 결과(terms.deliverables[].revisionRounds)에 이미 들어
+        # 있으므로 새 정책을 발명하지 않는다.
+        revisions_used = int(evidence.get("revisionCount") or 0)
+        outcome = classify_evidence_outcome(
+            policy_decision,
+            revisions_used=revisions_used,
+            max_revision_rounds=_max_revision_rounds(agreement),
+            low_confidence=bool(observations.get("lowConfidence")),
+        )
+        verification_status = "PASSED" if outcome.releasable else "FAILED"
         verified = {
             **evidence,
             "status": verification_status,
+            "outcome": outcome.status,
+            "outcomeReasonCodes": outcome.reason_codes,
+            "revisionCount": revisions_used,
+            "revisionsRemaining": outcome.revisions_remaining,
             "observations": observations,
             "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
             "verifiedAt": _now(),
@@ -3056,7 +3130,8 @@ def build_api_router(
             "sourceDigest": verified.get("sourceDigest"),
             "provider": "deterministic-url-policy",
             "model": None,
-            "status": "VERIFIED" if policy_decision.allowed else "REJECTED",
+            "status": outcome.status,
+            "reasonCodes": outcome.reason_codes,
             "observations": observations,
             "policyDecision": policy_decision.model_dump(by_alias=True, mode="json"),
             "createdAt": verified["verifiedAt"],
@@ -3076,12 +3151,14 @@ def build_api_router(
                 "milestoneId": verified["milestoneId"],
                 "evidenceId": evidence_id,
                 "status": verified["status"],
+                "outcome": outcome.status,
                 "violationCodes": [
                     violation.code for violation in policy_decision.violations
                 ],
             },
         )
-        if not policy_decision.allowed:
+        if outcome.status == EVIDENCE_REJECTED:
+            # 확정 거절만 오류다. 이 판정이 환불 경로의 트리거가 된다(docs/17 P2 트리거 3).
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -3090,15 +3167,36 @@ def build_api_router(
                     "status": status.HTTP_409_CONFLICT,
                     "detail": "Evidence does not satisfy verification policy.",
                     "code": "EVIDENCE_VERIFICATION_FAILED",
+                    "outcome": outcome.status,
+                    "reasonCodes": outcome.reason_codes,
                     "evidence": verified,
                 },
+            )
+        if not outcome.releasable:
+            # REVISION_REQUIRED / MANUAL_REVIEW 는 오류가 아니다 — 계약이 아직 살아 있고
+            # 자금도 그대로다. 오류로 내면 프론트가 "실패" 로 표시해 재제출 경로를 덮는다.
+            return _ok(
+                {
+                    "evidence": verified,
+                    "outcome": outcome.status,
+                    "reasonCodes": outcome.reason_codes,
+                    "revisionsRemaining": outcome.revisions_remaining,
+                    "autoSettlement": {"attempted": False, "reason": outcome.status},
+                }
             )
         auto_settlement = _try_auto_settlement(
             agreement_id=_require_document_str(verified, "agreementId"),
             milestone_id=_require_document_str(verified, "milestoneId"),
             promotion_id=str(verified["promotionId"]),
         )
-        return _ok({"evidence": verified, "autoSettlement": auto_settlement})
+        return _ok(
+            {
+                "evidence": verified,
+                "outcome": outcome.status,
+                "reasonCodes": outcome.reason_codes,
+                "autoSettlement": auto_settlement,
+            }
+        )
 
     def _try_auto_settlement(
         *,
@@ -3119,9 +3217,30 @@ def build_api_router(
         escrow_id = _require_document_str(escrow, "escrowId")
         if _find_settlement(repository, escrow_id, milestone_id) is not None:
             return {"attempted": False, "reason": "ALREADY_SETTLED"}
+        # 정상 완료는 계약금까지 크리에이터에게 간다 (docs/17 §0.6 종결 매트릭스).
+        # 계약금은 수락 시점에 귀속만 확정되고 전송은 종결 시에 일어나므로, 콘텐츠가
+        # 검증된 이 시점에 아직 안 나간 계약금을 먼저 릴리즈한다. 온체인 마일스톤 인덱스
+        # 순서를 지켜야 하므로 계약금이 먼저다.
+        pending_before = _unreleased_milestones_before(
+            repository,
+            escrow_id=escrow_id,
+            agreement_id=agreement_id,
+            milestone_id=milestone_id,
+        )
         # 같은 마일스톤을 두 번 자동 정산하지 않도록 결정적 키를 쓴다.
         key = f"auto-release-{escrow_id}-{milestone_id}"
         try:
+            for prior_id in pending_before:
+                _perform_milestone_release(
+                    escrow=escrow,
+                    escrow_id=escrow_id,
+                    milestone_id=prior_id,
+                    key=f"auto-release-{escrow_id}-{prior_id}",
+                )
+                # 잔액·상태가 바뀌었으므로 다시 읽는다.
+                refreshed = _find_escrow_by_agreement(repository, agreement_id)
+                if refreshed is not None:
+                    escrow = refreshed
             released = _perform_milestone_release(
                 escrow=escrow,
                 escrow_id=escrow_id,
@@ -3156,6 +3275,7 @@ def build_api_router(
             "attempted": True,
             "released": True,
             "settlement": settlement,
+            "alsoReleasedMilestoneIds": pending_before,
             "signedBy": "PLATFORM_SETTLEMENT_AUTHORITY",
         }
 
@@ -4003,13 +4123,39 @@ Respond in JSON format:
             )
         milestone = _get_milestone_document(repository, agreement_id, milestone_id)
 
-        passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
-        if passed_evidence is None:
-            raise _problem(
-                status.HTTP_409_CONFLICT,
-                "POLICY_VIOLATION",
-                "Milestone evidence has not passed verification.",
+        # 릴리즈 게이트는 마일스톤의 trigger 마다 다르다.
+        #
+        # - contentLiveVerified: 콘텐츠 증빙이 검증을 통과해야 한다.
+        # - creatorAccepted(계약금): 증빙이 없다. 크리에이터가 Agreement 를 수락한 시점에
+        #   귀속이 확정되고, 전송은 계약 종결 시에 일어난다(docs/17 §0.6). 그래서 여기서는
+        #   수락 여부만 확인하고, "언제 보내는가" 는 호출자(종결 오케스트레이션)가 정한다.
+        #
+        # 계약금에 증빙을 요구하면 정상 완료 시에도 계약금이 영구히 잠긴다 — 계약금에는
+        # 검증할 콘텐츠가 애초에 없기 때문이다.
+        passed_evidence = None
+        if str(milestone.get("trigger")) == DEPOSIT_MILESTONE_TRIGGER:
+            agreement_document = repository.get_raw_document(
+                FirestorePaths.agreement(agreement_id)
             )
+            agreement_status = str((agreement_document or {}).get("status") or "")
+            if agreement_document is None or agreement_status in {
+                "DRAFT",
+                "REJECTED",
+                "CANCELED",
+            }:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "POLICY_VIOLATION",
+                    "Deposit milestone requires an accepted Agreement.",
+                )
+        else:
+            passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
+            if passed_evidence is None:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "POLICY_VIOLATION",
+                    "Milestone evidence has not passed verification.",
+                )
 
         # The milestone→amount split was computed and stored on the escrow at lock time.
         locked = int(str(escrow["lockedAmountBaseUnits"]))
@@ -4110,8 +4256,8 @@ Respond in JSON format:
             "network": settings.escrow_network,
             "status": gateway_receipt["status"],
             "signature": gateway_receipt["signature"],
-            "evidenceId": passed_evidence["evidenceId"],
-            "sourceDigest": passed_evidence.get("sourceDigest"),
+            "evidenceId": (passed_evidence or {}).get("evidenceId"),
+            "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
             "receiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -4129,8 +4275,8 @@ Respond in JSON format:
             "status": "RELEASED",
             "releasedAmountBaseUnits": str(amount),
             "settlementId": settlement_id,
-            "evidenceId": passed_evidence["evidenceId"],
-            "sourceDigest": passed_evidence.get("sourceDigest"),
+            "evidenceId": (passed_evidence or {}).get("evidenceId"),
+            "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
             "releaseReceiptId": receipt_id,
             "releasedAt": now,
             "updatedAt": now,
@@ -4168,8 +4314,8 @@ Respond in JSON format:
                 "milestoneId": milestone_id,
                 "amountBaseUnits": str(amount),
                 "settlementId": settlement_id,
-                "evidenceId": passed_evidence["evidenceId"],
-                "sourceDigest": passed_evidence.get("sourceDigest"),
+                "evidenceId": (passed_evidence or {}).get("evidenceId"),
+                "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
                 "receiptStatus": receipt["status"],
             },
         )
@@ -4310,6 +4456,86 @@ def _brand_negotiation_display(
             "publicReason": "사용자 승인 없이 처리 가능한 공개 조건 범위입니다.",
         },
     }
+
+
+def _consume_wallet_challenge(
+    repository: KnotRepository,
+    *,
+    uid: str,
+    challenge_id: str,
+    wallet_address: str,
+    signature: str,
+) -> None:
+    """지갑 소유 증명을 검증하고 챌린지를 1회용으로 소진한다.
+
+    실패는 모두 422 로 낸다. 여기서 통과하지 못한 주소는 정산 수령처가 되지 않는다.
+    """
+    path = FirestorePaths.wallet_challenge(challenge_id)
+    challenge = repository.get_raw_document(path)
+    if challenge is None:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_NOT_FOUND",
+            "Wallet ownership challenge does not exist. Request a new challenge.",
+        )
+    if challenge.get("uid") != uid:
+        # 남의 챌린지를 가져다 쓰는 것을 막는다.
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_MISMATCH",
+            "Wallet ownership challenge does not belong to the current user.",
+        )
+    if challenge.get("walletAddress") != wallet_address:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_MISMATCH",
+            "Wallet ownership challenge was issued for a different address.",
+        )
+    if challenge.get("consumedAt"):
+        # 재사용 방지 — 한 번 쓴 서명으로 다시 등록할 수 없다.
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_ALREADY_USED",
+            "Wallet ownership challenge was already used. Request a new challenge.",
+        )
+    created_at = challenge.get("createdAt")
+    if isinstance(created_at, str) and _seconds_since(created_at) > CHALLENGE_TTL_SECONDS:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_EXPIRED",
+            "Wallet ownership challenge expired. Request a new challenge.",
+        )
+    message = challenge.get("message")
+    if not isinstance(message, str) or not message:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_CHALLENGE_INVALID",
+            "Wallet ownership challenge is missing its message.",
+        )
+    try:
+        verify_wallet_signature(
+            wallet_address=wallet_address,
+            message=message,
+            signature=signature,
+        )
+    except WalletProofError as exc:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "WALLET_OWNERSHIP_NOT_PROVEN",
+            str(exc),
+        ) from exc
+    repository.save_raw_document(path, {**challenge, "consumedAt": _now()})
+
+
+def _seconds_since(timestamp: str) -> float:
+    """ISO8601 시각으로부터 지난 초. 파싱 불가면 0(만료 아님)으로 본다."""
+    try:
+        moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - moment).total_seconds()
 
 
 def _current_negotiation_round(messages: list[dict[str, object]]) -> int:
@@ -6524,6 +6750,20 @@ def _require_negotiation(repository: KnotRepository, negotiation_id: str) -> dic
     return negotiation
 
 
+def _max_revision_rounds(agreement: dict[str, object]) -> int:
+    """협상된 재제출 허용 횟수. 산출물이 여러 개면 가장 관대한 값을 쓴다.
+
+    새 정책을 발명하지 않는다 — terms.deliverables[].revisionRounds 가 이미 협상 결과다.
+    """
+    try:
+        terms = AgreementTerms.model_validate(agreement["terms"])
+    except (KeyError, ValidationError):
+        return 0
+    if not terms.deliverables:
+        return 0
+    return max(deliverable.revision_rounds for deliverable in terms.deliverables)
+
+
 def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> dict[str, object]:
     agreement = repository.get_raw_document(FirestorePaths.agreement(agreement_id))
     if agreement is None:
@@ -6535,6 +6775,34 @@ def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> di
             "Agreement is not in an active funding or settlement state.",
         )
     return agreement
+
+
+def _unreleased_milestones_before(
+    repository: KnotRepository,
+    *,
+    escrow_id: str,
+    agreement_id: str,
+    milestone_id: str,
+) -> list[str]:
+    """`milestone_id` 앞에 있으면서 아직 정산되지 않은 마일스톤 id 를 순서대로 돌려준다.
+
+    계약금처럼 "귀속은 확정됐지만 전송은 종결 시" 인 마일스톤을 종결 시점에 함께
+    릴리즈하기 위한 목록이다. 온체인 마일스톤 인덱스 순서를 지켜야 하므로 순서를 보존한다.
+    """
+    escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+    if escrow is None:
+        return []
+    amounts = escrow.get("milestoneAmounts")
+    if not isinstance(amounts, dict):
+        return []
+    ordered = list(amounts.keys())
+    if milestone_id not in ordered:
+        return []
+    pending: list[str] = []
+    for candidate in ordered[: ordered.index(milestone_id)]:
+        if _find_settlement(repository, escrow_id, candidate) is None:
+            pending.append(candidate)
+    return pending
 
 
 def _get_milestone_document(

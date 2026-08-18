@@ -103,8 +103,9 @@ test("post-login redirect sends completed brands to dashboard instead of creatio
 
 test("Firebase auth errors map to user-facing messages", () => {
   assert.equal(
+    // 443aaf6 에서 내부 기술 용어(Firebase 허용 목록)를 유저 문구로 바꿨다.
     firebaseAuthErrorMessage({ code: "auth/unauthorized-domain" }),
-    "현재 접속한 도메인이 Firebase 로그인 허용 목록에 등록되지 않았습니다.",
+    "현재 접속한 주소에서는 로그인을 사용할 수 없습니다.",
   );
   assert.equal(
     firebaseAuthErrorMessage({ code: "auth/popup-blocked" }),
@@ -116,7 +117,7 @@ test("Firebase auth errors map to user-facing messages", () => {
   );
   assert.equal(
     firebaseAuthErrorMessage({ code: "auth/operation-not-allowed" }),
-    "Firebase Console에서 Email/Password 또는 Google 로그인 제공자를 활성화해야 합니다.",
+    "현재 사용할 수 없는 로그인 방식입니다. 다른 방식으로 시도해주세요.",
   );
 });
 
@@ -452,7 +453,8 @@ test("API data source projects canonical match run replay and technical proof", 
       "MATCH_RUN_COMPLETED",
     ]);
     assert.ok(view.technicalProof.some((item) => item.label === "Data source" && item.value === "LIVE"));
-    assert.ok(view.technicalProof.some((item) => item.label === "A2A Task ID" && item.value === "task-api-live"));
+    // 라벨이 "A2A Task ID" -> "협상 기록" 으로 바뀌었다(443aaf6, 내부 기술 용어 제거).
+    assert.ok(view.technicalProof.some((item) => item.label === "협상 기록" && item.value === "task-api-live"));
     assert.ok(calls.some((url) => url.endsWith("/api/v1/match-runs/match-api-live/events")));
     assert.ok(calls.some((url) => url.endsWith("/api/v1/negotiations/negotiation-api-live/events")));
   } finally {
@@ -529,6 +531,79 @@ test("API client does not start negotiation when matching has no eligible creato
     assert.equal(flow.negotiation, null);
     assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET", "GET"]);
     assert.ok(!calls.some((call) => call.url.includes(":start-negotiation")));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("evidence verification surfaces the four-way outcome", async () => {
+  // REVISION_REQUIRED / MANUAL_REVIEW 는 200 으로 오므로 클라이언트가 오류로 만들지 않아야
+  // 한다 — 오류로 내면 화면이 "실패" 로 보여서 재제출 경로를 덮는다 (docs/17 P1).
+  const previousFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    Response.json({
+      data: {
+        evidence: { evidenceId: "evidence-1", status: "FAILED" },
+        outcome: "REVISION_REQUIRED",
+        reasonCodes: ["EVIDENCE_DISCLOSURE_MISSING"],
+        revisionsRemaining: 1,
+        autoSettlement: { attempted: false, reason: "REVISION_REQUIRED" },
+      },
+    })) as typeof fetch;
+
+  try {
+    const result = await new ProductApiClient("").verifyEvidence("evidence-1");
+    assert.equal(result.outcome, "REVISION_REQUIRED");
+    assert.deepEqual(result.reasonCodes, ["EVIDENCE_DISCLOSURE_MISSING"]);
+    assert.equal(result.revisionsRemaining, 1);
+    assert.equal(result.autoSettlement?.released, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("wallet registration sends the ownership proof signature", async () => {
+  // 플랫폼이 유저 키를 보관하지 않으므로(docs/17 D7) 주소만 보내는 등록은 있어서는 안 된다.
+  const previousFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: unknown }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (url.endsWith("/api/v1/me/wallet/challenge")) {
+      return Response.json({
+        data: {
+          challenge: {
+            challengeId: "walletchal-1",
+            walletAddress: "WalletAddress1",
+            message: "knot-wallet-ownership:walletchal-1",
+            expiresInSeconds: 600,
+          },
+        },
+      });
+    }
+    return Response.json({ data: { wallet: { walletAddress: "WalletAddress1", walletNetwork: "devnet" } } });
+  }) as typeof fetch;
+
+  try {
+    const client = new ProductApiClient("");
+    const { challenge } = await client.createWalletChallenge("WalletAddress1");
+    await client.saveWalletAddress("WalletAddress1", {
+      challengeId: challenge.challengeId,
+      signature: "test-signature",
+    });
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].url.endsWith("/api/v1/me/wallet/challenge"));
+    assert.deepEqual(calls[0].body, { walletAddress: "WalletAddress1" });
+    assert.ok(calls[1].url.endsWith("/api/v1/me/wallet"));
+    assert.deepEqual(calls[1].body, {
+      walletAddress: "WalletAddress1",
+      network: "devnet",
+      challengeId: "walletchal-1",
+      signature: "test-signature",
+    });
   } finally {
     globalThis.fetch = previousFetch;
   }
