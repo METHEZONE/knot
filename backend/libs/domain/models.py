@@ -305,6 +305,18 @@ class DisputeReason(StrEnum):
     OTHER = "OTHER"
 
 
+class AutomationLevel(StrEnum):
+    """
+    Amount-based automation policy levels (mentoring feedback)
+    - FULL_AUTO: < 100 USDC - Fully automated, no human intervention
+    - HUMAN_REVIEW: 100-500 USDC - Requires human review before release
+    - HUMAN_SIGNATURE: >= 500 USDC - Requires human signature approval
+    """
+    FULL_AUTO = "FULL_AUTO"
+    HUMAN_REVIEW = "HUMAN_REVIEW"
+    HUMAN_SIGNATURE = "HUMAN_SIGNATURE"
+
+
 class Dispute(DomainModel):
     dispute_id: str = Field(alias="disputeId")
     agreement_id: str = Field(alias="agreementId")

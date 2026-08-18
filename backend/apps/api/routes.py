@@ -86,6 +86,7 @@ from libs.domain.hashing import (
 )
 from libs.domain.models import (
     AgreementTerms,
+    AutomationLevel,
     CreatorProfile,
     Dispute,
     DisputeReason,
@@ -3592,6 +3593,20 @@ Respond in JSON format:
                 return True
         return False
 
+    def _determine_automation_level(amount_usdc: float) -> AutomationLevel:
+        """
+        Determine automation level based on amount (mentoring feedback)
+        - < 100 USDC: FULL_AUTO (완전 자동)
+        - 100-500 USDC: HUMAN_REVIEW (검토 필요)
+        - >= 500 USDC: HUMAN_SIGNATURE (사람 서명 필요)
+        """
+        if amount_usdc < settings.automation_full_auto_threshold_usdc:
+            return AutomationLevel.FULL_AUTO
+        elif amount_usdc < settings.automation_human_review_threshold_usdc:
+            return AutomationLevel.HUMAN_REVIEW
+        else:
+            return AutomationLevel.HUMAN_SIGNATURE
+
     # ============= End Timelock Management =============
 
     @router.get("/promotions/{promotion_id}/timeline")
@@ -3961,6 +3976,30 @@ Respond in JSON format:
                 status.HTTP_409_CONFLICT,
                 "POLICY_VIOLATION",
                 "Auto-release is disabled for this Promotion; human approval is required.",
+            )
+
+        # Check automation level based on total agreement amount (멘토링 피드백)
+        agreement = _get_agreement_document(repository, agreement_id)
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        total_amount_usdc = terms.compensation.base_amount_usdc
+        automation_level = _determine_automation_level(total_amount_usdc)
+
+        # Auto-release only allowed for FULL_AUTO level (< 100 USDC)
+        # Check if this is an automated call (not from timelock checker or manual)
+        is_automated_call = not key.startswith("timelock-") and not key.startswith("manual-")
+
+        if is_automated_call and automation_level != AutomationLevel.FULL_AUTO:
+            # Log and defer to manual approval
+            logger.warning(
+                f"Milestone {milestone_id} requires {automation_level.value} approval "
+                f"(amount: ${total_amount_usdc} USDC), deferring auto-release"
+            )
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "HUMAN_APPROVAL_REQUIRED",
+                f"This milestone requires {automation_level.value} approval "
+                f"(total amount: ${total_amount_usdc} USDC). "
+                f"Auto-release is only available for amounts under $100 USDC.",
             )
         milestone = _get_milestone_document(repository, agreement_id, milestone_id)
 

@@ -76,6 +76,10 @@ class Settings(BaseModel):
     # evidence 검증 통과 즉시 마일스톤 정산을 서버 서명으로 실행한다(사람 클릭 없음).
     # 실패해도 수동 Phantom 릴리즈 경로가 fallback으로 남는다.
     auto_settlement_on_evidence: bool = True
+    # Amount-based automation thresholds (멘토링 피드백 반영)
+    automation_full_auto_threshold_usdc: float = 100.0  # < 100 USDC: 완전 자동
+    automation_human_review_threshold_usdc: float = 500.0  # < 500 USDC: 검토 필요
+    # >= 500 USDC: 사람 서명 필요
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -144,6 +148,12 @@ def get_settings(service_name: str | None = None) -> Settings:
         user_wallet_provision=_truthy(os.getenv("KNOT_USER_WALLET_PROVISION")),
         auto_settlement_on_evidence=_truthy_default_true(
             os.getenv("KNOT_AUTO_SETTLEMENT_ON_EVIDENCE")
+        ),
+        automation_full_auto_threshold_usdc=float(
+            os.getenv("AUTOMATION_FULL_AUTO_THRESHOLD_USDC", "100.0")
+        ),
+        automation_human_review_threshold_usdc=float(
+            os.getenv("AUTOMATION_HUMAN_REVIEW_THRESHOLD_USDC", "500.0")
         ),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),
