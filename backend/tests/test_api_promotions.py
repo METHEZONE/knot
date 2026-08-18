@@ -663,8 +663,10 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     assert agreement["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
     assert agreement["creatorSnapshot"]["completedDealCount"] == 12
     assert agreement["promotionSnapshot"]["productName"] == "Summer skincare launch"
+    # 계약금 20% + 잔금 80% 2분할 (docs/17 D3·N1)
     assert agreement["terms"]["milestones"] == [
-        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 100}
+        {"id": "deposit", "trigger": "creatorAccepted", "releasePct": 20},
+        {"id": "content", "trigger": "contentLiveVerified", "releasePct": 80},
     ]
 
     negotiation_id = negotiation["negotiationId"]
@@ -695,8 +697,13 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     milestones = repository.list_raw_documents(
         f"{COLLECTIONS.agreements}/{agreement['agreementId']}/{COLLECTIONS.milestones}"
     )
-    assert [milestone["milestoneId"] for milestone in milestones] == ["content"]
-    assert milestones[0]["releasePct"] == 100
+    assert sorted(milestone["milestoneId"] for milestone in milestones) == ["content", "deposit"]
+    release_pct_by_id = {item["milestoneId"]: item["releasePct"] for item in milestones}
+    assert release_pct_by_id == {"deposit": 20, "content": 80}
+    # 두 마일스톤 금액의 합이 락 금액과 같아야 한다 (release 가 locked 를 넘을 수 없다).
+    assert sum(int(item["amountBaseUnits"]) for item in milestones) == int(
+        lock_amount_base_units(AgreementTerms.model_validate(agreement["terms"]))
+    )
 
     negotiation_agreement_response = client.get(
         f"/api/v1/negotiations/{negotiation_id}/agreement"
@@ -1172,7 +1179,7 @@ def test_submit_and_verify_evidence_persists_policy_result_and_timeline_event() 
     evidence = submit_response.json()["data"]["evidence"]
     assert evidence["status"] == "SUBMITTED"
     assert evidence["milestoneId"] == "content"
-    assert evidence["milestoneSnapshot"]["releasePct"] == 100
+    assert evidence["milestoneSnapshot"]["releasePct"] == 80
     assert evidence["escrowId"] == escrow["escrowId"]
     assert evidence["url"] == "https://social.example/post/with-brand-and-ad"
     assert str(evidence["sourceDigest"]).startswith("sha256:")

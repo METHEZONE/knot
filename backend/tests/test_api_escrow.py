@@ -548,7 +548,8 @@ def test_authenticated_gateway_lock_requires_phantom_funding() -> None:
     assert response.json()["detail"]["code"] == "PHANTOM_FUNDING_REQUIRED"
 
 
-def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch) -> None:
+def test_releasing_content_alone_leaves_the_deposit_unreleased(monkeypatch) -> None:
+    """마일스톤이 계약금+잔금 2개이므로 잔금만 릴리즈하면 부분 릴리즈다 (docs/17 D3)."""
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
     escrow = lock(client, agreement, "lk")["escrow"]
@@ -562,9 +563,10 @@ def test_release_after_evidence_pass_completes_one_milestone_escrow(monkeypatch)
     data = response.json()["data"]
     assert data["settlement"]["milestoneId"] == "content"
     assert data["settlement"]["status"] == "CONFIRMED"
-    assert data["escrow"]["status"] == "RELEASED"
+    assert data["escrow"]["status"] == "PARTIALLY_RELEASED"
     assert data["escrow"]["releasedAmountBaseUnits"] == escrow["milestoneAmounts"]["content"]
-    assert data["escrow"]["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]
+    # 계약금이 아직 vault 에 남아 있다 — 종결 사유에 따라 크리에이터/브랜드로 갈린다.
+    assert int(data["escrow"]["releasedAmountBaseUnits"]) < int(escrow["lockedAmountBaseUnits"])
     assert data["receipt"]["signature"] == "release-signature-confirmed"
 
     receipt_id = data["receipt"]["receiptId"]
@@ -687,17 +689,26 @@ def test_release_blocked_when_auto_release_disabled(monkeypatch) -> None:
     assert response.json()["detail"]["code"] == "POLICY_VIOLATION"
 
 
-def test_releasing_one_hundred_percent_milestone_completes_escrow(monkeypatch) -> None:
+def test_releasing_deposit_and_content_completes_escrow(monkeypatch) -> None:
+    """정상 완료는 계약금 + 잔금 둘 다 크리에이터에게 간다 (docs/17 §0.6 종결 매트릭스)."""
     client, _ = seeded_gateway(monkeypatch)
     agreement = accepted_agreement(client)
     escrow = lock(client, agreement, "lk")["escrow"]
     pass_evidence(client, agreement, "content")
+
+    deposit = client.post(
+        f"/api/v1/escrows/{escrow['escrowId']}/milestones/deposit:release",
+        headers={"Idempotency-Key": "rel-deposit"},
+    )
+    assert deposit.status_code == 200, deposit.text
+    assert deposit.json()["data"]["escrow"]["status"] == "PARTIALLY_RELEASED"
 
     final = client.post(
         f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
         headers={"Idempotency-Key": "rel-content"},
     ).json()["data"]
     assert final["escrow"]["status"] == "RELEASED"
+    # released + refunded == funded 불변식: 환불이 없으므로 released == locked
     assert final["escrow"]["releasedAmountBaseUnits"] == escrow["lockedAmountBaseUnits"]
 
 
@@ -812,10 +823,12 @@ def test_evidence_pass_auto_settles_without_human_signature(monkeypatch) -> None
 
     pass_evidence(client, agreement, "content")
 
+    # 정상 완료는 계약금까지 크리에이터에게 간다 (docs/17 §0.6). 계약금은 수락 시점에
+    # 귀속만 확정되고 전송은 종결 시에 일어나므로, 잔금 검증 시점에 둘이 함께 나간다.
     settlements = repository.list_raw_documents("settlements")
-    assert len(settlements) == 1
-    assert settlements[0]["milestoneId"] == "content"
-    assert settlements[0]["status"] == "CONFIRMED"
+    assert len(settlements) == 2
+    assert {item["milestoneId"] for item in settlements} == {"deposit", "content"}
+    assert all(item["status"] == "CONFIRMED" for item in settlements)
 
     stored = repository.get_raw_document(f"escrows/{escrow['escrowId']}")
     assert stored is not None
@@ -830,16 +843,17 @@ def test_auto_settlement_reports_signer_and_is_not_repeated(monkeypatch) -> None
     escrow = lock(client, agreement, "lk")["escrow"]
 
     pass_evidence(client, agreement, "content")
-    assert len(repository.list_raw_documents("settlements")) == 1
+    assert len(repository.list_raw_documents("settlements")) == 2
 
-    # 이미 자동 정산된 마일스톤은 수동 릴리즈로 다시 지급되지 않는다.
-    replay = client.post(
-        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
-        headers={"Idempotency-Key": "manual-after-auto"},
-    )
-    assert replay.status_code == 409
-    assert replay.json()["detail"]["code"] == "MILESTONE_ALREADY_RELEASED"
-    assert len(repository.list_raw_documents("settlements")) == 1
+    # 이미 자동 정산된 마일스톤은 수동 릴리즈로 다시 지급되지 않는다 — 계약금도 마찬가지다.
+    for milestone_id in ("content", "deposit"):
+        replay = client.post(
+            f"/api/v1/escrows/{escrow['escrowId']}/milestones/{milestone_id}:release",
+            headers={"Idempotency-Key": f"manual-after-auto-{milestone_id}"},
+        )
+        assert replay.status_code == 409
+        assert replay.json()["detail"]["code"] == "MILESTONE_ALREADY_RELEASED"
+    assert len(repository.list_raw_documents("settlements")) == 2
 
 
 def test_auto_settlement_failure_leaves_manual_release_available(monkeypatch) -> None:
@@ -859,11 +873,12 @@ def test_auto_settlement_failure_leaves_manual_release_available(monkeypatch) ->
 
     monkeypatch.undo()
     install_confirmed_gateway(monkeypatch)
-    manual = client.post(
-        f"/api/v1/escrows/{escrow['escrowId']}/milestones/content:release",
-        headers={"Idempotency-Key": "manual-fallback"},
-    )
-    assert manual.status_code == 200, manual.text
+    for milestone_id in ("deposit", "content"):
+        manual = client.post(
+            f"/api/v1/escrows/{escrow['escrowId']}/milestones/{milestone_id}:release",
+            headers={"Idempotency-Key": f"manual-fallback-{milestone_id}"},
+        )
+        assert manual.status_code == 200, manual.text
     assert manual.json()["data"]["escrow"]["status"] == "RELEASED"
 
 

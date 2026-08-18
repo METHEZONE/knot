@@ -87,6 +87,7 @@ from libs.domain.models import AgreementTerms, CreatorProfile, Promotion, RateCa
 from libs.payments.paysh import PayCliNotFound
 from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
+    DEPOSIT_MILESTONE_TRIGGER,
     PLATFORM_FEE_BPS,
     lock_amount_base_units,
     milestone_amounts_base_units,
@@ -3159,9 +3160,30 @@ def build_api_router(
         escrow_id = _require_document_str(escrow, "escrowId")
         if _find_settlement(repository, escrow_id, milestone_id) is not None:
             return {"attempted": False, "reason": "ALREADY_SETTLED"}
+        # 정상 완료는 계약금까지 크리에이터에게 간다 (docs/17 §0.6 종결 매트릭스).
+        # 계약금은 수락 시점에 귀속만 확정되고 전송은 종결 시에 일어나므로, 콘텐츠가
+        # 검증된 이 시점에 아직 안 나간 계약금을 먼저 릴리즈한다. 온체인 마일스톤 인덱스
+        # 순서를 지켜야 하므로 계약금이 먼저다.
+        pending_before = _unreleased_milestones_before(
+            repository,
+            escrow_id=escrow_id,
+            agreement_id=agreement_id,
+            milestone_id=milestone_id,
+        )
         # 같은 마일스톤을 두 번 자동 정산하지 않도록 결정적 키를 쓴다.
         key = f"auto-release-{escrow_id}-{milestone_id}"
         try:
+            for prior_id in pending_before:
+                _perform_milestone_release(
+                    escrow=escrow,
+                    escrow_id=escrow_id,
+                    milestone_id=prior_id,
+                    key=f"auto-release-{escrow_id}-{prior_id}",
+                )
+                # 잔액·상태가 바뀌었으므로 다시 읽는다.
+                refreshed = _find_escrow_by_agreement(repository, agreement_id)
+                if refreshed is not None:
+                    escrow = refreshed
             released = _perform_milestone_release(
                 escrow=escrow,
                 escrow_id=escrow_id,
@@ -3196,6 +3218,7 @@ def build_api_router(
             "attempted": True,
             "released": True,
             "settlement": settlement,
+            "alsoReleasedMilestoneIds": pending_before,
             "signedBy": "PLATFORM_SETTLEMENT_AUTHORITY",
         }
 
@@ -3569,13 +3592,39 @@ def build_api_router(
             )
         milestone = _get_milestone_document(repository, agreement_id, milestone_id)
 
-        passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
-        if passed_evidence is None:
-            raise _problem(
-                status.HTTP_409_CONFLICT,
-                "POLICY_VIOLATION",
-                "Milestone evidence has not passed verification.",
+        # 릴리즈 게이트는 마일스톤의 trigger 마다 다르다.
+        #
+        # - contentLiveVerified: 콘텐츠 증빙이 검증을 통과해야 한다.
+        # - creatorAccepted(계약금): 증빙이 없다. 크리에이터가 Agreement 를 수락한 시점에
+        #   귀속이 확정되고, 전송은 계약 종결 시에 일어난다(docs/17 §0.6). 그래서 여기서는
+        #   수락 여부만 확인하고, "언제 보내는가" 는 호출자(종결 오케스트레이션)가 정한다.
+        #
+        # 계약금에 증빙을 요구하면 정상 완료 시에도 계약금이 영구히 잠긴다 — 계약금에는
+        # 검증할 콘텐츠가 애초에 없기 때문이다.
+        passed_evidence = None
+        if str(milestone.get("trigger")) == DEPOSIT_MILESTONE_TRIGGER:
+            agreement_document = repository.get_raw_document(
+                FirestorePaths.agreement(agreement_id)
             )
+            agreement_status = str((agreement_document or {}).get("status") or "")
+            if agreement_document is None or agreement_status in {
+                "DRAFT",
+                "REJECTED",
+                "CANCELED",
+            }:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "POLICY_VIOLATION",
+                    "Deposit milestone requires an accepted Agreement.",
+                )
+        else:
+            passed_evidence = _passed_evidence_for_milestone(repository, agreement_id, milestone_id)
+            if passed_evidence is None:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "POLICY_VIOLATION",
+                    "Milestone evidence has not passed verification.",
+                )
 
         # The milestone→amount split was computed and stored on the escrow at lock time.
         locked = int(str(escrow["lockedAmountBaseUnits"]))
@@ -3676,8 +3725,8 @@ def build_api_router(
             "network": settings.escrow_network,
             "status": gateway_receipt["status"],
             "signature": gateway_receipt["signature"],
-            "evidenceId": passed_evidence["evidenceId"],
-            "sourceDigest": passed_evidence.get("sourceDigest"),
+            "evidenceId": (passed_evidence or {}).get("evidenceId"),
+            "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
             "receiptId": receipt_id,
             "paymentOperationId": operation_id,
             "idempotencyKey": key,
@@ -3695,8 +3744,8 @@ def build_api_router(
             "status": "RELEASED",
             "releasedAmountBaseUnits": str(amount),
             "settlementId": settlement_id,
-            "evidenceId": passed_evidence["evidenceId"],
-            "sourceDigest": passed_evidence.get("sourceDigest"),
+            "evidenceId": (passed_evidence or {}).get("evidenceId"),
+            "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
             "releaseReceiptId": receipt_id,
             "releasedAt": now,
             "updatedAt": now,
@@ -3734,8 +3783,8 @@ def build_api_router(
                 "milestoneId": milestone_id,
                 "amountBaseUnits": str(amount),
                 "settlementId": settlement_id,
-                "evidenceId": passed_evidence["evidenceId"],
-                "sourceDigest": passed_evidence.get("sourceDigest"),
+                "evidenceId": (passed_evidence or {}).get("evidenceId"),
+                "sourceDigest": (passed_evidence or {}).get("sourceDigest"),
                 "receiptStatus": receipt["status"],
             },
         )
@@ -6172,6 +6221,34 @@ def _get_agreement_document(repository: KnotRepository, agreement_id: str) -> di
             "Agreement is not in an active funding or settlement state.",
         )
     return agreement
+
+
+def _unreleased_milestones_before(
+    repository: KnotRepository,
+    *,
+    escrow_id: str,
+    agreement_id: str,
+    milestone_id: str,
+) -> list[str]:
+    """`milestone_id` 앞에 있으면서 아직 정산되지 않은 마일스톤 id 를 순서대로 돌려준다.
+
+    계약금처럼 "귀속은 확정됐지만 전송은 종결 시" 인 마일스톤을 종결 시점에 함께
+    릴리즈하기 위한 목록이다. 온체인 마일스톤 인덱스 순서를 지켜야 하므로 순서를 보존한다.
+    """
+    escrow = repository.get_raw_document(FirestorePaths.escrow(escrow_id))
+    if escrow is None:
+        return []
+    amounts = escrow.get("milestoneAmounts")
+    if not isinstance(amounts, dict):
+        return []
+    ordered = list(amounts.keys())
+    if milestone_id not in ordered:
+        return []
+    pending: list[str] = []
+    for candidate in ordered[: ordered.index(milestone_id)]:
+        if _find_settlement(repository, escrow_id, candidate) is None:
+            pending.append(candidate)
+    return pending
 
 
 def _get_milestone_document(
