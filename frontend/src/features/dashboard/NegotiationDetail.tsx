@@ -16,7 +16,11 @@ import {
   ProductApiClient,
   ProductApiError,
 } from "@/product/apiClient";
-import { connectPhantomWallet, sendPreparedSolanaTransaction } from "@/features/wallet/phantom";
+import {
+  connectPhantomWallet,
+  sendPreparedSolanaTransaction,
+  signPhantomMessage,
+} from "@/features/wallet/phantom";
 
 type Role = "brand" | "creator";
 
@@ -33,6 +37,21 @@ type LoadState = {
   error: string | null;
   detail: DetailState | null;
 };
+
+/**
+ * 지갑 주소를 소유 증명과 함께 등록한다.
+ *
+ * 플랫폼이 유저 키를 보관하지 않으므로(docs/17 D7) 서버 챌린지를 지갑으로 서명해야
+ * 주소가 등록된다. 자금을 이동시키지 않는 서명이다.
+ */
+async function proveAndSaveWallet(client: ProductApiClient, address: string) {
+  const { challenge } = await client.createWalletChallenge(address);
+  const signature = await signPhantomMessage(challenge.message);
+  await client.saveWalletAddress(address, {
+    challengeId: challenge.challengeId,
+    signature,
+  });
+}
 
 export function NegotiationDetail({
   role,
@@ -108,7 +127,7 @@ export function NegotiationDetail({
     try {
       const wallet = await connectPhantomWallet();
       setWalletAddress(wallet.address);
-      await client.saveWalletAddress(wallet.address, "devnet");
+      await proveAndSaveWallet(client, wallet.address);
       await refreshAuth();
       const idempotencySeed = `${state.detail.agreement.agreementId}-${wallet.address}`;
       const prepared = await client.prepareEscrowFunding(
@@ -145,7 +164,7 @@ export function NegotiationDetail({
     try {
       const wallet = await connectPhantomWallet();
       setWalletAddress(wallet.address);
-      await client.saveWalletAddress(wallet.address, "devnet");
+      await proveAndSaveWallet(client, wallet.address);
       await refreshAuth();
       await refresh();
       setFundingState("idle");

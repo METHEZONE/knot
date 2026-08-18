@@ -923,12 +923,29 @@ export class ProductApiClient {
     return this.request<ApiAgreementEscrowBundle>(`/api/v1/agreements/${agreementId}/escrow`);
   }
 
-  async saveWalletAddress(walletAddress: string, network = "devnet") {
+  async createWalletChallenge(walletAddress: string) {
+    return this.request<{
+      challenge: { challengeId: string; walletAddress: string; message: string; expiresInSeconds: number };
+    }>("/api/v1/me/wallet/challenge", {
+      method: "POST",
+      body: JSON.stringify({ walletAddress }),
+    });
+  }
+
+  /**
+   * 지갑 주소 등록. 소유 증명 서명이 필수다 — 플랫폼이 유저 키를 보관하지 않으므로
+   * 이 서명만이 "이 주소가 이 유저 것" 을 보장한다(docs/17 D7).
+   */
+  async saveWalletAddress(
+    walletAddress: string,
+    proof: { challengeId: string; signature: string },
+    network = "devnet",
+  ) {
     return this.request<{ wallet: { walletAddress: string; walletNetwork: string } } & CurrentUserContext>(
       "/api/v1/me/wallet",
       {
         method: "POST",
-        body: JSON.stringify({ walletAddress, network }),
+        body: JSON.stringify({ walletAddress, network, ...proof }),
       },
     );
   }

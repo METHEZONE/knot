@@ -13,6 +13,11 @@ from libs.domain.models import (
     TermConstraints,
     TermDeliverable,
 )
+from libs.payments.settlement import (
+    CONTENT_MILESTONE_ID,
+    DEFAULT_DEPOSIT_PCT,
+    DEPOSIT_MILESTONE_ID,
+)
 
 
 def select_creator_for_negotiation(
@@ -56,8 +61,25 @@ def build_initial_terms(
             for deliverable in promotion.deliverables
         ],
         usageRights=promotion.usage_rights,
+        # 계약금 + 잔금 2분할 (docs/17 D3·N1).
+        #
+        # 계약금은 크리에이터가 Agreement 를 수락한 시점에 "귀속" 이 확정되지만 전송은
+        # 계약 종결 시에 일어난다. 수락 즉시 전송하면 "수락 → 계약금 수령 → 잠수" 를
+        # 반복하는 어뷰징이 성립한다(docs/17 §0.6).
+        #
+        # 이 분할만으로 브랜드 단순변심 처리가 기존 instruction 조합으로 나온다:
+        #   release_milestone(deposit) + refund_remaining → 계약금은 크리에이터, 잔금은 브랜드
         milestones=[
-            Milestone(id="content", trigger="contentLiveVerified", releasePct=100),
+            Milestone(
+                id=DEPOSIT_MILESTONE_ID,
+                trigger="creatorAccepted",
+                releasePct=DEFAULT_DEPOSIT_PCT,
+            ),
+            Milestone(
+                id=CONTENT_MILESTONE_ID,
+                trigger="contentLiveVerified",
+                releasePct=100 - DEFAULT_DEPOSIT_PCT,
+            ),
         ],
         constraints=TermConstraints(
             requiredDisclosures=promotion.constraints.required_disclosures,
