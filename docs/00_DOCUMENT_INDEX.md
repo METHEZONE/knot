@@ -36,6 +36,7 @@ When this bundle conflicts with an older KNOT v1/v2 document, this bundle wins f
 | `16_TEST_ACCEPTANCE_AND_DEMO.md` | Test matrix, acceptance criteria and 3-minute demo |
 | `17_REFUND_EXCEPTIONS_AND_PAYMENT_HARDENING.md` | Refund/cancellation, evidence exception paths, escrow key custody, platform wallet and cost ledger — implementation plan |
 | `18_UI_COPY_AND_STATE_DICTIONARY.md` | Korean copy, labels, empty/error states |
+| `19_PAYMENT_AND_SETTLEMENT_HANDOFF.md` | What payment/settlement actually does today, per layer — deploy state, on-chain instructions, evidence outcomes, wallet proof, and the refund gap |
 | `22_REFERENCES.md` | Source documents and official references |
 
 ## Maintained implementation artifact
