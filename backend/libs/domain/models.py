@@ -285,3 +285,38 @@ class AgreementTerms(DomainModel):
 class AgreementResult(StrEnum):
     AGREED = "AGREED"
     REJECTED = "REJECTED"
+
+
+class DisputeStatus(StrEnum):
+    OPEN = "OPEN"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    RESOLVED_CREATOR = "RESOLVED_CREATOR"
+    RESOLVED_BRAND = "RESOLVED_BRAND"
+    RESOLVED_PARTIAL = "RESOLVED_PARTIAL"
+    REJECTED = "REJECTED"
+
+
+class DisputeReason(StrEnum):
+    CONTENT_QUALITY = "CONTENT_QUALITY"
+    BRAND_MISMATCH = "BRAND_MISMATCH"
+    MISSING_DISCLOSURE = "MISSING_DISCLOSURE"
+    LATE_DELIVERY = "LATE_DELIVERY"
+    PROHIBITED_CLAIMS = "PROHIBITED_CLAIMS"
+    OTHER = "OTHER"
+
+
+class Dispute(DomainModel):
+    dispute_id: str = Field(alias="disputeId")
+    agreement_id: str = Field(alias="agreementId")
+    milestone_id: str = Field(alias="milestoneId")
+    raised_by: str = Field(alias="raisedBy")  # "brand" or "creator"
+    reason: DisputeReason
+    description: str
+    evidence_url: str | None = Field(default=None, alias="evidenceUrl")
+    status: DisputeStatus
+    amount_usdc: float = Field(alias="amountUsdc")
+    resolution: str | None = None
+    resolved_at: datetime | None = Field(default=None, alias="resolvedAt")
+    auto_resolved: bool = Field(default=False, alias="autoResolved")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")

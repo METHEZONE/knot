@@ -52,6 +52,7 @@ class FirestoreCollection:
     milestones: str = "milestones"
     evidence: str = "evidence"
     verification_results: str = "verificationResults"
+    disputes: str = "disputes"
     escrows: str = "escrows"
     settlements: str = "settlements"
     agent_activities: str = "agentActivities"
@@ -223,6 +224,10 @@ class FirestorePaths:
     @staticmethod
     def verification_result(verification_result_id: str) -> str:
         return document_path(COLLECTIONS.verification_results, verification_result_id)
+
+    @staticmethod
+    def dispute(dispute_id: str) -> str:
+        return document_path(COLLECTIONS.disputes, dispute_id)
 
     @staticmethod
     def escrow(escrow_id: str) -> str:

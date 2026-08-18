@@ -6,6 +6,7 @@ from solders.pubkey import Pubkey
 
 from libs.domain.models import (
     Deliverable,
+    DisputeReason,
     DomainModel,
     MoneyBudget,
     PostingWindow,
@@ -421,3 +422,32 @@ def default_promotion_request() -> PromotionCreateRequest:
         constraints=PromotionConstraints(requiredCategories=["beauty"], requiredDisclosures=["ad"]),
         autonomy=PromotionAutonomy(maxNegotiationRounds=5, autoEscrow=True, autoRelease=True),
     )
+
+
+class DisputeCreateRequest(DomainModel):
+    agreement_id: str = Field(alias="agreementId")
+    milestone_id: str = Field(alias="milestoneId")
+    reason: DisputeReason
+    description: str
+    evidence_url: str | None = Field(default=None, alias="evidenceUrl")
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: str) -> str:
+        if len(value.strip()) < 10:
+            raise ValueError("description must be at least 10 characters")
+        if len(value) > 1000:
+            raise ValueError("description must not exceed 1000 characters")
+        return value.strip()
+
+
+class DisputeResolutionRequest(DomainModel):
+    resolution: str
+    resolved_in_favor_of: str = Field(alias="resolvedInFavorOf")  # "brand" or "creator" or "partial"
+
+    @field_validator("resolved_in_favor_of")
+    @classmethod
+    def validate_resolved_in_favor_of(cls, value: str) -> str:
+        if value not in ["brand", "creator", "partial"]:
+            raise ValueError("resolvedInFavorOf must be 'brand', 'creator', or 'partial'")
+        return value

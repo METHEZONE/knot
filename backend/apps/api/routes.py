@@ -29,6 +29,8 @@ from apps.api.schemas import (
     CurrentUserCreatorProfileRequest,
     CurrentUserRoleRequest,
     CurrentWalletRequest,
+    DisputeCreateRequest,
+    DisputeResolutionRequest,
     EscrowFundingConfirmRequest,
     EvidenceObservations,
     EvidenceSubmissionRequest,
@@ -82,7 +84,16 @@ from libs.domain.hashing import (
     sha256_prefixed,
     terms_hash,
 )
-from libs.domain.models import AgreementTerms, CreatorProfile, Promotion, RateCard, UsageRights
+from libs.domain.models import (
+    AgreementTerms,
+    CreatorProfile,
+    Dispute,
+    DisputeReason,
+    DisputeStatus,
+    Promotion,
+    RateCard,
+    UsageRights,
+)
 from libs.payments.paysh import PayCliNotFound, PayShError, verify_content
 from libs.payments.paysh import fetch as fetch_paysh
 from libs.payments.settlement import (
@@ -3147,6 +3158,442 @@ def build_api_router(
             "signedBy": "PLATFORM_SETTLEMENT_AUTHORITY",
         }
 
+    # ============= Dispute Management =============
+
+    @router.post("/disputes")
+    def create_dispute(
+        payload: DisputeCreateRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """분쟁 제기 - 브랜드 또는 크리에이터가 마일스톤에 대해 이의 제기"""
+        user = _require_auth_user(token_verifier, authorization)
+        agreement = _get_agreement_document(repository, payload.agreement_id)
+
+        # Verify user is party to the agreement
+        brand_agent_id = _require_document_str(agreement, "brandAgentId")
+        creator_agent_id = _require_document_str(agreement, "creatorAgentId")
+
+        # Determine who is raising the dispute
+        user_role = user.get("role")
+        if user_role == "brand":
+            raised_by = "brand"
+            brand = repository.get_raw_document(
+                FirestorePaths.brand(_require_document_str(user, "brandId"))
+            )
+            if brand is None or brand.get("brandAgentId") != brand_agent_id:
+                raise _problem(
+                    status.HTTP_403_FORBIDDEN,
+                    "UNAUTHORIZED",
+                    "User is not authorized to raise dispute for this agreement",
+                )
+        elif user_role == "creator":
+            raised_by = "creator"
+            creator = repository.get_raw_document(
+                FirestorePaths.creator_profile(_require_document_str(user, "creatorId"))
+            )
+            if creator is None or creator.get("creatorAgentId") != creator_agent_id:
+                raise _problem(
+                    status.HTTP_403_FORBIDDEN,
+                    "UNAUTHORIZED",
+                    "User is not authorized to raise dispute for this agreement",
+                )
+        else:
+            raise _problem(
+                status.HTTP_403_FORBIDDEN,
+                "INVALID_ROLE",
+                "User must be either brand or creator to raise dispute",
+            )
+
+        # Get milestone to verify it exists and get amount
+        milestone = _get_milestone_document(repository, payload.agreement_id, payload.milestone_id)
+        milestone_release_pct = milestone.get("releasePct", 0)
+
+        # Calculate dispute amount
+        terms = AgreementTerms.model_validate(agreement["terms"])
+        total_amount = terms.compensation.base_amount_usdc
+        dispute_amount = total_amount * milestone_release_pct / 100.0
+
+        # Check if milestone already settled
+        escrow = _find_escrow_by_agreement(repository, payload.agreement_id)
+        if escrow:
+            escrow_id = _require_document_str(escrow, "escrowId")
+            existing_settlement = _find_settlement(repository, escrow_id, payload.milestone_id)
+            if existing_settlement:
+                raise _problem(
+                    status.HTTP_409_CONFLICT,
+                    "MILESTONE_ALREADY_SETTLED",
+                    "Cannot dispute a milestone that has already been settled",
+                )
+
+        # Create dispute
+        dispute_id = f"dispute-{uuid4()}"
+        now = _now()
+
+        dispute = {
+            "disputeId": dispute_id,
+            "agreementId": payload.agreement_id,
+            "milestoneId": payload.milestone_id,
+            "raisedBy": raised_by,
+            "reason": payload.reason.value,
+            "description": payload.description,
+            "evidenceUrl": payload.evidence_url,
+            "status": DisputeStatus.OPEN.value,
+            "amountUsdc": dispute_amount,
+            "resolution": None,
+            "resolvedAt": None,
+            "autoResolved": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+
+        repository.save_raw_document(FirestorePaths.dispute(dispute_id), dispute)
+
+        # Freeze the milestone (prevent auto-release during dispute)
+        milestone_path = FirestorePaths.milestone(payload.agreement_id, payload.milestone_id)
+        frozen_milestone = {
+            **milestone,
+            "frozen": True,
+            "frozenAt": now,
+            "frozenReason": f"DISPUTE_{dispute_id}",
+            "updatedAt": now,
+        }
+        repository.save_raw_document(milestone_path, frozen_milestone)
+
+        logger.info(
+            f"Dispute created: {dispute_id} by {raised_by} for milestone {payload.milestone_id}"
+        )
+
+        # Auto-resolve if amount is small enough
+        if dispute_amount < 100.0 and settings.gemini_mode != "off":
+            try:
+                auto_resolution = _auto_resolve_dispute_with_gemini(
+                    dispute=dispute,
+                    agreement=agreement,
+                    milestone=milestone,
+                )
+                if auto_resolution:
+                    dispute["status"] = auto_resolution["status"]
+                    dispute["resolution"] = auto_resolution["resolution"]
+                    dispute["resolvedAt"] = _now()
+                    dispute["autoResolved"] = True
+                    dispute["updatedAt"] = _now()
+                    repository.save_raw_document(FirestorePaths.dispute(dispute_id), dispute)
+                    logger.info(f"Dispute {dispute_id} auto-resolved: {auto_resolution['status']}")
+            except Exception as e:
+                logger.error(f"Auto-resolution failed for dispute {dispute_id}: {e}")
+                # Continue - dispute remains OPEN for manual resolution
+
+        return _ok({"dispute": dispute})
+
+    @router.get("/disputes/{dispute_id}")
+    def get_dispute(dispute_id: str) -> dict[str, object]:
+        """분쟁 조회"""
+        dispute = repository.get_raw_document(FirestorePaths.dispute(dispute_id))
+        if dispute is None:
+            raise _not_found("dispute", dispute_id)
+        return _ok({"dispute": dispute})
+
+    @router.post("/disputes/{dispute_id}:resolve")
+    def resolve_dispute(
+        dispute_id: str,
+        payload: DisputeResolutionRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """분쟁 해결 - 관리자 또는 자동 중재"""
+        _require_auth_user(token_verifier, authorization)
+
+        dispute = repository.get_raw_document(FirestorePaths.dispute(dispute_id))
+        if dispute is None:
+            raise _not_found("dispute", dispute_id)
+
+        if dispute.get("status") != DisputeStatus.OPEN.value:
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "DISPUTE_ALREADY_RESOLVED",
+                "Dispute has already been resolved",
+            )
+
+        # Update dispute status
+        resolution_status_map = {
+            "brand": DisputeStatus.RESOLVED_BRAND.value,
+            "creator": DisputeStatus.RESOLVED_CREATOR.value,
+            "partial": DisputeStatus.RESOLVED_PARTIAL.value,
+        }
+
+        updated_dispute = {
+            **dispute,
+            "status": resolution_status_map[payload.resolved_in_favor_of],
+            "resolution": payload.resolution,
+            "resolvedAt": _now(),
+            "updatedAt": _now(),
+        }
+
+        repository.save_raw_document(FirestorePaths.dispute(dispute_id), updated_dispute)
+
+        # Unfreeze milestone
+        agreement_id = _require_document_str(dispute, "agreementId")
+        milestone_id = _require_document_str(dispute, "milestoneId")
+        milestone_path = FirestorePaths.milestone(agreement_id, milestone_id)
+        milestone = repository.get_raw_document(milestone_path)
+
+        if milestone:
+            unfrozen_milestone = {
+                **milestone,
+                "frozen": False,
+                "frozenAt": None,
+                "frozenReason": None,
+                "updatedAt": _now(),
+            }
+            repository.save_raw_document(milestone_path, unfrozen_milestone)
+
+        logger.info(f"Dispute {dispute_id} resolved in favor of {payload.resolved_in_favor_of}")
+
+        return _ok({"dispute": updated_dispute})
+
+    @router.get("/agreements/{agreement_id}/disputes")
+    def list_agreement_disputes(agreement_id: str) -> dict[str, object]:
+        """합의서의 모든 분쟁 조회"""
+        _get_agreement_document(repository, agreement_id)
+
+        all_disputes = repository.list_raw_documents(COLLECTIONS.disputes)
+        agreement_disputes = [
+            d for d in all_disputes if d.get("agreementId") == agreement_id
+        ]
+
+        # Sort by creation date descending
+        agreement_disputes.sort(key=lambda d: str(d.get("createdAt", "")), reverse=True)
+
+        return _ok({"disputes": agreement_disputes})
+
+    def _auto_resolve_dispute_with_gemini(
+        dispute: dict[str, object],
+        agreement: dict[str, object],
+        milestone: dict[str, object],
+    ) -> dict[str, str] | None:
+        """
+        Use Gemini to auto-resolve small disputes (< 100 USDC)
+
+        Returns resolution dict with 'status' and 'resolution' or None if can't resolve
+        """
+        try:
+            from libs.ai.gemini import structured_analysis_json
+
+            prompt = f"""
+You are an impartial dispute resolver for creator-brand sponsorship agreements.
+
+DISPUTE DETAILS:
+- Raised by: {dispute['raisedBy']}
+- Reason: {dispute['reason']}
+- Description: {dispute['description']}
+- Amount: ${dispute['amountUsdc']} USDC
+- Evidence URL: {dispute.get('evidenceUrl', 'None')}
+
+AGREEMENT TERMS:
+- Product: {agreement.get('promotionSnapshot', {}).get('productName', 'Unknown')}
+- Deliverable: {agreement.get('terms', {}).get('deliverables', [])}
+- Usage Rights: {agreement.get('terms', {}).get('usageRights', 'Unknown')}
+
+MILESTONE:
+- ID: {milestone.get('milestoneId')}
+- Trigger: {milestone.get('trigger')}
+- Release %: {milestone.get('releasePct')}%
+
+Based on the dispute details and agreement terms, provide a fair resolution.
+
+Respond in JSON format:
+{{
+    "decision": "brand" | "creator" | "partial",
+    "reasoning": "Brief explanation of why this decision is fair",
+    "resolution": "Detailed resolution text to be shown to both parties"
+}}
+"""
+
+            result = structured_analysis_json(
+                model=settings.gemini_model,
+                prompt=prompt,
+            )
+
+            if result and "decision" in result:
+                decision = result["decision"]
+                resolution_text = result.get("resolution", result.get("reasoning", "Auto-resolved"))
+
+                return {
+                    "status": {
+                        "brand": DisputeStatus.RESOLVED_BRAND.value,
+                        "creator": DisputeStatus.RESOLVED_CREATOR.value,
+                        "partial": DisputeStatus.RESOLVED_PARTIAL.value,
+                    }.get(decision, DisputeStatus.RESOLVED_PARTIAL.value),
+                    "resolution": resolution_text,
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Gemini auto-resolution failed: {e}")
+            return None
+
+    # ============= End Dispute Management =============
+
+    # ============= Timelock Management =============
+
+    @router.post("/milestones/timelock:check")
+    def check_and_release_expired_timelocks() -> dict[str, object]:
+        """
+        Check all active timelocks and auto-release expired ones with no disputes
+        Called periodically by scheduler or manually by admin
+        """
+        from datetime import datetime, UTC
+
+        now_utc = datetime.now(UTC)
+        released_count = 0
+        errors = []
+
+        # Find all agreements
+        all_agreements = repository.list_raw_documents(COLLECTIONS.agreements)
+
+        for agreement in all_agreements:
+            agreement_id = agreement.get("agreementId")
+            if not agreement_id:
+                continue
+
+            # Get all milestones for this agreement
+            all_milestones = repository.list_raw_documents(
+                f"{COLLECTIONS.agreements}/{agreement_id}/{COLLECTIONS.milestones}"
+            )
+
+            # Find timelock milestones that are active
+            for milestone in all_milestones:
+                if milestone.get("status") != "TIMELOCK_ACTIVE":
+                    continue
+
+                timelock_expires_at_str = milestone.get("timelockExpiresAt")
+                if not timelock_expires_at_str:
+                    continue
+
+                # Parse expiry time
+                try:
+                    timelock_expires_at = datetime.fromisoformat(
+                        timelock_expires_at_str.replace("Z", "+00:00")
+                    )
+                except (ValueError, AttributeError):
+                    logger.error(f"Invalid timelockExpiresAt format: {timelock_expires_at_str}")
+                    continue
+
+                # Check if timelock has expired
+                if now_utc < timelock_expires_at:
+                    # Not expired yet
+                    continue
+
+                milestone_id = milestone.get("milestoneId")
+
+                # Check for active disputes
+                has_active_dispute = _has_active_dispute_for_milestone(
+                    repository, agreement_id, milestone_id
+                )
+
+                if has_active_dispute:
+                    logger.info(
+                        f"Timelock expired for {milestone_id} but has active dispute, skipping"
+                    )
+                    continue
+
+                # Check if milestone is frozen
+                if milestone.get("frozen"):
+                    logger.info(f"Milestone {milestone_id} is frozen, skipping auto-release")
+                    continue
+
+                # Auto-release timelock milestone
+                try:
+                    escrow = _find_escrow_by_agreement(repository, agreement_id)
+                    if not escrow:
+                        errors.append({
+                            "milestoneId": milestone_id,
+                            "agreementId": agreement_id,
+                            "error": "ESCROW_NOT_FOUND",
+                        })
+                        continue
+
+                    escrow_id = _require_document_str(escrow, "escrowId")
+                    key = f"timelock-auto-release-{escrow_id}-{milestone_id}"
+
+                    # Check if already released
+                    if _find_settlement(repository, escrow_id, milestone_id):
+                        logger.info(f"Milestone {milestone_id} already settled")
+                        continue
+
+                    # Mark evidence as passed for timelock milestone (auto-pass)
+                    evidence_id = f"evidence-timelock-{uuid4()}"
+                    timelock_evidence = {
+                        "evidenceId": evidence_id,
+                        "agreementId": agreement_id,
+                        "milestoneId": milestone_id,
+                        "promotionId": agreement.get("promotionId"),
+                        "url": "timelock://auto-release",
+                        "status": "PASSED",
+                        "observations": {
+                            "urlReachable": True,
+                            "brandMentioned": True,
+                            "disclosurePresent": True,
+                            "prohibitedClaimsFound": [],
+                        },
+                        "policyDecision": {
+                            "allowed": True,
+                            "violations": [],
+                        },
+                        "verifiedAt": _now().isoformat(),
+                        "submittedBy": "SYSTEM",
+                        "submittedAt": _now().isoformat(),
+                        "createdAt": _now().isoformat(),
+                        "updatedAt": _now().isoformat(),
+                    }
+                    repository.save_raw_document(
+                        FirestorePaths.evidence(evidence_id),
+                        timelock_evidence,
+                    )
+
+                    # Perform milestone release
+                    result = _perform_milestone_release(
+                        escrow=escrow,
+                        escrow_id=escrow_id,
+                        milestone_id=milestone_id,
+                        key=key,
+                    )
+
+                    logger.info(f"Auto-released timelock milestone {milestone_id}")
+                    released_count += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to auto-release milestone {milestone_id}: {e}")
+                    errors.append({
+                        "milestoneId": milestone_id,
+                        "agreementId": agreement_id,
+                        "error": str(e),
+                    })
+
+        return _ok({
+            "releasedCount": released_count,
+            "errors": errors,
+            "checkedAt": now_utc.isoformat(),
+        })
+
+    def _has_active_dispute_for_milestone(
+        repository: KnotRepository,
+        agreement_id: str,
+        milestone_id: str,
+    ) -> bool:
+        """Check if there are any open disputes for this milestone"""
+        all_disputes = repository.list_raw_documents(COLLECTIONS.disputes)
+        for dispute in all_disputes:
+            if (
+                dispute.get("agreementId") == agreement_id
+                and dispute.get("milestoneId") == milestone_id
+                and dispute.get("status") == DisputeStatus.OPEN.value
+            ):
+                return True
+        return False
+
+    # ============= End Timelock Management =============
+
     @router.get("/promotions/{promotion_id}/timeline")
     def get_promotion_timeline(promotion_id: str) -> dict[str, object]:
         _get_promotion(repository, promotion_id)
@@ -3697,6 +4144,15 @@ def build_api_router(
                 "operationId": operation_id,
             },
         )
+
+        # Set timelock on next milestone if applicable (72-hour dispute window)
+        _set_timelock_for_next_milestone(
+            repository=repository,
+            agreement_id=agreement_id,
+            released_milestone_id=milestone_id,
+            released_at=now,
+        )
+
         return _ok({"settlement": settlement, "escrow": updated_escrow, "receipt": receipt})
 
     @router.post("/escrows/{escrow_id}/milestones/{milestone_id}:release")
@@ -7144,6 +7600,65 @@ def _passed_evidence_for_milestone(
         ):
             return document
     return None
+
+
+def _set_timelock_for_next_milestone(
+    repository: KnotRepository,
+    agreement_id: str,
+    released_milestone_id: str,
+    released_at: datetime,
+) -> None:
+    """
+    Set 72-hour timelock on the next milestone after verification milestone is released
+    This provides dispute window before final payment
+    """
+    from datetime import timedelta
+
+    # Get all milestones for this agreement
+    all_milestones = repository.list_raw_documents(
+        f"{COLLECTIONS.agreements}/{agreement_id}/{COLLECTIONS.milestones}"
+    )
+
+    # Find timelock milestone (should be the one with trigger="timelockExpired")
+    timelock_milestone = None
+    for ms in all_milestones:
+        if ms.get("trigger") == "timelockExpired":
+            timelock_milestone = ms
+            break
+
+    if not timelock_milestone:
+        # No timelock milestone defined, skip
+        return
+
+    timelock_milestone_id = timelock_milestone.get("milestoneId")
+    if not timelock_milestone_id:
+        return
+
+    # Only set timelock if the released milestone was "verification"
+    if released_milestone_id != "verification":
+        return
+
+    # Set timelock expiry to 72 hours from now
+    timelock_expires_at = released_at + timedelta(hours=72)
+
+    # Update timelock milestone
+    updated_timelock_milestone = {
+        **timelock_milestone,
+        "timelockStartedAt": released_at.isoformat(),
+        "timelockExpiresAt": timelock_expires_at.isoformat(),
+        "status": "TIMELOCK_ACTIVE",
+        "updatedAt": _now().isoformat(),
+    }
+
+    repository.save_raw_document(
+        FirestorePaths.milestone(agreement_id, timelock_milestone_id),
+        updated_timelock_milestone,
+    )
+
+    logger.info(
+        f"Timelock set for milestone {timelock_milestone_id}, "
+        f"expires at {timelock_expires_at.isoformat()}"
+    )
 
 
 def _receipt_by_id(repository: KnotRepository, receipt_id: object) -> dict[str, object] | None:
