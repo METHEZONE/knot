@@ -31,10 +31,35 @@ Updated: 2026-08-20 KST
 
 ### Deployment Note
 
-- No Secret Manager, Cloud Run environment, wallet, pay.sh, or Solana transaction
-  changes have been made in this phase.
-- Deployed Creator analysis will continue to show `공개 지표 확인 필요` until the API
-  service receives a valid `YOUTUBE_API_KEY`.
+- Deployed commit `45ac986` to Cloud Run:
+  - `knot-creator-agent-00017-zqc` at 100% traffic.
+  - `knot-web3-00014-hkr` at 100% traffic.
+  - `knot-api-00025-fsg` at 100% traffic.
+  - `knot-web-00023-fqg` at 100% traffic.
+- Public health checks returned 200 for deployed Web `/login`, API `/readyz`,
+  web3 `/readyz`, and Creator Agent `/readyz`.
+- No YouTube API Secret exists in Secret Manager yet, so deployed Creator analysis
+  still reports missing YouTube Data API credentials instead of fabricating counts.
+- No wallet funding, pay.sh call, Solana program deploy, or on-chain transaction
+  was performed in this phase.
+
+### Firestore Demo Cleanup
+
+- Ran final demo cleanup with `--reset-all-demo`.
+- Deleted 703 existing Firestore demo documents from KNOT top-level business
+  collections.
+- Re-seeded 155 final XEXYMIX demo documents.
+- Verified Firestore counts after cleanup:
+  - `users=2`: Brand `t1@knot.com`, Creator `c1@knot.com`.
+  - `brands=1`.
+  - `promotions=1`: `promotion-xexymix-devnet`.
+  - `creatorProfiles=30` and `creatorDiscoveryProfiles=30` for the matching
+    candidate pool.
+  - `matchRuns=0`, `negotiations=0`, `agreements=0`, `escrows=0`,
+    `settlements=0`, `analysisJobs=0`, `onboardingSessions=0`.
+- Verified deployed authenticated API:
+  - `t1@knot.com / 000000`: `BRAND`, `COMPLETED`, 1 promotion.
+  - `c1@knot.com / 000000`: `CREATOR`, `COMPLETED`, 0 initial offers.
 
 ## Final Demo Risk Tightening (2026-08-20 KST)
 
