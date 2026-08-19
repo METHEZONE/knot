@@ -7,6 +7,7 @@ REPOSITORY="${REPOSITORY:-knot}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 A2A_SECRET_NAME="${A2A_SECRET_NAME:-knot-a2a-service-token}"
 SETTLEMENT_SECRET_NAME="${SETTLEMENT_SECRET_NAME:-knot-settlement-keypair-json}"
+YOUTUBE_API_KEY_SECRET_NAME="${YOUTUBE_API_KEY_SECRET_NAME:-}"
 
 AR_HOST="${REGION}-docker.pkg.dev"
 IMAGE_BASE="${AR_HOST}/${PROJECT_ID}/${REPOSITORY}"
@@ -44,6 +45,14 @@ deploy_service() {
     --region="${REGION}" \
     --image="${image}" \
     "$@"
+}
+
+api_secret_args() {
+  local secrets="KNOT_A2A_SERVICE_TOKEN=${A2A_SECRET_NAME}:latest"
+  if [[ -n "${YOUTUBE_API_KEY_SECRET_NAME}" ]]; then
+    secrets="${secrets},YOUTUBE_API_KEY=${YOUTUBE_API_KEY_SECRET_NAME}:latest"
+  fi
+  printf '%s' "${secrets}"
 }
 
 service_url() {
@@ -97,7 +106,7 @@ deploy_service "knot-api" "${API_IMAGE}" \
   --min-instances=1 \
   --max-instances=20 \
   --set-env-vars="KNOT_REPOSITORY_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT_ID=${PROJECT_ID},KNOT_AUTH_MODE=firebase,FIREBASE_PROJECT_ID=${PROJECT_ID},KNOT_SERVICE_NAME=knot-api,KNOT_CREATOR_A2A_MODE=http,CREATOR_AGENT_BASE_URL=${CREATOR_URL},CREATOR_A2A_TIMEOUT_SECONDS=60,KNOT_WEB3_MODE=gateway,WEB3_GATEWAY_BASE_URL=${WEB3_URL},KNOT_ESCROW_PROGRAM_ID=${KNOT_ESCROW_PROGRAM_ID:-Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj},KNOT_USDC_MINT=${KNOT_USDC_MINT:-4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU},KNOT_SETTLEMENT_AUTHORITY=${KNOT_SETTLEMENT_AUTHORITY},KNOT_AUTO_SETTLEMENT_ON_EVIDENCE=${KNOT_AUTO_SETTLEMENT_ON_EVIDENCE:-1},KNOT_USER_WALLET_PROVISION=${KNOT_USER_WALLET_PROVISION:-1},KNOT_GEMINI_MODE=vertex,VERTEX_AI_LOCATION=us-central1,GEMINI_MODEL=gemini-2.5-flash,PAYSH_MODE=sandbox,PAYSH_RESOURCE_ID=${PAYSH_RESOURCE_ID:-https://debugger.pay.sh/mpp/quote/AAPL},PAYSH_TIMEOUT_SECONDS=90" \
-  --set-secrets="KNOT_A2A_SERVICE_TOKEN=${A2A_SECRET_NAME}:latest"
+  --set-secrets="$(api_secret_args)"
 
 API_URL="$(service_url "knot-api")"
 
