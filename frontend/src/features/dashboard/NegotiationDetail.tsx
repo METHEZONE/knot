@@ -263,6 +263,7 @@ export function NegotiationDetail({
 
       <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
         <SectionHeader eyebrow="협상 메시지" title="Agent 대화" />
+        <PayShVerificationSummary messages={messages} />
         <MessageThread role={role} messages={messages} />
       </section>
     </div>
@@ -483,6 +484,33 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   );
 }
 
+function PayShVerificationSummary({ messages }: { messages: ApiNegotiationMessage[] }) {
+  const event = messages.map(payShVerificationEvent).find((item): item is Record<string, unknown> => item !== null);
+  if (!event) return null;
+  const display = isRecord(event.display) ? event.display : null;
+  const status = String(event.status ?? "RECORDED");
+  const amount = numberFromUnknown(event.amountUsdc);
+  const receiptId = typeof event.receiptId === "string" ? event.receiptId : null;
+  const resourceId = typeof event.resourceId === "string" ? event.resourceId : null;
+  const message =
+    typeof display?.message === "string" && display.message.trim()
+      ? display.message
+      : `후보 검증 ${status}${amount === null ? "" : ` · ${amount.toLocaleString()} USDC`}`;
+  return (
+    <div className="mb-3 grid gap-2 border border-border-subtle bg-background p-3 text-xs sm:grid-cols-[1fr_auto]">
+      <div>
+        <p className="font-mono uppercase text-muted">pay.sh / x402</p>
+        <p className="mt-1 text-sm">{message}</p>
+        {resourceId ? <p className="mt-1 break-all font-mono text-[10px] text-muted">{resourceId}</p> : null}
+      </div>
+      <div className="font-mono text-[10px] text-muted sm:text-right">
+        <p>{status}</p>
+        {receiptId ? <p className="mt-1 break-all">{shortAddress(receiptId) ?? receiptId}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function SettlementSummaryPanel({
   role,
   agreement,
@@ -610,6 +638,7 @@ function MilestonePanel({
         const settlement = settlements.find((item) => item.milestoneId === milestone.id);
         const released = settlement?.status === "CONFIRMED" || Boolean(settlement?.signature);
         const amount = Math.round((agreement.terms.compensation.baseAmountUsdc * milestone.releasePct) / 100);
+        const evidenceRequired = milestoneRequiresEvidence(milestone);
         return (
           <div key={milestone.id} className="sketch-alt ink border border-border-subtle bg-surface-raised p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -623,8 +652,10 @@ function MilestonePanel({
               {released
                 ? "정산 완료"
                 : escrow
-                  ? `에스크로 잔금 수령 조건: ${deliverableRequirement(agreement.terms)} 완료 URL 제출 후 Agent 검토 통과`
-                  : `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`}
+                  ? milestoneSettlementRequirement(milestone, agreement.terms)
+                  : evidenceRequired
+                    ? `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`
+                    : "에스크로가 잠기고 콘텐츠 검증이 끝나면 함께 정산됩니다."}
             </p>
             {settlement?.signature ? (
               <TransactionReference
@@ -634,7 +665,7 @@ function MilestonePanel({
               />
             ) : null}
             <WorkItemList terms={agreement.terms} compact />
-            {role === "creator" && escrow && !released ? (
+            {role === "creator" && escrow && !released && evidenceRequired ? (
               <EvidenceForm
                 agreement={agreement}
                 escrow={escrow}
@@ -646,6 +677,11 @@ function MilestonePanel({
                 onRefresh={onRefresh}
                 onError={onError}
               />
+            ) : null}
+            {role === "creator" && escrow && !released && !evidenceRequired ? (
+              <p className="mt-4 text-xs text-muted">
+                이 마일스톤은 별도 URL 제출 대상이 아닙니다. 콘텐츠 검증 마일스톤이 통과되면 순서대로 정산됩니다.
+              </p>
             ) : null}
           </div>
         );
@@ -893,7 +929,7 @@ function messageActorLabel(side: MessageSide) {
 }
 
 function messageSide(message: ApiNegotiationMessage, index: number): MessageSide {
-  const payload = message.payload ?? message.content ?? {};
+  const payload = messagePayload(message);
   if (String(message.role ?? "") === "ROLE_SYSTEM") return "system";
   if (String(payload.type ?? "").toUpperCase() === "VERIFICATION_EVENT") return "system";
   if (String(message.role ?? "") === "ROLE_AGENT") return "creator";
@@ -904,7 +940,7 @@ function messageSide(message: ApiNegotiationMessage, index: number): MessageSide
 }
 
 function messageLine(message: ApiNegotiationMessage, index: number) {
-  const payload = message.payload ?? message.content ?? {};
+  const payload = messagePayload(message);
   const display = isRecord(payload.display) ? payload.display : null;
   if (typeof display?.message === "string" && display.message.trim()) {
     const headline =
@@ -940,7 +976,34 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
 
 function formatA2aPayload(message: ApiNegotiationMessage) {
   const a2aData = firstA2aPartData(message.a2aMessage);
-  return JSON.stringify(a2aData ?? message.payload ?? message.content ?? {}, null, 2);
+  return JSON.stringify(a2aData ?? messagePayload(message), null, 2);
+}
+
+function messagePayload(message: ApiNegotiationMessage) {
+  return message.payload ?? message.content ?? {};
+}
+
+function payShVerificationEvent(message: ApiNegotiationMessage) {
+  const payload = messagePayload(message);
+  if (String(payload.type ?? "").toUpperCase() !== "VERIFICATION_EVENT") return null;
+  if (String(payload.provider ?? "").toLowerCase() !== "pay.sh") return null;
+  return payload;
+}
+
+function milestoneRequiresEvidence(milestone: ApiAgreementTerms["milestones"][number]) {
+  const trigger = String(milestone.trigger ?? "").toLowerCase();
+  if (trigger === "creatoraccepted" || milestone.id === "deposit") return false;
+  return true;
+}
+
+function milestoneSettlementRequirement(
+  milestone: ApiAgreementTerms["milestones"][number],
+  terms: ApiAgreementTerms,
+) {
+  if (!milestoneRequiresEvidence(milestone)) {
+    return "콘텐츠 검증이 통과되면 계약금이 먼저 정산되고 잔금이 이어서 정산됩니다.";
+  }
+  return `에스크로 잔금 수령 조건: ${deliverableRequirement(terms)} 완료 URL 제출 후 Agent 검토 통과`;
 }
 
 function firstA2aPartData(a2aMessage: Record<string, unknown> | undefined) {
