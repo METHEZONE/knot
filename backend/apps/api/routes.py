@@ -2665,10 +2665,100 @@ def build_api_router(
 
     @router.get("/negotiations/{negotiation_id}/messages")
     def list_negotiation_messages(negotiation_id: str) -> dict[str, object]:
-        _require_negotiation(repository, negotiation_id)
+        negotiation = _require_negotiation(repository, negotiation_id)
         messages = repository.list_raw_documents(
             f"{COLLECTIONS.negotiations}/{negotiation_id}/{COLLECTIONS.negotiation_messages}"
         )
+
+        # Add pay.sh verification system messages if available
+        system_messages = []
+
+        # 1. Creator verification (before negotiation starts)
+        match_run_id = negotiation.get("matchRunId")
+        creator_agent_id = negotiation.get("creatorAgentId")
+
+        if match_run_id and creator_agent_id:
+            # Find the match candidate
+            candidates = repository.list_raw_documents(
+                f"{COLLECTIONS.match_runs}/{match_run_id}/{COLLECTIONS.match_candidates}"
+            )
+            candidate = next(
+                (c for c in candidates if c.get("creatorAgentId") == creator_agent_id),
+                None
+            )
+
+            if candidate and candidate.get("verificationReceipt"):
+                receipt = candidate["verificationReceipt"]
+                result = receipt.get("verificationResult", {})
+
+                # Create system message for creator verification
+                system_messages.append({
+                    "messageId": f"system-paysh-creator-{candidate.get('creatorId', 'unknown')}",
+                    "negotiationId": negotiation_id,
+                    "sender": "SYSTEM",
+                    "senderRole": "SYSTEM",
+                    "messageType": "VERIFICATION_EVENT",
+                    "content": {
+                        "event": "CREATOR_VERIFICATION",
+                        "provider": "pay.sh (Nansen API)",
+                        "cost_usdc": receipt.get("costUsdc", 0.10),
+                        "receipt_id": receipt.get("receiptId", "N/A"),
+                        "network": receipt.get("network", "SANDBOX"),
+                        "result": {
+                            "bot_percentage": result.get("bot_percentage"),
+                            "engagement_quality": result.get("engagement_quality"),
+                            "follower_count": result.get("follower_count"),
+                            "passed": candidate.get("verificationPassed", False)
+                        }
+                    },
+                    "createdAt": candidate.get("createdAt", negotiation.get("createdAt")),
+                    "sequence": 0
+                })
+
+        # 2. Content verification (after creator submits content)
+        agreement_id = negotiation.get("agreementId")
+        if agreement_id:
+            # Find evidence for this agreement
+            try:
+                all_evidence = repository.list_raw_documents(COLLECTIONS.evidence)
+                agreement_evidence = [
+                    e for e in all_evidence
+                    if e.get("agreementId") == agreement_id and e.get("contentVerificationReceipt")
+                ]
+
+                for evidence in agreement_evidence:
+                    receipt = evidence["contentVerificationReceipt"]
+                    result = receipt.get("verificationResult", {})
+
+                    # Create system message for content verification
+                    system_messages.append({
+                        "messageId": f"system-paysh-content-{evidence.get('evidenceId', 'unknown')}",
+                        "negotiationId": negotiation_id,
+                        "sender": "SYSTEM",
+                        "senderRole": "SYSTEM",
+                        "messageType": "VERIFICATION_EVENT",
+                        "content": {
+                            "event": "CONTENT_VERIFICATION",
+                            "provider": "pay.sh (Brandwatch API)",
+                            "cost_usdc": receipt.get("costUsdc", 0.50),
+                            "receipt_id": receipt.get("receiptId", "N/A"),
+                            "network": receipt.get("network", "SANDBOX"),
+                            "content_url": evidence.get("url"),
+                            "result": {
+                                "brand_mentioned": result.get("brand_mention_found"),
+                                "sentiment_score": result.get("sentiment_score"),
+                                "quality_score": result.get("quality_score"),
+                                "passed": evidence.get("status") == "PASSED"
+                            }
+                        },
+                        "createdAt": evidence.get("verifiedAt", evidence.get("createdAt")),
+                        "sequence": 0
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to fetch content verification messages: {e}")
+
+        # Insert all system messages
+        messages.extend(system_messages)
         messages.sort(key=lambda item: (str(item.get("createdAt", "")), item.get("sequence", 0)))
         return _ok({"messages": messages})
 
@@ -3094,7 +3184,7 @@ def build_api_router(
             repository,
             _require_document_str(evidence, "agreementId"),
         )
-        observations = _evidence_observations(
+        observations, content_receipt = _evidence_observations(
             evidence=evidence,
             agreement=agreement,
             payload=payload,
@@ -3123,6 +3213,8 @@ def build_api_router(
             "verifiedAt": _now(),
             "updatedAt": _now(),
         }
+        if content_receipt is not None:
+            verified["contentVerificationReceipt"] = content_receipt
         repository.save_raw_document(evidence_path, verified)
         verification_result = {
             "verificationResultId": f"verification-{evidence_id}",
@@ -7219,9 +7311,12 @@ def _evidence_observations(
     evidence: dict[str, object],
     agreement: dict[str, object],
     payload: EvidenceVerificationRequest | None,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], dict[str, object] | None]:
+    """
+    Returns (observations_dict, receipt_dict or None)
+    """
     if payload is not None and payload.observations is not None:
-        return payload.observations.model_dump(by_alias=True, mode="json")
+        return payload.observations.model_dump(by_alias=True, mode="json"), None
 
     terms = AgreementTerms.model_validate(agreement["terms"])
     url = _require_document_str(evidence, "url")
@@ -7268,12 +7363,23 @@ def _evidence_observations(
                 f"sentiment={sentiment_score:.2f}, quality={quality_score:.2f}"
             )
 
-            return EvidenceObservations(
+            observations = EvidenceObservations(
                 urlReachable=url_reachable,
                 brandMentioned=brand_mentioned,
                 disclosurePresent=disclosure_present,
                 prohibitedClaimsFound=prohibited_claims_found,
             ).model_dump(by_alias=True, mode="json")
+
+            # Store receipt for system message
+            receipt_dict = {
+                "receiptId": receipt.receipt_id,
+                "costUsdc": receipt.cost_usdc,
+                "network": receipt.network,
+                "provider": "brandwatch",
+                "verificationResult": result,
+            }
+
+            return observations, receipt_dict
 
         except PayShError as e:
             # If pay.sh verification fails, log and fall back to simple checks
@@ -7287,12 +7393,13 @@ def _evidence_observations(
         for claim in terms.constraints.prohibited_claims
         if claim.lower() in url_lower
     ]
-    return EvidenceObservations(
+    observations = EvidenceObservations(
         urlReachable="unreachable" not in url_lower,
         brandMentioned="missing-brand" not in url_lower,
         disclosurePresent="missing-disclosure" not in url_lower,
         prohibitedClaimsFound=prohibited_claims_found,
     ).model_dump(by_alias=True, mode="json")
+    return observations, None
 
 
 def _match_run_events(

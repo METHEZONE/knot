@@ -362,13 +362,21 @@ export async function confirmBrandFunding(
     throw new Error("Vault token account owner or mint failed validation");
   }
 
+  // Calculate required funding (totalAmount + fee) to match prepareBrandFunding
+  const feeBps = config.feeBps;
+  const feeTotal = milestoneAmounts.reduce(
+    (acc, amount) => acc + applyBps(amount, feeBps),
+    0n
+  );
+  const requiredFunding = totalAmount + feeTotal;
+
   const brandDelta = tokenDelta(tx, brandTokenAccount, mint);
   const vaultDelta = tokenDelta(tx, vaultTokenAccount, mint);
-  if (brandDelta !== -totalAmount) {
-    throw new Error("Brand token balance delta does not match Agreement amount");
+  if (brandDelta !== -requiredFunding) {
+    throw new Error("Brand token balance delta does not match Agreement amount plus fee");
   }
-  if (vaultDelta !== totalAmount) {
-    throw new Error("Vault token balance delta does not match Agreement amount");
+  if (vaultDelta !== requiredFunding) {
+    throw new Error("Vault token balance delta does not match Agreement amount plus fee");
   }
 
   return {

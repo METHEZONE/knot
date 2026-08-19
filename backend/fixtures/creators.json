@@ -57,6 +57,139 @@
     "active": true
   },
   {
+    "creatorId": "creator-004",
+    "creatorAgentId": "creator-agent-004",
+    "displayName": "현지의 뷰티로그",
+    "categories": ["beauty", "skincare"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "story", "post"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d", "paidBoost90d"],
+    "minDaysToPost": 3,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 6,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 25,
+    "rateCard": {
+      "minBaseUsdc": 800,
+      "maxBaseUsdc": 1200
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-005",
+    "creatorAgentId": "creator-agent-005",
+    "displayName": "서연의 스킨케어",
+    "categories": ["beauty", "skincare"],
+    "prohibitedIndustries": ["tobacco", "gambling", "alcohol"],
+    "supportedDeliverableFormats": ["reel", "story", "short"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 5,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 5,
+    "activeDeliverablesThisMonth": 1,
+    "completedDealCount": 15,
+    "rateCard": {
+      "minBaseUsdc": 600,
+      "maxBaseUsdc": 900
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-006",
+    "creatorAgentId": "creator-agent-006",
+    "displayName": "지우의 메이크업",
+    "categories": ["beauty", "makeup"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "short", "post"],
+    "allowedUsageRights": ["organicOnly"],
+    "minDaysToPost": 7,
+    "availableFrom": "2026-08-02",
+    "monthlyCapacity": 3,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 8,
+    "rateCard": {
+      "minBaseUsdc": 400,
+      "maxBaseUsdc": 700
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-007",
+    "creatorAgentId": "creator-agent-007",
+    "displayName": "유진의 라이프스타일",
+    "categories": ["lifestyle", "fashion"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "story", "post"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 5,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 5,
+    "activeDeliverablesThisMonth": 2,
+    "completedDealCount": 20,
+    "rateCard": {
+      "minBaseUsdc": 700,
+      "maxBaseUsdc": 1000
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-008",
+    "creatorAgentId": "creator-agent-008",
+    "displayName": "수빈의 피트니스",
+    "categories": ["fitness", "health"],
+    "prohibitedIndustries": ["tobacco", "gambling", "alcohol"],
+    "supportedDeliverableFormats": ["reel", "short"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+    "minDaysToPost": 4,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 4,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 12,
+    "rateCard": {
+      "minBaseUsdc": 550,
+      "maxBaseUsdc": 850
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-009",
+    "creatorAgentId": "creator-agent-009",
+    "displayName": "다현의 푸드로그",
+    "categories": ["food", "lifestyle"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "story", "review"],
+    "allowedUsageRights": ["organicOnly"],
+    "minDaysToPost": 6,
+    "availableFrom": "2026-08-03",
+    "monthlyCapacity": 6,
+    "activeDeliverablesThisMonth": 1,
+    "completedDealCount": 18,
+    "rateCard": {
+      "minBaseUsdc": 500,
+      "maxBaseUsdc": 800
+    },
+    "active": true
+  },
+  {
+    "creatorId": "creator-010",
+    "creatorAgentId": "creator-agent-010",
+    "displayName": "채원의 패션다이어리",
+    "categories": ["fashion", "lifestyle"],
+    "prohibitedIndustries": ["tobacco", "gambling"],
+    "supportedDeliverableFormats": ["reel", "post"],
+    "allowedUsageRights": ["organicOnly", "paidBoost30d", "paidBoost90d"],
+    "minDaysToPost": 3,
+    "availableFrom": "2026-08-01",
+    "monthlyCapacity": 5,
+    "activeDeliverablesThisMonth": 0,
+    "completedDealCount": 22,
+    "rateCard": {
+      "minBaseUsdc": 750,
+      "maxBaseUsdc": 1100
+    },
+    "active": true
+  },
+  {
     "creatorId": "creator-1",
     "creatorAgentId": "agent-creator-1",
     "ownerUid": "user-creator-1",
@@ -77,7 +210,7 @@
     },
     "primaryPlatform": "Instagram",
     "demoNamespace": "knot-demo-v1",
-    "active": false
+    "active": true
   },
   {
     "creatorId": "creator-2",
@@ -100,6 +233,6 @@
     },
     "primaryPlatform": "Instagram",
     "demoNamespace": "knot-demo-v1",
-    "active": false
+    "active": true
   }
 ]
