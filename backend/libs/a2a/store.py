@@ -56,8 +56,6 @@ class InMemoryA2ATaskStore:
     def register_context(self, tenant: str, context: CreatorNegotiationContext) -> None:
         if context.creator_agent_id != tenant:
             raise A2ATaskError("context tenant mismatch")
-        if tenant in self._context_by_tenant:
-            return
         self._context_by_tenant[tenant] = context
 
     def get_task(self, task_id: str) -> A2ATask:
@@ -143,16 +141,15 @@ class InMemoryA2ATaskStore:
         return task
 
     def _get_context(self, tenant: str) -> CreatorNegotiationContext:
+        if self._context_resolver is not None:
+            context = self._context_resolver(tenant)
+            if context is not None:
+                self._context_by_tenant[tenant] = context
+                return context
         try:
             return self._context_by_tenant[tenant]
         except KeyError as exc:
-            if self._context_resolver is None:
-                raise A2ATaskError("unknown tenant") from exc
-            context = self._context_resolver(tenant)
-            if context is None:
-                raise A2ATaskError("unknown tenant") from exc
-            self._context_by_tenant[tenant] = context
-            return context
+            raise A2ATaskError("unknown tenant") from exc
 
     def _display_rationale(
         self,

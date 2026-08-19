@@ -1177,6 +1177,51 @@ Updated: 2026-08-20 KST
 
 ### Scope Guard
 
-- Firestore was not reset or reseeded.
-- No deployment, wallet funding, Secret Manager change, Solana program change,
-  or on-chain transaction was performed.
+- After approval, Firestore was scoped-reset/reseeded with the final XEXYMIX
+  demo seed.
+- After approval, Web was deployed to Cloud Run.
+- No wallet funding, Secret Manager change, Solana program change, or on-chain
+  transaction was performed.
+
+### Web Deployment And Seed
+
+- Pushed main to `origin/main` through commit
+  `ee512e2 Improve demo negotiation flow and promotion copy`.
+- Built Web image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:ee512e2`.
+- Cloud Build ID:
+  `b7ee4596-498d-488c-af2a-1b23af1f5a06`, status `SUCCESS`.
+- Deployed Cloud Run Web revision `knot-web-00021-8cq`.
+- `knot-web-00021-8cq` is serving 100% traffic at
+  `https://knot-web-7k3walthgq-uc.a.run.app`.
+- Firestore seed command:
+  `ALLOW_DEVNET_DEMO_SEED=true PYTHONPATH=backend ./.venv/bin/python scripts/seed_xexymix_final_demo.py --target firestore --project knot-dev-503505 --reset-demo --confirm=SEED_KNOT_XEXYMIX_FINAL_DEMO`.
+- Seed result: 155 documents, 30 creator discovery profiles,
+  `promotion-xexymix-devnet`, contract amount `2 devnet USDC`, pay.sh sandbox
+  verification quote `0.02 USDC`.
+- Deployed API verification still produced an immediate `OFFER 1 → ACCEPT 1`
+  flow. Root cause: Creator Agent cached an existing tenant policy and ignored
+  fresher embedded A2A negotiation context for the same tenant.
+
+## 2026-08-20 Creator Agent Policy Cache Refresh
+
+### Changed
+
+- Updated `InMemoryA2ATaskStore.register_context` so embedded A2A
+  `creatorNegotiationContext` replaces a previously cached tenant context.
+- Updated `_get_context` so a configured context resolver, such as the
+  Firestore resolver used by the deployed Creator Agent, refreshes an existing
+  tenant cache entry when it can resolve a current policy.
+- Added regression tests proving that a stale `agent-creator-devnet-phantom`
+  policy cache no longer causes a `1 USDC` immediate accept when the fresh
+  context requires `2 USDC`.
+
+### Verification
+
+- `./.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`:
+  17 passed.
+
+### Scope Guard
+
+- No wallet funding, Secret Manager change, Solana program change, or on-chain
+  transaction was performed.

@@ -142,6 +142,73 @@ def test_creator_agent_accepts_embedded_dynamic_context_metadata() -> None:
     assert data["terms"]["compensation"]["baseAmountUsdc"] == 650
 
 
+def test_creator_agent_embedded_context_refreshes_existing_policy_cache() -> None:
+    cached_context = demo_creator_contexts()["creator-agent-001"].model_copy(
+        update={"creator_agent_id": "agent-creator-devnet-phantom"}
+    )
+    fresh_context = cached_context.model_copy(
+        update={
+            "policy": cached_context.policy.model_copy(update={"min_base_usdc": 2}),
+        }
+    )
+    client = TestClient(
+        create_app(
+            task_store=InMemoryA2ATaskStore(
+                {"agent-creator-devnet-phantom": cached_context}
+            )
+        )
+    )
+    payload = a2a_request(
+        tenant="agent-creator-devnet-phantom",
+        base_amount_usdc=1,
+    )
+    payload["metadata"] = {
+        "creatorNegotiationContext": fresh_context.model_dump(
+            by_alias=True,
+            mode="json",
+        )
+    }
+
+    response = client.post("/a2a/v1/message:send", json=payload, headers=headers())
+
+    assert response.status_code == 200
+    data = response.json()["task"]["status"]["message"]["parts"][0]["data"]
+    assert data["type"] == "COUNTER"
+    assert data["terms"]["compensation"]["baseAmountUsdc"] == 2
+
+
+def test_task_store_resolver_refreshes_existing_policy_cache() -> None:
+    cached_context = demo_creator_contexts()["creator-agent-001"].model_copy(
+        update={"creator_agent_id": "agent-creator-devnet-phantom"}
+    )
+    fresh_context = cached_context.model_copy(
+        update={
+            "policy": cached_context.policy.model_copy(update={"min_base_usdc": 2}),
+        }
+    )
+    task_store = InMemoryA2ATaskStore(
+        {"agent-creator-devnet-phantom": cached_context},
+        context_resolver=lambda tenant: (
+            fresh_context if tenant == "agent-creator-devnet-phantom" else None
+        ),
+    )
+    client = TestClient(create_app(task_store=task_store))
+
+    response = client.post(
+        "/a2a/v1/message:send",
+        json=a2a_request(
+            tenant="agent-creator-devnet-phantom",
+            base_amount_usdc=1,
+        ),
+        headers=headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["task"]["status"]["message"]["parts"][0]["data"]
+    assert data["type"] == "COUNTER"
+    assert data["terms"]["compensation"]["baseAmountUsdc"] == 2
+
+
 def test_creator_agent_can_use_non_authoritative_rationale_provider() -> None:
     class GeneratedRationale:
         text = "정책 검사를 통과한 조건이라 Creator Agent가 수락했습니다."

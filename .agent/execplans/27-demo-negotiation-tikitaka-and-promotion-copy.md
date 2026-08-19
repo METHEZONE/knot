@@ -37,6 +37,11 @@ users.
    sentence-like lines.
 8. [x] Run targeted backend tests, frontend typecheck/lint/tests, frontend
    build, and memory seed dry-run.
+9. [x] Deploy Web and reseed Firestore after approval.
+10. [x] Verify deployed Agent run and identify stale Creator Agent policy cache
+    as the reason the first deployed verification still accepted `1 USDC`.
+11. [x] Fix Creator Agent policy context refresh for embedded A2A metadata and
+    Firestore resolver contexts.
 
 ## Verification
 
@@ -48,8 +53,18 @@ users.
   2 passed.
 - `PYTHONPATH=backend ./.venv/bin/python scripts/seed_xexymix_final_demo.py --target memory --reset-demo`:
   passed, generated 155 documents and contract amount `2 devnet USDC`.
+- `ALLOW_DEVNET_DEMO_SEED=true PYTHONPATH=backend ./.venv/bin/python scripts/seed_xexymix_final_demo.py --target firestore --project knot-dev-503505 --reset-demo --confirm=SEED_KNOT_XEXYMIX_FINAL_DEMO`:
+  passed, generated 155 documents and 30 creator discovery profiles.
+- Web deployed from `ee512e2` to Cloud Run revision `knot-web-00021-8cq`.
+- Initial deployed verification found the remaining issue:
+  `OFFER 1 → ACCEPT 1`, caused by stale Creator Agent policy cache.
+- `./.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`:
+  17 passed after the cache refresh fix.
 
-## Pending Approval
+## Pending
 
-- Firestore reset/reseed is still pending explicit approval.
-- Web deployment is still pending explicit approval.
+- Deploy the Creator Agent cache refresh fix.
+- Reseed Firestore again if a clean final demo state is needed after
+  verification runs.
+- Re-run deployed Agent-run verification and confirm
+  `OFFER 1 → COUNTER 2 → ACCEPT → ACCEPT`.
