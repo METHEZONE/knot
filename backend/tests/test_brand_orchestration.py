@@ -23,7 +23,7 @@ def test_brand_agent_selects_top_eligible_creator() -> None:
     )
 
     assert selected is not None
-    assert selected.creator_agent_id == "creator-agent-003"
+    assert selected.creator_agent_id == "agent-creator-1"
 
 
 def test_brand_agent_builds_initial_terms_from_promotion_contract() -> None:

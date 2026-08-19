@@ -51,6 +51,27 @@ def client_and_repository_with_seed(
     return TestClient(create_app(settings=settings, repository=repository)), repository
 
 
+def set_creator_min_base(
+    repository: KnotRepository,
+    agent_id: str,
+    min_base_usdc: int,
+) -> None:
+    policy = repository.get_raw_document(FirestorePaths.agent_policy(agent_id))
+    assert policy is not None
+    creator_policy = policy["creator"]
+    assert isinstance(creator_policy, dict)
+    repository.save_raw_document(
+        FirestorePaths.agent_policy(agent_id),
+        {
+            **policy,
+            "creator": {
+                **creator_policy,
+                "minBaseUsdc": min_base_usdc,
+            },
+        },
+    )
+
+
 def accepted_agreement(client: TestClient) -> dict[str, object]:
     match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
         "matchRun"
@@ -148,14 +169,14 @@ def test_run_match_persists_run_candidates_and_timeline_event() -> None:
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["status"] == "COMPLETED"
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
+    assert match_run["selectedCreatorAgentId"] == "agent-creator-1"
 
     candidates_response = client.get(f"/api/v1/match-runs/{match_run['matchRunId']}/candidates")
     assert candidates_response.status_code == 200
     candidates = candidates_response.json()["data"]["candidates"]
-    assert candidates[0]["creatorAgentId"] == "creator-agent-001"
-    assert candidates[0]["creatorId"] == "creator-001"
-    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-001"
+    assert candidates[0]["creatorAgentId"] == "agent-creator-1"
+    assert candidates[0]["creatorId"] == "creator-1"
+    assert candidates[0]["creatorProfilePath"] == "creatorProfiles/creator-1"
     assert candidates[0]["rank"] == 1
     assert candidates[0]["eligible"] is True
     assert candidates[0]["analysisProvider"] == "deterministic"
@@ -179,9 +200,9 @@ def test_run_match_uses_indexed_discovery_without_creator_profile_scan() -> None
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
     assert match_run["discoveryLimit"] == 100
-    assert match_run["discoveryReturnedCount"] == 2
+    assert match_run["discoveryReturnedCount"] == 6
     assert match_run["detailReadLimit"] == 20
-    assert match_run["detailReadCount"] == 2
+    assert match_run["detailReadCount"] == 6
 
 
 def test_run_match_uses_any_supported_format_not_only_primary_format() -> None:
@@ -212,7 +233,7 @@ def test_run_match_uses_any_supported_format_not_only_primary_format() -> None:
 
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
+    assert match_run["selectedCreatorAgentId"] == "agent-creator-1"
     assert match_run["discoveryReturnedCount"] >= 1
 
 
@@ -355,7 +376,7 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     timeline = client.get("/api/v1/promotions/promotion-001/timeline").json()["data"]["events"]
     api_payment = next(event for event in timeline if event["type"] == "API_PAYMENT")
     assert api_payment["data"]["externalReceiptId"] == "receipt-pay-001"
-    assert api_payment["data"]["selectedCreatorAgentId"] == "creator-agent-001"
+    assert api_payment["data"]["selectedCreatorAgentId"] == "agent-creator-1"
     operations = repository.list_raw_documents(COLLECTIONS.payment_operations)
     receipts = repository.list_raw_documents(COLLECTIONS.transaction_receipts)
     assert len(operations) == 1
@@ -504,7 +525,7 @@ def test_run_match_normalizes_korean_category_aliases() -> None:
 
     assert run_response.status_code == 201
     match_run = run_response.json()["data"]["matchRun"]
-    assert match_run["selectedCreatorAgentId"] == "creator-agent-001"
+    assert match_run["selectedCreatorAgentId"] == "agent-creator-1"
     start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
     assert start_response.status_code == 201
     assert start_response.json()["data"]["negotiation"]["status"] == "AGREED"
@@ -643,8 +664,8 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
     agreement = body["agreement"]
     assert negotiation["status"] == "AGREED"
     assert negotiation["matchRunId"] == match_run["matchRunId"]
-    assert negotiation["matchCandidateId"] == "creator-001"
-    assert negotiation["creatorAgentId"] == "creator-agent-001"
+    assert negotiation["matchCandidateId"] == "creator-1"
+    assert negotiation["creatorAgentId"] == "agent-creator-1"
     assert agreement["status"] == "FUNDING_REQUIRED"
     assert agreement["artifactId"].startswith("artifact-")
     assert agreement["termsHash"].startswith("sha256:")
@@ -660,8 +681,8 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
         "targetAudience": None,
         "description": None,
     }
-    assert agreement["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
-    assert agreement["creatorSnapshot"]["completedDealCount"] == 12
+    assert agreement["creatorSnapshot"]["displayName"] == "민지의 뷰티룸"
+    assert agreement["creatorSnapshot"]["completedDealCount"] == 18
     assert agreement["promotionSnapshot"]["productName"] == "Summer skincare launch"
     # 계약금 20% + 잔금 80% 2분할 (docs/17 D3·N1)
     assert agreement["terms"]["milestones"] == [
@@ -717,6 +738,7 @@ def test_start_negotiation_persists_messages_events_and_agreement() -> None:
 
 def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
     client, repository = client_and_repository_with_seed()
+    set_creator_min_base(repository, "agent-creator-1", 650)
     promotion_path = FirestorePaths.promotion("promotion-001")
     promotion = repository.get_raw_document(promotion_path)
     assert promotion is not None
@@ -822,7 +844,7 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
                             "url": "http://creator-agent.test/a2a/v1",
                             "protocolBinding": "HTTP+JSON",
                             "protocolVersion": "1.0",
-                                "tenant": "creator-agent-001",
+                            "tenant": "agent-creator-1",
                         }
                     ],
                 }
@@ -921,16 +943,16 @@ def test_start_negotiation_uses_creator_a2a_http_when_configured(monkeypatch) ->
         "Content-Type": "application/a2a+json",
     }
     assert captured["timeout"] == 60
-    assert captured["request"]["tenant"] == "creator-agent-001"  # type: ignore[index]
+    assert captured["request"]["tenant"] == "agent-creator-1"  # type: ignore[index]
     metadata = captured["request"]["metadata"]  # type: ignore[index]
-    assert metadata["creatorNegotiationContext"]["creatorAgentId"] == "creator-agent-001"  # type: ignore[index]
+    assert metadata["creatorNegotiationContext"]["creatorAgentId"] == "agent-creator-1"  # type: ignore[index]
     assert body["negotiation"]["taskId"] == "task-http-001"
     assert body["negotiation"]["brandDisplayName"] == "Demo Skincare Brand"
-    assert body["negotiation"]["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
+    assert body["negotiation"]["creatorSnapshot"]["displayName"] == "민지의 뷰티룸"
     assert body["negotiation"]["creatorPolicySnapshot"] == {"redacted": True}
     assert body["agreement"]["agreementId"] == "agreement-http-001"
     assert body["agreement"]["brandSnapshot"]["displayName"] == "Demo Skincare Brand"
-    assert body["agreement"]["creatorSnapshot"]["displayName"] == "Demo Beauty Creator"
+    assert body["agreement"]["creatorSnapshot"]["displayName"] == "민지의 뷰티룸"
     messages = client.get(
         f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
     ).json()["data"]["messages"]
@@ -1011,7 +1033,7 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
                             "url": "http://creator-agent.test/a2a/v1",
                             "protocolBinding": "HTTP+JSON",
                             "protocolVersion": "1.0",
-                            "tenant": "creator-agent-001",
+                            "tenant": "agent-creator-1",
                         }
                     ],
                     "skills": [{"id": "promotion-negotiation"}],
@@ -1035,7 +1057,7 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
             compensation["baseAmountUsdc"] = 650
             terms["compensation"] = compensation
 
-            if CounterHttpClient.post_count == 2:
+            if CounterHttpClient.post_count == 3:
                 assert message["taskId"] == "task-http-counter"
                 assert message["contextId"]
                 assert data["type"] == "ACCEPT"
@@ -1043,7 +1065,7 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
                 decision = {
                     "schema": "knot.negotiation.v1",
                     "type": "ACCEPT",
-                    "round": 2,
+                    "round": 3,
                     "terms": terms,
                     "changedFields": ["compensation.baseAmountUsdc"],
                     "rationale": "Creator accepted Brand policy-approved counter.",
@@ -1097,7 +1119,7 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
             decision = {
                 "schema": "knot.negotiation.v1",
                 "type": "COUNTER",
-                "round": 1,
+                "round": data["round"],
                 "terms": terms,
                 "changedFields": ["compensation.baseAmountUsdc"],
                 "rationale": "Counter through Creator A2A HTTP.",
@@ -1114,7 +1136,7 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
                 },
             }
             response_message = {
-                "messageId": "message-http-agent-counter",
+                "messageId": f"message-http-agent-counter-{CounterHttpClient.post_count}",
                 "contextId": message["contextId"],
                 "taskId": "task-http-counter",
                 "role": "ROLE_AGENT",
@@ -1148,13 +1170,15 @@ def test_start_negotiation_counter_a2a_task_continues_with_brand_accept(monkeypa
     assert response.status_code == 201, response.text
     body = response.json()["data"]
     assert body["negotiation"]["status"] == "AGREED"
-    assert body["negotiation"]["currentRound"] == 2
+    assert body["negotiation"]["currentRound"] == 3
     assert body["agreement"]["agreementId"] == "agreement-http-counter"
     assert len(repository.list_raw_documents(COLLECTIONS.agreements)) == 1
     messages = client.get(
         f"/api/v1/negotiations/{body['negotiation']['negotiationId']}/messages"
     ).json()["data"]["messages"]
     assert [message["role"] for message in messages] == [
+        "ROLE_USER",
+        "ROLE_AGENT",
         "ROLE_USER",
         "ROLE_AGENT",
         "ROLE_USER",

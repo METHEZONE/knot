@@ -1,6 +1,48 @@
 # Implementation Status
 
-Updated: 2026-08-19
+Updated: 2026-08-20 KST
+
+## Final Hackathon QA Smoke (2026-08-20 KST)
+
+### Verification
+
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/libs/settings/config.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py backend/tests/test_brand_orchestration.py backend/tests/test_creator_discovery.py backend/tests/test_firestore_repositories.py scripts/seed_devnet_phantom_demo.py scripts/seed_xexymix_demo.py scripts/seed_demo.py`: passed.
+- `./.venv/bin/pytest backend/tests -q`: 165 passed, 7 skipped.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix web3/gateway run build`: passed.
+- `npm --prefix web3/gateway run lint`: passed.
+- `npm --prefix web3/gateway test`: 14 passed, 1 failed in this sandbox because the route test needs a local `127.0.0.1` listener and the sandbox returns `listen EPERM`.
+- Fixture JSON validation passed for users, brands, creators, extended creators, agents, extended agents, agent policies, promotions, agreements, escrows, settlements, negotiations, and matching golden data.
+- Memory demo seeds passed:
+  - `./.venv/bin/python scripts/seed_demo.py --target memory`
+  - `./.venv/bin/python scripts/seed_devnet_phantom_demo.py --target memory`
+  - `./.venv/bin/python scripts/seed_xexymix_demo.py --target memory`
+- Cloud Run listed all services as `RoutesReady=True`: `knot-web`, `knot-api`, `knot-web3`, `knot-creator-agent`.
+- Live HTTPS smoke returned 200 for:
+  - `https://knot-web-7k3walthgq-uc.a.run.app/login`
+  - `https://knot-api-7k3walthgq-uc.a.run.app/readyz`
+  - `https://knot-web3-7k3walthgq-uc.a.run.app/readyz`
+  - `https://knot-creator-agent-7k3walthgq-uc.a.run.app/readyz`
+- Live deployed web routes returned 200 for the Brand/Creator demo route set, including promotion, negotiation, agreement, offers, criteria, and settlements pages.
+- Firebase Auth sign-in succeeded for:
+  - `t1@knot.com / 000000`: Brand, completed onboarding, devnet wallet present.
+  - `c1@knot.com / 000000`: Creator, completed onboarding, devnet wallet present.
+- Live deployed web proxy API smoke passed for `/api/v1/me`, Brand dashboard/promotions/agreements, Creator dashboard/offers/agreements/agent, negotiation messages, match candidates, agreement escrow.
+- Firestore contains required demo/test documents for devnet and XEXYMIX flows: users, brand, Creator profile, Brand/Creator agents, Creator policy, discovery projection, promotions, match runs, candidates, negotiations, messages, agreements, milestones, escrows, evidence, and settlements.
+- Solana devnet RPC confirmed the completed demo signatures:
+  - funding `3ePDmJdJXr4mdgkHxpbP67SkZZVC24GiEjMM5Brmqug3F6JUKGhu9vXM6911jQtfVWJ9QD1L4ZWQyGvkkXd5fVLa`: finalized, `err=None`.
+  - release `5GCmf7tRixGgV7ZS1zuJQ7AeNQ7G4QsPCai5jDQXDWyxwY6uVJESJwFvcNx3fKr9yAZAHy7pQB41osRx1ajLnnJf`: finalized, `err=None`.
+- Tracked-file secret pattern scan found only the literal scan command documented in `.agent/execplans/11-final-qa-deployment-lock.md`.
+
+### Demo Notes
+
+- Use `agreement-devnet-1usdc` when showing the full funding/evidence/release proof sequence; it has timeline events for `ESCROW_FUNDED`, `EVIDENCE_SUBMITTED`, `EVIDENCE_VERIFIED`, and `MILESTONE_RELEASED`.
+- Use `promotion-xexymix-devnet` / `negotiation-xexymix-devnet` when showing the branded XEXYMIX A2A story; it has OFFER -> COUNTER -> ACCEPT messages and a funding prepare path, but no promotion timeline events yet.
+- The live `agreement-devnet-1usdc` Agreement document still reports `status=FUNDING_REQUIRED` while its escrow is `RELEASED`; explain money state from the escrow/settlement panel, not the Agreement status badge, until the projection is reconciled.
+- Current demo data mixes devnet program IDs: completed escrow proof uses `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn`, while current code/deploy defaults prepare new escrows with `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`. Both accounts exist and are executable on devnet, but the final script should present one canonical program ID.
 
 ## Mentoring Feedback Integration (2026-08-19)
 

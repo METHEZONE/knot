@@ -3,25 +3,74 @@
   "weightsVersion": "matching-v1",
   "expectedOrder": [
     {
+      "creatorAgentId": "agent-creator-1",
+      "eligible": true,
+      "score": 0.943125,
+      "rank": 1,
+      "hardFilterReasons": []
+    },
+    {
+      "creatorAgentId": "creator-agent-005",
+      "eligible": true,
+      "score": 0.88125,
+      "rank": 2,
+      "hardFilterReasons": []
+    },
+    {
+      "creatorAgentId": "creator-agent-004",
+      "eligible": true,
+      "score": 0.875,
+      "rank": 3,
+      "hardFilterReasons": []
+    },
+    {
       "creatorAgentId": "creator-agent-003",
       "eligible": true,
       "score": 0.8625,
-      "rank": 1,
+      "rank": 4,
       "hardFilterReasons": []
     },
     {
       "creatorAgentId": "creator-agent-001",
       "eligible": true,
       "score": 0.858437,
-      "rank": 2,
+      "rank": 5,
       "hardFilterReasons": []
     },
     {
-      "creatorAgentId": "agent-creator-1",
+      "creatorAgentId": "creator-agent-010",
       "eligible": false,
       "score": 0.0,
       "rank": null,
-      "hardFilterReasons": ["CREATOR_INACTIVE"]
+      "hardFilterReasons": ["CATEGORY_MISMATCH"]
+    },
+    {
+      "creatorAgentId": "creator-agent-007",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["CATEGORY_MISMATCH"]
+    },
+    {
+      "creatorAgentId": "creator-agent-009",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["CATEGORY_MISMATCH", "USAGE_RIGHTS_UNSUPPORTED"]
+    },
+    {
+      "creatorAgentId": "creator-agent-008",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["CATEGORY_MISMATCH"]
+    },
+    {
+      "creatorAgentId": "creator-agent-006",
+      "eligible": false,
+      "score": 0.0,
+      "rank": null,
+      "hardFilterReasons": ["USAGE_RIGHTS_UNSUPPORTED"]
     },
     {
       "creatorAgentId": "creator-agent-002",
@@ -35,11 +84,7 @@
       "eligible": false,
       "score": 0.0,
       "rank": null,
-      "hardFilterReasons": [
-        "CREATOR_INACTIVE",
-        "CATEGORY_MISMATCH",
-        "USAGE_RIGHTS_UNSUPPORTED"
-      ]
+      "hardFilterReasons": ["CATEGORY_MISMATCH", "USAGE_RIGHTS_UNSUPPORTED"]
     }
   ]
 }

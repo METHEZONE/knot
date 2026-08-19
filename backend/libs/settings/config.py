@@ -64,7 +64,7 @@ class Settings(BaseModel):
     paysh_creator_verification_max_price: float = 0.10
     paysh_creator_verification_bot_threshold: float = 0.25
     # Content verification via pay.sh
-    paysh_content_verification_enabled: bool = True
+    paysh_content_verification_enabled: bool = False
     paysh_content_verification_max_price: float = 0.50
     escrow_network: str = "solanaDevnet"
     escrow_program_id: str = DEFAULT_ESCROW_PROGRAM_ID
@@ -77,9 +77,9 @@ class Settings(BaseModel):
     # 실패해도 수동 Phantom 릴리즈 경로가 fallback으로 남는다.
     auto_settlement_on_evidence: bool = True
     # Amount-based automation thresholds (멘토링 피드백 반영)
-    automation_full_auto_threshold_usdc: float = 100.0  # < 100 USDC: 완전 자동
-    automation_human_review_threshold_usdc: float = 500.0  # < 500 USDC: 검토 필요
-    # >= 500 USDC: 사람 서명 필요
+    automation_full_auto_threshold_usdc: float = 500.0  # < 500 USDC: 완전 자동
+    automation_human_review_threshold_usdc: float = 1000.0  # < 1000 USDC: 검토 필요
+    # >= 1000 USDC: 사람 서명 필요
     dev_admin_enabled: bool = False
     dev_admin_allowlist: list[str] = []
 
@@ -135,7 +135,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         paysh_creator_verification_bot_threshold=float(
             os.getenv("PAYSH_CREATOR_VERIFICATION_BOT_THRESHOLD", "0.25")
         ),
-        paysh_content_verification_enabled=_truthy_default_true(
+        paysh_content_verification_enabled=_truthy(
             os.getenv("PAYSH_CONTENT_VERIFICATION_ENABLED")
         ),
         paysh_content_verification_max_price=float(
@@ -150,10 +150,10 @@ def get_settings(service_name: str | None = None) -> Settings:
             os.getenv("KNOT_AUTO_SETTLEMENT_ON_EVIDENCE")
         ),
         automation_full_auto_threshold_usdc=float(
-            os.getenv("AUTOMATION_FULL_AUTO_THRESHOLD_USDC", "100.0")
+            os.getenv("AUTOMATION_FULL_AUTO_THRESHOLD_USDC", "500.0")
         ),
         automation_human_review_threshold_usdc=float(
-            os.getenv("AUTOMATION_HUMAN_REVIEW_THRESHOLD_USDC", "500.0")
+            os.getenv("AUTOMATION_HUMAN_REVIEW_THRESHOLD_USDC", "1000.0")
         ),
         dev_admin_enabled=_truthy(os.getenv("KNOT_DEV_ADMIN_ENABLED")),
         dev_admin_allowlist=_csv(os.getenv("KNOT_DEV_ADMIN_ALLOWLIST")),

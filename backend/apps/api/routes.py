@@ -90,8 +90,6 @@ from libs.domain.models import (
     AgreementTerms,
     AutomationLevel,
     CreatorProfile,
-    Dispute,
-    DisputeReason,
     DisputeStatus,
     Promotion,
     RateCard,
@@ -2731,29 +2729,32 @@ def build_api_router(
                     result = receipt.get("verificationResult", {})
 
                     # Create system message for content verification
-                    system_messages.append({
-                        "messageId": f"system-paysh-content-{evidence.get('evidenceId', 'unknown')}",
-                        "negotiationId": negotiation_id,
-                        "sender": "SYSTEM",
-                        "senderRole": "SYSTEM",
-                        "messageType": "VERIFICATION_EVENT",
-                        "content": {
-                            "event": "CONTENT_VERIFICATION",
-                            "provider": "pay.sh (Brandwatch API)",
-                            "cost_usdc": receipt.get("costUsdc", 0.50),
-                            "receipt_id": receipt.get("receiptId", "N/A"),
-                            "network": receipt.get("network", "SANDBOX"),
-                            "content_url": evidence.get("url"),
-                            "result": {
-                                "brand_mentioned": result.get("brand_mention_found"),
-                                "sentiment_score": result.get("sentiment_score"),
-                                "quality_score": result.get("quality_score"),
-                                "passed": evidence.get("status") == "PASSED"
-                            }
-                        },
-                        "createdAt": evidence.get("verifiedAt", evidence.get("createdAt")),
-                        "sequence": 0
-                    })
+                    evidence_id = evidence.get("evidenceId", "unknown")
+                    system_messages.append(
+                        {
+                            "messageId": f"system-paysh-content-{evidence_id}",
+                            "negotiationId": negotiation_id,
+                            "sender": "SYSTEM",
+                            "senderRole": "SYSTEM",
+                            "messageType": "VERIFICATION_EVENT",
+                            "content": {
+                                "event": "CONTENT_VERIFICATION",
+                                "provider": "pay.sh (Brandwatch API)",
+                                "cost_usdc": receipt.get("costUsdc", 0.50),
+                                "receipt_id": receipt.get("receiptId", "N/A"),
+                                "network": receipt.get("network", "SANDBOX"),
+                                "content_url": evidence.get("url"),
+                                "result": {
+                                    "brand_mentioned": result.get("brand_mention_found"),
+                                    "sentiment_score": result.get("sentiment_score"),
+                                    "quality_score": result.get("quality_score"),
+                                    "passed": evidence.get("status") == "PASSED",
+                                },
+                            },
+                            "createdAt": evidence.get("verifiedAt", evidence.get("createdAt")),
+                            "sequence": 0,
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to fetch content verification messages: {e}")
 
@@ -3185,6 +3186,7 @@ def build_api_router(
             _require_document_str(evidence, "agreementId"),
         )
         observations, content_receipt = _evidence_observations(
+            settings=settings,
             evidence=evidence,
             agreement=agreement,
             payload=payload,
@@ -3657,7 +3659,7 @@ Respond in JSON format:
         Check all active timelocks and auto-release expired ones with no disputes
         Called periodically by scheduler or manually by admin
         """
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
 
         now_utc = datetime.now(UTC)
         released_count = 0
@@ -3767,7 +3769,7 @@ Respond in JSON format:
                     )
 
                     # Perform milestone release
-                    result = _perform_milestone_release(
+                    _perform_milestone_release(
                         escrow=escrow,
                         escrow_id=escrow_id,
                         milestone_id=milestone_id,
@@ -7308,6 +7310,7 @@ def _match_candidate_by_agent_id(
 
 def _evidence_observations(
     *,
+    settings: Settings,
     evidence: dict[str, object],
     agreement: dict[str, object],
     payload: EvidenceVerificationRequest | None,
@@ -7356,7 +7359,7 @@ def _evidence_observations(
             # Determine if content quality is acceptable
             # Quality and sentiment must meet thresholds
             url_reachable = quality_score > 0.3  # If we got a quality score, URL was reachable
-            disclosure_present = sentiment_score > 0.0  # Positive sentiment suggests proper disclosure
+            disclosure_present = sentiment_score > 0.0
 
             logger.info(
                 f"Content verification result: brand_mentioned={brand_mentioned}, "
@@ -7372,10 +7375,11 @@ def _evidence_observations(
 
             # Store receipt for system message
             receipt_dict = {
-                "receiptId": receipt.receipt_id,
+                "receiptId": f"receipt-content-{_require_document_str(evidence, 'evidenceId')}",
+                "externalReceiptId": receipt.transaction_id,
                 "costUsdc": receipt.cost_usdc,
-                "network": receipt.network,
-                "provider": "brandwatch",
+                "network": f"pay.sh:{settings.paysh_mode}",
+                "provider": receipt.provider,
                 "verificationResult": result,
             }
 
@@ -8054,16 +8058,21 @@ def _set_timelock_for_next_milestone(
         # No content milestone defined, skip
         return
 
+    if isinstance(released_at, str):
+        released_at_dt = datetime.fromisoformat(released_at.replace("Z", "+00:00"))
+    else:
+        released_at_dt = released_at
+
     # Set timelock expiry to 72 hours from deposit release
-    timelock_expires_at = released_at + timedelta(hours=72)
+    timelock_expires_at = released_at_dt + timedelta(hours=72)
 
     # Update content milestone with timelock fields
     updated_content_milestone = {
         **content_milestone,
-        "timelockStartedAt": released_at.isoformat(),
+        "timelockStartedAt": released_at_dt.isoformat(),
         "timelockExpiresAt": timelock_expires_at.isoformat(),
         "status": "TIMELOCK_ACTIVE",
-        "updatedAt": _now().isoformat(),
+        "updatedAt": _now(),
     }
 
     repository.save_raw_document(
@@ -8072,7 +8081,7 @@ def _set_timelock_for_next_milestone(
     )
 
     logger.info(
-        f"Timelock set for milestone {timelock_milestone_id}, "
+        f"Timelock set for milestone {CONTENT_MILESTONE_ID}, "
         f"expires at {timelock_expires_at.isoformat()}"
     )
 

@@ -10,6 +10,7 @@ from apps.api.main import create_app as create_api_app
 from apps.creator_agent.main import create_app as create_creator_app
 from libs.a2a.store import InMemoryA2ATaskStore
 from libs.agents.demo_context import demo_creator_contexts
+from libs.repositories.firestore_paths import FirestorePaths
 from libs.repositories.seed import seed_demo_repository
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
@@ -51,6 +52,20 @@ def test_product_api_runs_real_http_a2a_counter_accept_golden_path() -> None:
         store = InMemoryDocumentStore()
         repository = KnotRepository(store)
         seed_demo_repository(repository)
+        policy = repository.get_raw_document(FirestorePaths.agent_policy("agent-creator-1"))
+        assert policy is not None
+        creator_policy = policy["creator"]
+        assert isinstance(creator_policy, dict)
+        repository.save_raw_document(
+            FirestorePaths.agent_policy("agent-creator-1"),
+            {
+                **policy,
+                "creator": {
+                    **creator_policy,
+                    "minBaseUsdc": 750,
+                },
+            },
+        )
         api_client = TestClient(
             create_api_app(
                 settings=Settings(

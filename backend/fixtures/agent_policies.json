@@ -45,6 +45,111 @@
     "active": true
   },
   {
+    "agentId": "creator-agent-004",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 800,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 6,
+      "minDaysToPost": 3,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d", "fullLicense90d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-005",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 600,
+      "blockedIndustries": ["tobacco", "gambling", "alcohol"],
+      "maxDeliverablesPerMonth": 5,
+      "minDaysToPost": 5,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-006",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 400,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 3,
+      "minDaysToPost": 7,
+      "allowedUsageRights": ["organicOnly"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-007",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 700,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 5,
+      "minDaysToPost": 5,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-008",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 550,
+      "blockedIndustries": ["tobacco", "gambling", "alcohol"],
+      "maxDeliverablesPerMonth": 4,
+      "minDaysToPost": 4,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-009",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 500,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 6,
+      "minDaysToPost": 6,
+      "allowedUsageRights": ["organicOnly"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
+    "agentId": "creator-agent-010",
+    "policyVersion": 1,
+    "agentType": "CREATOR",
+    "creator": {
+      "minBaseUsdc": 750,
+      "blockedIndustries": ["tobacco", "gambling"],
+      "maxDeliverablesPerMonth": 5,
+      "minDaysToPost": 3,
+      "allowedUsageRights": ["organicOnly", "paidBoost30d", "fullLicense90d"],
+      "maxRevisionRounds": 1,
+      "maxExclusivityDays": 0
+    },
+    "active": true
+  },
+  {
     "agentId": "agent-creator-1",
     "policyVersion": 1,
     "agentType": "CREATOR",

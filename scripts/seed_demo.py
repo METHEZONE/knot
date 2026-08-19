@@ -3,16 +3,16 @@ import os
 import sys
 from pathlib import Path
 
-# ruff: noqa: E402,I001
+# ruff: noqa: I001
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from libs.repositories.firestore_adapter import FirestoreDocumentStore  # noqa: E402
-from libs.repositories.firestore_paths import COLLECTIONS  # noqa: E402
-from libs.repositories.seed import seed_demo_repository  # noqa: E402
-from libs.repositories.store import InMemoryDocumentStore, KnotRepository  # noqa: E402
+from libs.repositories.firestore_adapter import FirestoreDocumentStore
+from libs.repositories.firestore_paths import COLLECTIONS
+from libs.repositories.seed import seed_demo_repository
+from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 
 
 DEMO_AUTH_USERS = [

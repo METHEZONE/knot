@@ -36,15 +36,25 @@ def test_creator_discovery_backfill_is_dry_run_then_idempotent_write() -> None:
             "maxActiveCollaborations": 1,
         },
     )
+    projection_path = FirestorePaths.creator_discovery_profile("creator-001")
+    existing_projection = repository.get_raw_document(projection_path)
+    assert existing_projection is not None
+    repository.save_raw_document(
+        projection_path,
+        {
+            **existing_projection,
+            "agentStatus": "DRAFT",
+        },
+    )
 
     dry_run = backfill_module.backfill_creator_discovery_profiles(
         repository,
         updated_at="2026-07-31T00:00:00+00:00",
     )
-    assert dry_run == {"scanned": 5, "changed": 2, "missingAgents": 0}
+    assert dry_run == {"scanned": 12, "changed": 1, "missingAgents": 0}
     assert (
         repository.get_raw_document(FirestorePaths.creator_discovery_profile("creator-1"))
-        is None
+        is not None
     )
 
     written = backfill_module.backfill_creator_discovery_profiles(
@@ -52,7 +62,7 @@ def test_creator_discovery_backfill_is_dry_run_then_idempotent_write() -> None:
         write=True,
         updated_at="2026-07-31T00:00:00+00:00",
     )
-    assert written == {"scanned": 5, "changed": 2, "missingAgents": 0}
+    assert written == {"scanned": 12, "changed": 1, "missingAgents": 0}
     projection = repository.get_raw_document(
         FirestorePaths.creator_discovery_profile("creator-001")
     )
@@ -68,4 +78,4 @@ def test_creator_discovery_backfill_is_dry_run_then_idempotent_write() -> None:
         write=True,
         updated_at="2026-07-31T00:00:00+00:00",
     )
-    assert repeated == {"scanned": 5, "changed": 0, "missingAgents": 0}
+    assert repeated == {"scanned": 12, "changed": 0, "missingAgents": 0}

@@ -44,4 +44,20 @@ Run the final local verification matrix and document deployment/on-chain blocker
 
 ## Result
 
-Local QA passed. Production deployment, live smoke, and live devnet signatures remain blocked until explicitly approved.
+2026-08-20 KST follow-up QA:
+
+- Local backend full test suite passed: `165 passed, 7 skipped`.
+- Frontend typecheck, lint, unit tests, and production build passed.
+- Web3 Gateway build and lint passed. `npm --prefix web3/gateway test` still cannot fully run inside this sandbox because one route test opens a local `127.0.0.1` listener and fails with `listen EPERM`; this is an environment limitation.
+- Cloud Run services were listed as `RoutesReady=True`: `knot-web`, `knot-api`, `knot-web3`, `knot-creator-agent`.
+- Live web routes for the demo pages returned 200.
+- Firebase password sign-in for `t1@knot.com / 000000` and `c1@knot.com / 000000` succeeded.
+- Live web proxy API smoke passed for `/api/v1/me`, role dashboards, promotions, agreements, Creator agent state, negotiation messages, and match candidates.
+- Firestore contains the required devnet/XEXYMIX demo users, agents, policies, discovery profile, promotions, match runs, candidates, negotiations, messages, agreements, milestones, escrows, evidence, and settlements.
+- Solana devnet confirmed the completed demo lock/release signatures as `finalized` with `err=None`.
+
+Open release risks:
+
+- Browser-click E2E with Phantom was not fully automated because Playwright/Puppeteer is not installed and Chrome headless did not complete inside the sandbox.
+- `promotion-xexymix-devnet` has A2A and Agreement data, but its promotion timeline is empty; use `agreement-devnet-1usdc` for the final proof sequence if showing funding/evidence/release timeline.
+- Demo data currently mixes program IDs: completed escrow evidence uses `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn`, while current code/deploy defaults prepare new escrows with `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`. Both programs exist on devnet, but the demo script and documentation should present one canonical program ID.

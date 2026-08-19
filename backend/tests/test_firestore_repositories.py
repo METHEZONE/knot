@@ -93,9 +93,17 @@ def test_demo_seed_is_idempotent_and_loads_core_collections() -> None:
         "creator-001",
         "creator-002",
         "creator-003",
+        "creator-004",
+        "creator-005",
+        "creator-006",
+        "creator-007",
+        "creator-008",
+        "creator-009",
+        "creator-010",
         "creator-1",
         "creator-2",
     ]
+    assert repository.get_agent_policy("creator-agent-010") is not None
     assert "brands/brand-001" in store.paths()
     assert "agents/brand-agent-001" in store.paths()
     assert "users/user-brand-1" in store.paths()
