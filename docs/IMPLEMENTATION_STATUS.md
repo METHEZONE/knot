@@ -1314,7 +1314,33 @@ Updated: 2026-08-20 KST
 
 - No Firestore reset, wallet funding, Secret Manager change, Solana program
   change, or on-chain transaction was performed.
-- API/Web deployment is pending explicit approval.
+- API/Web deployment was performed after explicit approval.
+
+### Deployment And Verification
+
+- Pushed main to `origin/main` through commit
+  `7bc3107 Switch creator onboarding to YouTube analysis`.
+- Built API image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-api:7bc3107`.
+- API Cloud Build ID:
+  `8147b7d6-64d4-4645-b55b-a94c8dccd74b`, status `SUCCESS`.
+- Deployed Cloud Run API revision `knot-api-00024-xvp`.
+- Built Web image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:7bc3107`.
+- Web Cloud Build ID:
+  `f76be030-a18a-4007-9517-1abf4fda9aaf`, status `SUCCESS`.
+- Deployed Cloud Run Web revision `knot-web-00022-wxl`.
+- `knot-api-00024-xvp` and `knot-web-00022-wxl` are serving 100% traffic.
+- Public route verification returned 200 for:
+  - `https://knot-web-7k3walthgq-uc.a.run.app/login`
+  - `https://knot-web-7k3walthgq-uc.a.run.app/creator/connect`
+- Deployed YouTube Creator analysis verification returned:
+  - `provider=vertex-gemini`
+  - `fallbackReason=null`
+  - `displayName=Rick Astley`
+  - `handle=@RickAstleyYT`
+  - title `Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)`
+  - notes confirming YouTube oEmbed metadata and Gemini metadata analysis.
 
 ## 2026-08-20 Creator YouTube Onboarding Analysis
 

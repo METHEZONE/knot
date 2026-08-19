@@ -38,8 +38,24 @@ the demo uses a more stable public metadata source.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run build`: passed.
 
-## Pending
+## Deployment And Final Verification
 
-- API/Web deployment is pending explicit approval.
-- After deployment, verify `/creator/connect` with a public YouTube URL on the
-  deployed app.
+- Pushed main to `origin/main` through
+  `7bc3107 Switch creator onboarding to YouTube analysis`.
+- API deployed to Cloud Run revision `knot-api-00024-xvp`.
+- Web deployed to Cloud Run revision `knot-web-00022-wxl`.
+- Both revisions serve 100% traffic.
+- Public deployed routes returned 200:
+  - `/login`
+  - `/creator/connect`
+- Deployed YouTube Creator analysis verification returned:
+  - `provider=vertex-gemini`
+  - `fallbackReason=null`
+  - `displayName=Rick Astley`
+  - `handle=@RickAstleyYT`
+  - YouTube title from oEmbed metadata.
+
+## Remaining Guardrail
+
+- This phase did not reset Firestore, fund wallets, change Secret Manager,
+  change Solana programs, or create on-chain transactions.
