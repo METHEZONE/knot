@@ -2,6 +2,40 @@
 
 Updated: 2026-08-20 KST
 
+## Creator YouTube Public Stats (2026-08-20 KST)
+
+### Changed
+
+- Added optional backend `YOUTUBE_API_KEY` configuration for Creator onboarding.
+- Creator profile analysis now parses representative YouTube video IDs from
+  `watch?v=`, `shorts/`, `youtu.be/`, `embed/`, and `live/` URLs.
+- When the API key is configured, the backend calls YouTube Data API
+  `videos.list(part=snippet,statistics)` and `channels.list(part=snippet,statistics)`.
+- The analysis draft now fills only returned public statistics: subscriber count,
+  representative video views, likes, comments, channel total views, and channel
+  video count. Missing or failed fields remain in `unknownFields`.
+- Creator onboarding now displays YouTube-native labels: `구독자`, `영상 조회수`,
+  `좋아요`, `댓글`, `채널 영상`, and `채널 총조회`.
+- `.env.example` and `backend/.env.example` document `YOUTUBE_API_KEY`; real keys
+  must be supplied through local `.env` or Cloud Run Secret Manager, not git.
+
+### Verification
+
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/libs/settings/config.py backend/tests/test_api_onboarding.py`: passed.
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py -q`: 15 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `git diff --check`: passed.
+
+### Deployment Note
+
+- No Secret Manager, Cloud Run environment, wallet, pay.sh, or Solana transaction
+  changes have been made in this phase.
+- Deployed Creator analysis will continue to show `공개 지표 확인 필요` until the API
+  service receives a valid `YOUTUBE_API_KEY`.
+
 ## Final Demo Risk Tightening (2026-08-20 KST)
 
 ### Changed

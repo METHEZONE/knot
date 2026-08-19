@@ -8,6 +8,9 @@ export function analysisSourceLabel(provider: string, fallbackReason: string | n
   if (provider === "youtube-oembed") {
     return "YouTube 공개 메타데이터를 확인했습니다. 조회수와 구독자 수는 직접 확인해 주세요.";
   }
+  if (provider === "youtube-data-api") {
+    return "YouTube 공개 메타데이터와 공개 통계를 확인했습니다.";
+  }
   if (provider === "secure-fetch") {
     return fallbackReason
       ? "URL 내용을 읽어 초안을 만들었습니다. 일부 항목은 직접 확인해 주세요."

@@ -11,7 +11,7 @@ from hashlib import sha256
 from html import unescape as html_unescape
 from subprocess import TimeoutExpired
 from typing import cast
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import httpx
@@ -5875,6 +5875,21 @@ class FetchedSourcePage:
 
 
 @dataclass(frozen=True)
+class YoutubePublicStats:
+    video_id: str | None = None
+    channel_id: str | None = None
+    channel_title: str | None = None
+    channel_handle: str | None = None
+    video_view_count: int | None = None
+    like_count: int | None = None
+    comment_count: int | None = None
+    subscriber_count: int | None = None
+    channel_view_count: int | None = None
+    video_count: int | None = None
+    channel_fetch_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class AnalysisDraftResult:
     draft: dict[str, object]
     provider: str
@@ -6071,6 +6086,7 @@ def _youtube_creator_profile_draft(
     source_url: str,
     settings: Settings,
 ) -> AnalysisDraftResult | None:
+    youtube_stats, youtube_stats_reason = _youtube_data_api_public_stats(source_url, settings)
     fetched, fetch_reason = _youtube_oembed_source_page(source_url, settings)
     if fetched is None:
         return _deterministic_creator_profile_draft(
@@ -6082,6 +6098,8 @@ def _youtube_creator_profile_draft(
         source_url,
         fetched,
         settings,
+        youtube_stats=youtube_stats,
+        youtube_stats_reason=youtube_stats_reason,
     )
     if gemini_result is not None:
         return gemini_result
@@ -6089,8 +6107,211 @@ def _youtube_creator_profile_draft(
         source_url,
         fetched,
         settings,
+        youtube_stats=youtube_stats,
+        youtube_stats_reason=youtube_stats_reason,
         fallback_reason=gemini_reason,
     )
+
+
+def _youtube_data_api_public_stats(
+    source_url: str,
+    settings: Settings,
+) -> tuple[YoutubePublicStats | None, str | None]:
+    api_key = (settings.youtube_api_key or "").strip()
+    if not api_key:
+        return None, "youtube_data_api_key_missing"
+
+    video_id = _youtube_video_id_from_url(source_url)
+    if video_id is None:
+        channel_filter = _youtube_channel_filter_from_url(source_url)
+        if channel_filter is None:
+            return None, "youtube_video_id_missing"
+        channel_item, channel_reason = _youtube_fetch_channel_item(
+            api_key,
+            filter_name=channel_filter[0],
+            filter_value=channel_filter[1],
+        )
+        if channel_item is None:
+            return None, channel_reason
+        return (
+            _youtube_public_stats_from_items(
+                video_id=None,
+                video_snippet={},
+                video_statistics={},
+                channel_item=channel_item,
+                channel_fetch_reason=None,
+            ),
+            None,
+        )
+
+    video_endpoint = "https://www.googleapis.com/youtube/v3/videos?" + urlencode(
+        {"part": "snippet,statistics", "id": video_id, "key": api_key}
+    )
+    try:
+        response = httpx.get(video_endpoint, timeout=httpx.Timeout(5.0))
+        if response.status_code >= 400:
+            return None, f"youtube_data_api_http_{response.status_code}"
+        payload = response.json()
+    except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+        return None, "youtube_data_api_failed"
+
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        return None, "youtube_video_not_found"
+    item = items[0] if isinstance(items[0], dict) else {}
+    snippet = item.get("snippet") if isinstance(item.get("snippet"), dict) else {}
+    statistics = item.get("statistics") if isinstance(item.get("statistics"), dict) else {}
+    channel_id = _string_value(snippet.get("channelId"))
+    channel_item: dict[str, object] | None = None
+    channel_fetch_reason: str | None = None
+
+    if channel_id:
+        channel_item, channel_fetch_reason = _youtube_fetch_channel_item(
+            api_key,
+            filter_name="id",
+            filter_value=channel_id,
+        )
+
+    return (
+        _youtube_public_stats_from_items(
+            video_id=video_id,
+            video_snippet=snippet,
+            video_statistics=statistics,
+            channel_item=channel_item,
+            channel_fetch_reason=channel_fetch_reason,
+        ),
+        None,
+    )
+
+
+def _youtube_fetch_channel_item(
+    api_key: str,
+    *,
+    filter_name: str,
+    filter_value: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    channel_endpoint = "https://www.googleapis.com/youtube/v3/channels?" + urlencode(
+        {"part": "snippet,statistics", filter_name: filter_value, "key": api_key}
+    )
+    try:
+        channel_response = httpx.get(channel_endpoint, timeout=httpx.Timeout(5.0))
+        if channel_response.status_code >= 400:
+            return None, f"youtube_channel_api_http_{channel_response.status_code}"
+        channel_payload = channel_response.json()
+    except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+        return None, "youtube_channel_api_failed"
+    channel_items = channel_payload.get("items")
+    if not isinstance(channel_items, list) or not channel_items:
+        return None, "youtube_channel_not_found"
+    channel_item = channel_items[0]
+    if isinstance(channel_item, dict):
+        return channel_item, None
+    return None, "youtube_channel_not_found"
+
+
+def _youtube_public_stats_from_items(
+    *,
+    video_id: str | None,
+    video_snippet: dict[str, object],
+    video_statistics: dict[str, object],
+    channel_item: dict[str, object] | None,
+    channel_fetch_reason: str | None,
+) -> YoutubePublicStats:
+    channel_snippet = (
+        channel_item.get("snippet")
+        if channel_item is not None and isinstance(channel_item.get("snippet"), dict)
+        else {}
+    )
+    channel_statistics = (
+        channel_item.get("statistics")
+        if channel_item is not None and isinstance(channel_item.get("statistics"), dict)
+        else {}
+    )
+    channel_id = _string_value(video_snippet.get("channelId"))
+    if channel_id is None and channel_item is not None:
+        channel_id = _string_value(channel_item.get("id"))
+    channel_title = _string_value(video_snippet.get("channelTitle")) or _string_value(
+        channel_snippet.get("title")
+    )
+    return YoutubePublicStats(
+        video_id=video_id,
+        channel_id=channel_id,
+        channel_title=channel_title,
+        channel_handle=_youtube_channel_handle(channel_snippet),
+        video_view_count=_youtube_stat_int(video_statistics, "viewCount"),
+        like_count=_youtube_stat_int(video_statistics, "likeCount"),
+        comment_count=_youtube_stat_int(video_statistics, "commentCount"),
+        subscriber_count=_youtube_stat_int(channel_statistics, "subscriberCount"),
+        channel_view_count=_youtube_stat_int(channel_statistics, "viewCount"),
+        video_count=_youtube_stat_int(channel_statistics, "videoCount"),
+        channel_fetch_reason=channel_fetch_reason,
+    )
+
+
+def _youtube_video_id_from_url(source_url: str) -> str | None:
+    parsed = urlparse(source_url)
+    host = (parsed.hostname or "").lower()
+    path_parts = [part for part in parsed.path.split("/") if part]
+    candidate: str | None = None
+    if host == "youtu.be" and path_parts:
+        candidate = path_parts[0]
+    elif path_parts and path_parts[0] in {"shorts", "embed", "live", "v"} and len(path_parts) > 1:
+        candidate = path_parts[1]
+    elif path_parts and path_parts[0] == "watch":
+        values = parse_qs(parsed.query).get("v") or []
+        candidate = values[0] if values else None
+    elif not path_parts:
+        candidate = None
+    elif host.endswith("youtube.com"):
+        values = parse_qs(parsed.query).get("v") or []
+        candidate = values[0] if values else None
+    if not candidate:
+        return None
+    cleaned = candidate.strip()
+    return cleaned if re.fullmatch(r"[0-9A-Za-z_-]{6,64}", cleaned) else None
+
+
+def _youtube_channel_filter_from_url(source_url: str) -> tuple[str, str] | None:
+    parsed = urlparse(source_url)
+    host = (parsed.hostname or "").lower()
+    if not host.endswith("youtube.com"):
+        return None
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if not path_parts:
+        return None
+    first = path_parts[0].strip()
+    if first.startswith("@") and re.fullmatch(r"@[0-9A-Za-z_.-]{3,64}", first):
+        return "forHandle", first
+    if first == "channel" and len(path_parts) > 1:
+        channel_id = path_parts[1].strip()
+        if re.fullmatch(r"[0-9A-Za-z_-]{6,128}", channel_id):
+            return "id", channel_id
+    if first == "user" and len(path_parts) > 1:
+        username = path_parts[1].strip()
+        if re.fullmatch(r"[0-9A-Za-z_.-]{3,64}", username):
+            return "forUsername", username
+    return None
+
+
+def _youtube_stat_int(statistics: object, key: str) -> int | None:
+    if not isinstance(statistics, dict):
+        return None
+    value = statistics.get(key)
+    if isinstance(value, int) and value >= 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _youtube_channel_handle(snippet: object) -> str | None:
+    if not isinstance(snippet, dict):
+        return None
+    for key in ("customUrl", "handle"):
+        value = _string_value(snippet.get(key))
+        if value:
+            return value if value.startswith("@") else f"@{value.lstrip('/')}"
+    return None
 
 
 def _youtube_oembed_source_page(
@@ -6159,28 +6380,60 @@ def _youtube_oembed_creator_profile_draft(
     fetched: FetchedSourcePage,
     settings: Settings,
     *,
+    youtube_stats: YoutubePublicStats | None,
+    youtube_stats_reason: str | None,
     fallback_reason: str | None,
 ) -> AnalysisDraftResult:
     title = fetched.title or "YouTube video"
     description = fetched.description or title
     author_name = _youtube_author_from_description(description) or _host_label(source_url)
-    handle = _youtube_handle_from_links(fetched.links) or _handle_from_text(author_name)
+    handle = (
+        (youtube_stats.channel_handle if youtube_stats else None)
+        or _youtube_handle_from_links(fetched.links)
+        or _handle_from_text(author_name)
+    )
     text = f"{title} {description} {fetched.text}"
     category = _infer_category(text)
     tags = list(dict.fromkeys([*_keyword_hits(text), *_creator_mood_hints(text), "youtube"]))[
         :8
     ]
+    metrics = _youtube_creator_metrics(youtube_stats)
+    unknown_fields = _youtube_unknown_fields(metrics)
+    provider = "youtube-data-api" if youtube_stats else "youtube-oembed"
+    handle_from_stats = bool(youtube_stats and youtube_stats.channel_handle)
+    handle_source = "YOUTUBE_DATA_API" if handle_from_stats else "YOUTUBE_OEMBED"
+    handle_confidence = 0.86 if handle_from_stats else 0.75
     draft = {
         "schemaVersion": "knot.creator-profile.v1",
         "sourceUrl": source_url,
-        "provider": "youtube-oembed",
+        "provider": provider,
         "model": None if settings.gemini_mode == "off" else settings.gemini_model,
         "fallbackReason": fallback_reason,
         "displayName": _field(author_name[:80], source="YOUTUBE_OEMBED", confidence=0.82),
-        "handle": _field(handle, source="YOUTUBE_OEMBED", confidence=0.75),
-        "followerCount": _field(None, source="UNKNOWN", confidence=0.0),
-        "averageViews": _field(None, source="UNKNOWN", confidence=0.0),
-        "engagementRate": _field(None, source="UNKNOWN", confidence=0.0),
+        "handle": _field(
+            handle,
+            source=handle_source,
+            confidence=handle_confidence,
+        ),
+        "followerCount": _field(
+            metrics["followerCount"],
+            source="YOUTUBE_DATA_API" if metrics["followerCount"] is not None else "UNKNOWN",
+            confidence=0.92 if metrics["followerCount"] is not None else 0.0,
+        ),
+        "averageViews": _field(
+            metrics["averageViews"],
+            source=(
+                "YOUTUBE_DATA_API_REPRESENTATIVE_VIDEO"
+                if metrics["averageViews"] is not None
+                else "UNKNOWN"
+            ),
+            confidence=0.72 if metrics["averageViews"] is not None else 0.0,
+        ),
+        "engagementRate": _field(
+            metrics["engagementRate"],
+            source="YOUTUBE_DATA_API" if metrics["engagementRate"] is not None else "UNKNOWN",
+            confidence=0.72 if metrics["engagementRate"] is not None else 0.0,
+        ),
         "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
         "categoryKeys": [category],
         "formatKeys": ["short" if "/shorts/" in urlparse(source_url).path else "video"],
@@ -6192,26 +6445,22 @@ def _youtube_oembed_creator_profile_draft(
             "fetchStatus": "FETCHED",
             "sourceTitle": title,
             "sourceDescription": description,
-            "profileCounts": {},
+            "profileCounts": _youtube_profile_counts(youtube_stats),
             "contentHints": tags,
             "recentPostUrls": [source_url],
-            "analysisNotes": [
-                "YouTube oEmbed 공개 메타데이터를 반영했습니다.",
-                "조회수·구독자 수는 YouTube Data API 연결 후 자동 수집됩니다.",
-            ],
+            "analysisNotes": _youtube_analysis_notes(
+                youtube_stats,
+                youtube_stats_reason,
+                used_gemini=False,
+            ),
         },
-        "unknownFields": [
-            "followerCount",
-            "averageViews",
-            "engagementRate",
-            "recentPosts",
-        ],
+        "unknownFields": unknown_fields,
         "safetyFlags": [],
         "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
     }
     return AnalysisDraftResult(
         draft=draft,
-        provider="youtube-oembed",
+        provider=provider,
         model=None if settings.gemini_mode == "off" else settings.gemini_model,
         fallback_reason=fallback_reason,
     )
@@ -6221,6 +6470,9 @@ def _gemini_youtube_creator_profile_draft(
     source_url: str,
     fetched: FetchedSourcePage,
     settings: Settings,
+    *,
+    youtube_stats: YoutubePublicStats | None,
+    youtube_stats_reason: str | None,
 ) -> tuple[AnalysisDraftResult | None, str | None]:
     prompt: dict[str, object] = {
         "task": "Extract KNOT creator style signals from public YouTube metadata.",
@@ -6231,6 +6483,7 @@ def _gemini_youtube_creator_profile_draft(
         ],
         "sourceUrl": source_url,
         "youtube": _page_prompt_payload(fetched),
+        "youtubePublicStats": _youtube_stats_prompt_payload(youtube_stats),
         "outputSchema": {
             "categoryKeys": ["string"],
             "formatKeys": ["video|short"],
@@ -6249,6 +6502,8 @@ def _gemini_youtube_creator_profile_draft(
         fetched,
         settings,
         generated.data,
+        youtube_stats=youtube_stats,
+        youtube_stats_reason=youtube_stats_reason,
     )
     if draft is None:
         return None, "model_schema_invalid"
@@ -6260,6 +6515,9 @@ def _normalize_gemini_youtube_creator_draft(
     fetched: FetchedSourcePage,
     settings: Settings,
     data: dict[str, object],
+    *,
+    youtube_stats: YoutubePublicStats | None,
+    youtube_stats_reason: str | None,
 ) -> AnalysisDraftResult | None:
     summary = _string_value(data.get("summary"))
     if not summary:
@@ -6267,7 +6525,11 @@ def _normalize_gemini_youtube_creator_draft(
     title = fetched.title or "YouTube video"
     description = fetched.description or title
     author_name = _youtube_author_from_description(description) or _host_label(source_url)
-    handle = _youtube_handle_from_links(fetched.links) or _handle_from_text(author_name)
+    handle = (
+        (youtube_stats.channel_handle if youtube_stats else None)
+        or _youtube_handle_from_links(fetched.links)
+        or _handle_from_text(author_name)
+    )
     format_keys = _string_list(data.get("formatKeys")) or [
         "short" if "/shorts/" in urlparse(source_url).path else "video"
     ]
@@ -6281,6 +6543,11 @@ def _normalize_gemini_youtube_creator_draft(
             ]
         )
     )[:8]
+    metrics = _youtube_creator_metrics(youtube_stats)
+    unknown_fields = _youtube_unknown_fields(metrics)
+    handle_from_stats = bool(youtube_stats and youtube_stats.channel_handle)
+    handle_source = "YOUTUBE_DATA_API" if handle_from_stats else "YOUTUBE_OEMBED"
+    handle_confidence = 0.86 if handle_from_stats else 0.75
     draft = {
         "schemaVersion": "knot.creator-profile.v1",
         "sourceUrl": source_url,
@@ -6288,10 +6555,30 @@ def _normalize_gemini_youtube_creator_draft(
         "model": settings.gemini_model,
         "fallbackReason": None,
         "displayName": _field(author_name[:80], source="YOUTUBE_OEMBED", confidence=0.82),
-        "handle": _field(handle, source="YOUTUBE_OEMBED", confidence=0.75),
-        "followerCount": _field(None, source="UNKNOWN", confidence=0.0),
-        "averageViews": _field(None, source="UNKNOWN", confidence=0.0),
-        "engagementRate": _field(None, source="UNKNOWN", confidence=0.0),
+        "handle": _field(
+            handle,
+            source=handle_source,
+            confidence=handle_confidence,
+        ),
+        "followerCount": _field(
+            metrics["followerCount"],
+            source="YOUTUBE_DATA_API" if metrics["followerCount"] is not None else "UNKNOWN",
+            confidence=0.92 if metrics["followerCount"] is not None else 0.0,
+        ),
+        "averageViews": _field(
+            metrics["averageViews"],
+            source=(
+                "YOUTUBE_DATA_API_REPRESENTATIVE_VIDEO"
+                if metrics["averageViews"] is not None
+                else "UNKNOWN"
+            ),
+            confidence=0.72 if metrics["averageViews"] is not None else 0.0,
+        ),
+        "engagementRate": _field(
+            metrics["engagementRate"],
+            source="YOUTUBE_DATA_API" if metrics["engagementRate"] is not None else "UNKNOWN",
+            confidence=0.72 if metrics["engagementRate"] is not None else 0.0,
+        ),
         "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
         "categoryKeys": _string_list(data.get("categoryKeys")) or [_infer_category(summary)],
         "formatKeys": format_keys,
@@ -6303,21 +6590,16 @@ def _normalize_gemini_youtube_creator_draft(
             "fetchStatus": "FETCHED",
             "sourceTitle": title,
             "sourceDescription": description,
-            "profileCounts": {},
+            "profileCounts": _youtube_profile_counts(youtube_stats),
             "contentHints": tags,
             "recentPostUrls": [source_url],
-            "analysisNotes": [
-                "YouTube oEmbed 공개 메타데이터를 반영했습니다.",
-                "Gemini가 YouTube 제목과 채널 메타데이터를 분석했습니다.",
-                "조회수·구독자 수는 YouTube Data API 연결 후 자동 수집됩니다.",
-            ],
+            "analysisNotes": _youtube_analysis_notes(
+                youtube_stats,
+                youtube_stats_reason,
+                used_gemini=True,
+            ),
         },
-        "unknownFields": [
-            "followerCount",
-            "averageViews",
-            "engagementRate",
-            "recentPosts",
-        ],
+        "unknownFields": unknown_fields,
         "safetyFlags": _string_list(data.get("safetyFlags")),
         "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
     }
@@ -6327,6 +6609,120 @@ def _normalize_gemini_youtube_creator_draft(
         model=settings.gemini_model,
         fallback_reason=None,
     )
+
+
+def _youtube_creator_metrics(stats: YoutubePublicStats | None) -> dict[str, int | float | None]:
+    if stats is None:
+        return {"followerCount": None, "averageViews": None, "engagementRate": None}
+    engagement_rate: float | None = None
+    if stats.video_view_count and stats.video_view_count > 0:
+        interactions = (stats.like_count or 0) + (stats.comment_count or 0)
+        if interactions > 0:
+            engagement_rate = round(interactions / stats.video_view_count, 4)
+    return {
+        "followerCount": stats.subscriber_count,
+        "averageViews": stats.video_view_count,
+        "engagementRate": engagement_rate,
+    }
+
+
+def _youtube_unknown_fields(metrics: dict[str, int | float | None]) -> list[str]:
+    return [
+        field
+        for field, value in {
+            "followerCount": metrics["followerCount"],
+            "averageViews": metrics["averageViews"],
+            "engagementRate": metrics["engagementRate"],
+            "reelShare": None,
+            "recentPosts": None,
+        }.items()
+        if value is None
+    ]
+
+
+def _youtube_profile_counts(stats: YoutubePublicStats | None) -> dict[str, int]:
+    if stats is None:
+        return {}
+    counts = {
+        "subscriberCount": stats.subscriber_count,
+        "videoViewCount": stats.video_view_count,
+        "likeCount": stats.like_count,
+        "commentCount": stats.comment_count,
+        "channelViewCount": stats.channel_view_count,
+        "videoCount": stats.video_count,
+    }
+    return {
+        key: value
+        for key, value in counts.items()
+        if isinstance(value, int) and value >= 0
+    }
+
+
+def _youtube_analysis_notes(
+    stats: YoutubePublicStats | None,
+    stats_reason: str | None,
+    *,
+    used_gemini: bool,
+) -> list[str]:
+    notes = ["YouTube oEmbed 공개 메타데이터를 반영했습니다."]
+    if used_gemini:
+        notes.append("Gemini가 YouTube 제목과 채널 메타데이터를 분석했습니다.")
+    if stats is None:
+        notes.append(_youtube_data_api_note(stats_reason))
+        return notes
+    notes.append("YouTube Data API 공개 통계를 반영했습니다.")
+    if stats.subscriber_count is not None:
+        notes.append("구독자 수는 YouTube가 공개하는 반올림 값을 사용할 수 있습니다.")
+    if stats.video_view_count is not None:
+        notes.append("대표 영상 조회수를 추천용 조회수 후보값으로 반영했습니다.")
+    if stats.channel_fetch_reason:
+        notes.append(_youtube_data_api_note(stats.channel_fetch_reason))
+    return notes[:5]
+
+
+def _youtube_data_api_note(reason: str | None) -> str:
+    labels = {
+        "youtube_data_api_key_missing": (
+            "YouTube Data API 키가 없어 조회수·구독자 수는 표시하지 않았습니다."
+        ),
+        "youtube_video_id_missing": (
+            "채널 링크에서는 대표 영상 조회수를 가져올 수 없어 공개 숫자는 직접 확인이 필요합니다."
+        ),
+        "youtube_video_not_found": "YouTube Data API에서 해당 영상을 찾지 못했습니다.",
+        "youtube_channel_not_found": "YouTube Data API에서 해당 채널을 찾지 못했습니다.",
+        "youtube_data_api_failed": (
+            "YouTube Data API 요청이 실패해 공개 숫자는 직접 확인이 필요합니다."
+        ),
+        "youtube_channel_api_failed": (
+            "YouTube 채널 통계 요청이 실패해 일부 숫자는 직접 확인이 필요합니다."
+        ),
+    }
+    if not reason:
+        return "YouTube Data API 통계가 없어 공개 숫자는 직접 확인이 필요합니다."
+    if reason.startswith("youtube_data_api_http_"):
+        status_code = reason.removeprefix("youtube_data_api_http_")
+        return f"YouTube Data API가 HTTP {status_code} 응답을 반환했습니다."
+    if reason.startswith("youtube_channel_api_http_"):
+        status_code = reason.removeprefix("youtube_channel_api_http_")
+        return f"YouTube 채널 통계 API가 HTTP {status_code} 응답을 반환했습니다."
+    return labels.get(reason, f"YouTube 통계 제한 사유: {reason}")
+
+
+def _youtube_stats_prompt_payload(stats: YoutubePublicStats | None) -> dict[str, object] | None:
+    if stats is None:
+        return None
+    return {
+        "videoId": stats.video_id,
+        "channelId": stats.channel_id,
+        "channelTitle": stats.channel_title,
+        "channelHandle": stats.channel_handle,
+        "videoViewCount": stats.video_view_count,
+        "likeCount": stats.like_count,
+        "commentCount": stats.comment_count,
+        "subscriberCount": stats.subscriber_count,
+        "channelViewCount": stats.channel_view_count,
+        "videoCount": stats.video_count,
+    }
 
 
 def _safe_https_url(value: object) -> str | None:
@@ -6983,7 +7379,9 @@ def _creator_fetch_note(reason: str | None) -> str:
     labels = {
         "secure_fetch_disabled": "서버 fetch가 꺼져 있어 URL 기반 제한 분석만 수행했습니다.",
         "secure_fetch_failed": "공개 페이지 요청이 실패해 URL 기반 제한 분석만 수행했습니다.",
-        "instagram_access_limited": "Instagram이 로그인 화면을 반환해 공개 지표는 직접 확인이 필요합니다.",
+        "instagram_access_limited": (
+            "Instagram이 로그인 화면을 반환해 공개 지표는 직접 확인이 필요합니다."
+        ),
         "empty_source": "공개 페이지에 분석 가능한 텍스트가 거의 없었습니다.",
         "too_many_redirects": "공개 페이지 리다이렉트가 너무 많아 fetch를 중단했습니다.",
     }

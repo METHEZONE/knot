@@ -400,6 +400,194 @@ def test_creator_profile_analysis_uses_youtube_oembed_metadata(monkeypatch) -> N
     assert "followerCount" in draft["unknownFields"]
 
 
+def test_creator_profile_analysis_uses_youtube_data_api_public_stats(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("creator-youtube-stats", "creator-youtube-stats@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-youtube-stats-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def fetched_youtube_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="Pilates Morning Routine | Form Check",
+                description="Pilates Morning Routine | Form Check · Move With Mina",
+                text="YouTube public video metadata. Channel: Move With Mina",
+                links=(source_url, "https://www.youtube.com/@MoveWithMina"),
+            ),
+            None,
+        )
+
+    def youtube_stats(_source_url: str, _settings: Settings):
+        return (
+            routes.YoutubePublicStats(
+                video_id="demo123",
+                channel_id="UCdemo",
+                channel_title="Move With Mina",
+                channel_handle="@MoveWithMina",
+                video_view_count=1200,
+                like_count=96,
+                comment_count=24,
+                subscriber_count=3400,
+                channel_view_count=88000,
+                video_count=42,
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_youtube_oembed_source_page", fetched_youtube_page)
+    monkeypatch.setattr(routes, "_youtube_data_api_public_stats", youtube_stats)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-youtube-stats-analysis"},
+        json={"sourceUrl": "https://www.youtube.com/watch?v=demo123"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "youtube-data-api"
+    assert draft["followerCount"]["value"] == 3400
+    assert draft["averageViews"]["value"] == 1200
+    assert draft["engagementRate"]["value"] == 0.1
+    assert draft["handle"]["source"] == "YOUTUBE_DATA_API"
+    assert draft["publicSignals"]["profileCounts"] == {
+        "subscriberCount": 3400,
+        "videoViewCount": 1200,
+        "likeCount": 96,
+        "commentCount": 24,
+        "channelViewCount": 88000,
+        "videoCount": 42,
+    }
+    assert "YouTube Data API 공개 통계를 반영했습니다." in draft["publicSignals"][
+        "analysisNotes"
+    ]
+    assert "followerCount" not in draft["unknownFields"]
+    assert "averageViews" not in draft["unknownFields"]
+    assert "engagementRate" not in draft["unknownFields"]
+
+
+def test_youtube_data_api_public_stats_maps_shorts_video_and_channel(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self.status_code = 200
+            self._payload = payload
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    def fake_get(url: str, **_kwargs: object) -> FakeResponse:
+        calls.append(url)
+        if "/videos?" in url:
+            return FakeResponse(
+                {
+                    "items": [
+                        {
+                            "snippet": {
+                                "channelId": "UCxexymix",
+                                "channelTitle": "젝시믹스 xexymix",
+                            },
+                            "statistics": {
+                                "viewCount": "4321",
+                                "likeCount": "321",
+                                "commentCount": "18",
+                            },
+                        }
+                    ]
+                }
+            )
+        return FakeResponse(
+            {
+                "items": [
+                    {
+                        "snippet": {"customUrl": "@xexymix_official"},
+                        "statistics": {
+                            "subscriberCount": "120000",
+                            "viewCount": "8800000",
+                            "videoCount": "512",
+                        },
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(routes.httpx, "get", fake_get)
+
+    stats, reason = routes._youtube_data_api_public_stats(
+        "https://youtube.com/shorts/clgsVltRPyU?si=NxP6nqRp68mxRDnH",
+        Settings(youtube_api_key="test-key"),
+    )
+
+    assert reason is None
+    assert stats is not None
+    assert stats.video_id == "clgsVltRPyU"
+    assert stats.channel_id == "UCxexymix"
+    assert stats.channel_handle == "@xexymix_official"
+    assert stats.video_view_count == 4321
+    assert stats.like_count == 321
+    assert stats.comment_count == 18
+    assert stats.subscriber_count == 120000
+    assert stats.channel_view_count == 8800000
+    assert stats.video_count == 512
+    assert len(calls) == 2
+
+
+def test_youtube_data_api_public_stats_maps_channel_handle(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "items": [
+                    {
+                        "id": "UCxexymix",
+                        "snippet": {
+                            "title": "젝시믹스 xexymix",
+                            "customUrl": "@xexymix_official",
+                        },
+                        "statistics": {
+                            "subscriberCount": "120000",
+                            "viewCount": "8800000",
+                            "videoCount": "512",
+                        },
+                    }
+                ]
+            }
+
+    def fake_get(url: str, **_kwargs: object) -> FakeResponse:
+        calls.append(url)
+        return FakeResponse()
+
+    monkeypatch.setattr(routes.httpx, "get", fake_get)
+
+    stats, reason = routes._youtube_data_api_public_stats(
+        "https://www.youtube.com/@xexymix_official",
+        Settings(youtube_api_key="test-key"),
+    )
+
+    assert reason is None
+    assert stats is not None
+    assert stats.video_id is None
+    assert stats.channel_id == "UCxexymix"
+    assert stats.channel_title == "젝시믹스 xexymix"
+    assert stats.channel_handle == "@xexymix_official"
+    assert stats.subscriber_count == 120000
+    assert stats.channel_view_count == 8800000
+    assert stats.video_count == 512
+    assert stats.video_view_count is None
+    assert len(calls) == 1
+    assert "forHandle=%40xexymix_official" in calls[0]
+
+
 def test_creator_profile_analysis_uses_gemini_for_youtube_metadata(
     monkeypatch,
 ) -> None:

@@ -52,6 +52,14 @@ def main() -> int:
     parser.add_argument("--initial-offer-usdc", type=int, default=INITIAL_OFFER_USDC)
     parser.add_argument("--reset-demo", action="store_true")
     parser.add_argument(
+        "--reset-all-demo",
+        action="store_true",
+        help=(
+            "Delete all KNOT demo top-level business collections before seeding. "
+            "Use this only for final demo cleanup."
+        ),
+    )
+    parser.add_argument(
         "--confirm",
         default="",
         help=f"Required for Firestore writes: --confirm={CONFIRM_TOKEN}",
@@ -74,7 +82,9 @@ def main() -> int:
     if args.target == "firestore":
         _assert_safe_firestore_seed(args.project, args.confirm)
         client = base._firestore_client(args.project)
-        if args.reset_demo:
+        if args.reset_all_demo:
+            _reset_firestore_all_demo(client)
+        elif args.reset_demo:
             _reset_firestore_demo(client)
         repository = KnotRepository(FirestoreDocumentStore(client))
         base.seed_documents(repository, documents)
@@ -82,7 +92,9 @@ def main() -> int:
         return 0
 
     memory_store = InMemoryDocumentStore()
-    if args.reset_demo:
+    if args.reset_all_demo:
+        print("memory full reset requested; no remote documents deleted")
+    elif args.reset_demo:
         print("memory reset requested; no remote documents deleted")
     base.seed_documents(KnotRepository(memory_store), documents)
     _print_summary("Loaded XEXYMIX final demo data into memory.", documents, args)
@@ -496,6 +508,50 @@ def _reset_firestore_demo(client: object) -> None:
     _delete_promotion_events(client)
 
 
+def _reset_firestore_all_demo(client: object) -> None:
+    deleted = 0
+    for collection_name in _top_level_demo_collections():
+        deleted += client.recursive_delete(client.collection(collection_name))
+    print(f"Deleted {deleted} Firestore documents from KNOT demo collections.")
+
+
+def _top_level_demo_collections() -> tuple[str, ...]:
+    return (
+        COLLECTIONS.users,
+        COLLECTIONS.brands,
+        COLLECTIONS.creator_profiles,
+        COLLECTIONS.product_profiles,
+        COLLECTIONS.social_snapshots,
+        COLLECTIONS.analysis_jobs,
+        COLLECTIONS.agents,
+        COLLECTIONS.agent_policies,
+        COLLECTIONS.agent_authorities,
+        COLLECTIONS.agent_registry,
+        COLLECTIONS.creator_discovery_profiles,
+        COLLECTIONS.promotions,
+        COLLECTIONS.match_runs,
+        COLLECTIONS.negotiations,
+        COLLECTIONS.a2a_tasks,
+        COLLECTIONS.agreements,
+        COLLECTIONS.evidence,
+        COLLECTIONS.verification_results,
+        COLLECTIONS.disputes,
+        COLLECTIONS.escrows,
+        COLLECTIONS.settlements,
+        COLLECTIONS.agent_activities,
+        COLLECTIONS.onboarding_sessions,
+        COLLECTIONS.payment_operations,
+        COLLECTIONS.transaction_receipts,
+        COLLECTIONS.agent_payment_events,
+        COLLECTIONS.audit_events,
+        COLLECTIONS.notifications,
+        COLLECTIONS.idempotency_records,
+        COLLECTIONS.admin_jobs,
+        COLLECTIONS.deletion_jobs,
+        COLLECTIONS.wallet_challenges,
+    )
+
+
 def _delete_prefix_documents(collection: object, prefix: str) -> None:
     for snapshot in collection.stream():
         if snapshot.id.startswith(prefix):
@@ -547,7 +603,10 @@ def _print_summary(
     print(f"Contract amount: {args.amount_usdc} devnet USDC")
     print("pay.sh verification: sandbox quote, expected 0.02 USDC")
     print(f"Top creator: {base.CREATOR_ID} / {base.CREATOR_AGENT_ID}")
-    print(f"Reset scope: {CREATOR_PREFIX}-*, {AGENT_PREFIX}-*, promotion operational docs")
+    if args.reset_all_demo:
+        print("Reset scope: all KNOT demo top-level business collections")
+    else:
+        print(f"Reset scope: {CREATOR_PREFIX}-*, {AGENT_PREFIX}-*, promotion operational docs")
 
 
 def _default_project_id() -> str:

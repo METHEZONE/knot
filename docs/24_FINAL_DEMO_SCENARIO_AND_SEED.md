@@ -23,6 +23,19 @@ python scripts/seed_xexymix_final_demo.py \
   --confirm=SEED_KNOT_XEXYMIX_FINAL_DEMO
 ```
 
+Clean all KNOT demo business collections and install only the final XEXYMIX demo
+set:
+
+```bash
+ALLOW_DEVNET_DEMO_SEED=true \
+PYTHONPATH=backend \
+python scripts/seed_xexymix_final_demo.py \
+  --target firestore \
+  --project knot-dev-503505 \
+  --reset-all-demo \
+  --confirm=SEED_KNOT_XEXYMIX_FINAL_DEMO
+```
+
 The reset is intentionally bounded. It deletes and recreates:
 
 - XEXYMIX promotion operational documents for `promotion-xexymix-devnet`
@@ -33,6 +46,12 @@ The reset is intentionally bounded. It deletes and recreates:
 
 It does not delete Firebase Auth users, wallet secrets, Secret Manager secrets,
 program accounts, or on-chain transactions.
+
+The full cleanup option deletes KNOT's top-level demo business collections before
+recreating the final seed. After that cleanup, Firestore should contain only one
+Brand demo account document for `t1@knot.com`, one Creator demo account document
+for `c1@knot.com`, the single XEXYMIX Promotion, and the candidate pool required
+for matching.
 
 ## Demo Accounts
 

@@ -296,6 +296,19 @@ function creatorStats(found: CreatorDraft) {
       { label: "공개 지표", value: "확인 필요" },
     ];
   }
+  const youtubeStats = [
+    ["구독자", counts.subscriberCount ?? found.followers],
+    ["영상 조회수", counts.videoViewCount ?? found.avgViews],
+    ["좋아요", counts.likeCount],
+    ["댓글", counts.commentCount],
+    ["채널 영상", counts.videoCount],
+    ["채널 총조회", counts.channelViewCount],
+  ] as const;
+  const renderedYoutubeStats = youtubeStats.flatMap(([label, value]) =>
+    typeof value === "number" && value >= 0 ? [{ label, value: value.toLocaleString() }] : [],
+  );
+  if (renderedYoutubeStats.length) return renderedYoutubeStats.slice(0, 4);
+
   const stats = [
     ["팔로워", counts.followerCount ?? found.followers],
     ["팔로잉", counts.followingCount],

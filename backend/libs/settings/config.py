@@ -48,6 +48,7 @@ class Settings(BaseModel):
     gemini_mode: str = "off"
     gemini_model: str = "gemini-2.5-flash"
     gemini_match_explanations: bool = False
+    youtube_api_key: str | None = None
     secure_fetch_enabled: bool = True
     secure_fetch_timeout_seconds: float = 8.0
     paysh_mode: str = "sandbox"
@@ -113,6 +114,7 @@ def get_settings(service_name: str | None = None) -> Settings:
         gemini_mode=os.getenv("KNOT_GEMINI_MODE", "off"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         gemini_match_explanations=_truthy(os.getenv("KNOT_GEMINI_MATCH_EXPLANATIONS")),
+        youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
         secure_fetch_enabled=_truthy_default_true(os.getenv("KNOT_SECURE_FETCH_ENABLED")),
         secure_fetch_timeout_seconds=float(os.getenv("KNOT_SECURE_FETCH_TIMEOUT_SECONDS", "8")),
         paysh_mode=os.getenv("PAYSH_MODE", "sandbox"),

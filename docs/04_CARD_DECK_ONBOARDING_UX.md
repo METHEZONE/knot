@@ -196,11 +196,12 @@ YouTube 링크만 주세요
 ```
 
 Accept a supported public YouTube channel, video, or Shorts URL as the MVP
-default. Use official/public YouTube metadata first, then Gemini structured
+default. Use official/public YouTube metadata first, add YouTube Data API public
+statistics when `YOUTUBE_API_KEY` is configured, then use Gemini structured
 analysis for style/category proposals. Instagram may be accepted as a secondary
 manual URL, but the MVP must not depend on Instagram scraping. If any source is
-unavailable or access-limited, show a truthful limited analysis and allow manual
-confirmation rather than fabricating metrics.
+unavailable, access-limited, or missing API credentials, show a truthful limited
+analysis and allow manual confirmation rather than fabricating metrics.
 
 ### Card 2 — analysis
 
@@ -212,6 +213,7 @@ Possible real stages:
 
 - source validation;
 - publicly accessible YouTube metadata extraction;
+- YouTube Data API public statistics extraction when configured;
 - Gemini structured analysis;
 - mood proposal;
 - embedding generation.
