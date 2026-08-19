@@ -43,10 +43,11 @@ Deploy the verified final-demo risk tightening changes to the existing Cloud Run
 4. [ ] Smoke test authenticated Brand and Creator API paths through API and Web proxy.
 5. [ ] Verify `POST /api/v1/brand/promotions/{promotion_id}/agent-run` exists on the deployment.
 6. [x] Fix deployed Agent run 500 caused by missing Firestore composite discovery index by adding a real-document deterministic fallback.
-7. [ ] Run a deployed Agent run against a safe demo Promotion only if it does not require wallet funding or an on-chain transaction.
-8. [ ] Verify deployed negotiation messages include pay.sh `VERIFICATION_EVENT` when the MatchRun records a settled receipt.
-9. [ ] Re-check existing devnet funding/release signatures as read-only proof.
-10. [ ] Update `docs/IMPLEMENTATION_STATUS.md` with exact live results.
+7. [x] Fix deployed pay.sh runtime failure caused by the API image missing `curl` for the native pay binary install path.
+8. [ ] Run a deployed Agent run against a safe demo Promotion only if it does not require wallet funding or an on-chain transaction.
+9. [ ] Verify deployed negotiation messages include pay.sh `VERIFICATION_EVENT` when the MatchRun records a settled receipt.
+10. [ ] Re-check existing devnet funding/release signatures as read-only proof.
+11. [ ] Update `docs/IMPLEMENTATION_STATUS.md` with exact live results.
 
 ## Non-goals
 

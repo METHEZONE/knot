@@ -16,6 +16,7 @@ Updated: 2026-08-20 KST
 - Added a pay.sh CLI fallback from `pay` to `npx -y @solana/pay`, matching pay.sh's documented one-shot install path, so local/CI sandbox verification can execute even when the global `pay` binary is not installed.
 - Updated the Cloud Run demo deploy script to default `PAYSH_RESOURCE_ID` to the pay.sh sandbox debugger quote endpoint and keep demo services warm with min instances during the final demo.
 - Added a Creator discovery fallback for missing Firestore composite indexes. When Firestore reports that the indexed query requires a new index, the API now reads real `creatorDiscoveryProfiles` documents and applies the same public filters in deterministic code instead of failing the live Agent run.
+- Hardened the API container for pay.sh by installing `curl`/CA certificates and running `pay --version` during image build, so the native pay binary is available before the first Cloud Run request.
 
 ### Verification
 
