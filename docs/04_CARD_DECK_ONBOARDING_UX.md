@@ -192,10 +192,15 @@ Completion creates/updates Profile, Promotion, Brand Agent policy/authority, ana
 ### Card 1 — profile source
 
 ```text
-인스타그램 링크만 주세요
+YouTube 링크만 주세요
 ```
 
-Accept supported public profile URL. If direct Instagram access is unavailable, show a truthful limited analysis and allow manual confirmation rather than fabricating metrics.
+Accept a supported public YouTube channel, video, or Shorts URL as the MVP
+default. Use official/public YouTube metadata first, then Gemini structured
+analysis for style/category proposals. Instagram may be accepted as a secondary
+manual URL, but the MVP must not depend on Instagram scraping. If any source is
+unavailable or access-limited, show a truthful limited analysis and allow manual
+confirmation rather than fabricating metrics.
 
 ### Card 2 — analysis
 
@@ -206,7 +211,7 @@ Accept supported public profile URL. If direct Instagram access is unavailable, 
 Possible real stages:
 
 - source validation;
-- publicly accessible content extraction;
+- publicly accessible YouTube metadata extraction;
 - Gemini structured analysis;
 - mood proposal;
 - embedding generation.

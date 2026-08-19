@@ -1,6 +1,6 @@
 "use client";
 
-/** `/creator/connect` — 인스타 사용자이름 하나 (docs/24 §3-1). */
+/** `/creator/connect` — YouTube 채널 또는 대표 영상 링크 하나. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -41,7 +41,7 @@ export function CreatorConnect() {
     setBusy(true);
     setError(null);
     try {
-      const sourceUrl = instagramUrlFromHandle(handle);
+      const sourceUrl = socialUrlFromInput(handle);
       const analysis = await new ProductApiClient().analyzeCreatorProfile(sourceUrl);
       setFound(creatorDraftFromAnalysis(analysis));
     } catch (caught) {
@@ -66,9 +66,9 @@ export function CreatorConnect() {
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-10">
       <div>
         <p className="font-mono text-xs uppercase tracking-wide text-muted">1 / 2</p>
-        <h1 className="mt-1 text-4xl">인스타그램만 연결하면 돼요</h1>
+        <h1 className="mt-1 text-4xl">YouTube 링크만 넣으면 돼요</h1>
         <p className="mt-2 text-muted">
-          사용자이름만 알려주세요. 나머지는 매니저가 알아서 봅니다.
+          채널이나 대표 영상 링크를 알려주세요. 매니저가 공개 정보와 콘텐츠 스타일을 확인합니다.
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export function CreatorConnect() {
         <input
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
-          placeholder="@myhandle"
+          placeholder="https://www.youtube.com/watch?v=..."
           className="sketch-alt ink flex-1 border border-border-subtle bg-surface-raised px-4 py-3 text-lg outline-none"
         />
         <button
@@ -210,12 +210,13 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
   };
 }
 
-function instagramUrlFromHandle(value: string): string {
+function socialUrlFromInput(value: string): string {
   const trimmed = value.trim();
   if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
   if (trimmed.includes(".")) return `https://${trimmed.replace(/^\/+/, "")}`;
+  if (trimmed.startsWith("@")) return `https://www.youtube.com/${trimmed}`;
   const clean = trimmed.replace(/^@/, "").replace(/^\/+/, "");
-  return `https://instagram.com/${clean}`;
+  return `https://www.youtube.com/@${clean}`;
 }
 
 function handleFromUrl(value: string): string {
@@ -289,10 +290,9 @@ function numberMap(value: unknown): Record<string, number> {
 
 function creatorStats(found: CreatorDraft) {
   const counts = found.publicSignals.profileCounts;
-  const limited = found.publicSignals.fetchStatus === "LIMITED";
-  if (limited && !Object.keys(counts).length) {
+  if (!Object.keys(counts).length) {
     return [
-      { label: "사용자이름", value: found.handle },
+      { label: "분석한 콘텐츠", value: found.publicSignals.sourceTitle ?? found.handle },
       { label: "공개 지표", value: "확인 필요" },
     ];
   }

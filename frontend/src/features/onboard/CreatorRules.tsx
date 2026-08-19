@@ -85,7 +85,7 @@ function CreatorRulesForm({
       await client.createMyCreatorProfile(
         {
           creatorName: creator.handle,
-          snsUrl: `https://instagram.com/${creator.handle.replace(/^@/, "")}`,
+          snsUrl: creatorSourceUrl(creator),
           categories: ["beauty"],
           customCategory: creator.toneKeywords.join(", "),
           preferredContent: ["reel", "short", "post"],
@@ -177,4 +177,14 @@ function stableKey(prefix: string, ...parts: string[]) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `${prefix}-${(hash >>> 0).toString(16)}`;
+}
+
+function creatorSourceUrl(
+  creator: NonNullable<ReturnType<typeof useBoard>["board"]["creator"]>,
+) {
+  const sourceUrl = (creator as unknown as { sourceUrl?: unknown }).sourceUrl;
+  if (typeof sourceUrl === "string" && sourceUrl.startsWith("https://")) {
+    return sourceUrl;
+  }
+  return `https://www.youtube.com/${creator.handle}`;
 }

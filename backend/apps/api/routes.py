@@ -11,7 +11,7 @@ from hashlib import sha256
 from html import unescape as html_unescape
 from subprocess import TimeoutExpired
 from typing import cast
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import httpx
@@ -6031,6 +6031,11 @@ def _creator_profile_analysis_draft(
     source_url: str,
     settings: Settings,
 ) -> AnalysisDraftResult:
+    if _is_youtube_url(source_url):
+        youtube_result = _youtube_creator_profile_draft(source_url, settings)
+        if youtube_result is not None:
+            return youtube_result
+
     fetched, fetch_reason = _secure_fetch_source_page(source_url, settings)
     if fetched is not None:
         if _is_creator_profile_access_limited(source_url, fetched):
@@ -6053,6 +6058,305 @@ def _creator_profile_analysis_draft(
             fallback_reason=gemini_reason,
         )
     return _deterministic_creator_profile_draft(source_url, settings, fallback_reason=fetch_reason)
+
+
+def _is_youtube_url(source_url: str) -> bool:
+    host = (urlparse(source_url).hostname or "").lower()
+    return host in {"youtu.be", "youtube.com", "www.youtube.com", "m.youtube.com"} or host.endswith(
+        ".youtube.com"
+    )
+
+
+def _youtube_creator_profile_draft(
+    source_url: str,
+    settings: Settings,
+) -> AnalysisDraftResult | None:
+    fetched, fetch_reason = _youtube_oembed_source_page(source_url, settings)
+    if fetched is None:
+        return _deterministic_creator_profile_draft(
+            source_url,
+            settings,
+            fallback_reason=fetch_reason,
+        )
+    gemini_result, gemini_reason = _gemini_youtube_creator_profile_draft(
+        source_url,
+        fetched,
+        settings,
+    )
+    if gemini_result is not None:
+        return gemini_result
+    return _youtube_oembed_creator_profile_draft(
+        source_url,
+        fetched,
+        settings,
+        fallback_reason=gemini_reason,
+    )
+
+
+def _youtube_oembed_source_page(
+    source_url: str,
+    settings: Settings,
+) -> tuple[FetchedSourcePage | None, str | None]:
+    del settings
+    endpoint = "https://www.youtube.com/oembed?" + urlencode(
+        {"url": source_url, "format": "json"}
+    )
+    try:
+        _assert_public_dns_target(endpoint)
+        response = httpx.get(
+            endpoint,
+            timeout=httpx.Timeout(5.0),
+            headers=_analysis_fetch_headers(),
+        )
+        if response.status_code >= 400:
+            return None, f"youtube_oembed_http_{response.status_code}"
+        data = response.json()
+    except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+        return None, "youtube_oembed_failed"
+
+    title = _string_value(data.get("title"))
+    author_name = _string_value(data.get("author_name"))
+    author_url = _safe_https_url(data.get("author_url"))
+    thumbnail_url = _safe_https_url(data.get("thumbnail_url"))
+    if not title and not author_name:
+        return None, "youtube_oembed_empty"
+    links = tuple(
+        link
+        for link in [source_url, author_url, thumbnail_url]
+        if isinstance(link, str) and link.startswith("https://")
+    )
+    description = (
+        f"{title or 'YouTube video'} · {author_name}"
+        if author_name
+        else title or "YouTube video"
+    )
+    text = _compact_text(
+        " ".join(
+            part
+            for part in [
+                "YouTube public video metadata.",
+                f"Title: {title}" if title else "",
+                f"Channel: {author_name}" if author_name else "",
+                f"Channel URL: {author_url}" if author_url else "",
+            ]
+            if part
+        )
+    )
+    return (
+        FetchedSourcePage(
+            final_url=source_url,
+            title=title,
+            description=description,
+            text=text,
+            links=links,
+        ),
+        None,
+    )
+
+
+def _youtube_oembed_creator_profile_draft(
+    source_url: str,
+    fetched: FetchedSourcePage,
+    settings: Settings,
+    *,
+    fallback_reason: str | None,
+) -> AnalysisDraftResult:
+    title = fetched.title or "YouTube video"
+    description = fetched.description or title
+    author_name = _youtube_author_from_description(description) or _host_label(source_url)
+    handle = _youtube_handle_from_links(fetched.links) or _handle_from_text(author_name)
+    text = f"{title} {description} {fetched.text}"
+    category = _infer_category(text)
+    tags = list(dict.fromkeys([*_keyword_hits(text), *_creator_mood_hints(text), "youtube"]))[
+        :8
+    ]
+    draft = {
+        "schemaVersion": "knot.creator-profile.v1",
+        "sourceUrl": source_url,
+        "provider": "youtube-oembed",
+        "model": None if settings.gemini_mode == "off" else settings.gemini_model,
+        "fallbackReason": fallback_reason,
+        "displayName": _field(author_name[:80], source="YOUTUBE_OEMBED", confidence=0.82),
+        "handle": _field(handle, source="YOUTUBE_OEMBED", confidence=0.75),
+        "followerCount": _field(None, source="UNKNOWN", confidence=0.0),
+        "averageViews": _field(None, source="UNKNOWN", confidence=0.0),
+        "engagementRate": _field(None, source="UNKNOWN", confidence=0.0),
+        "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
+        "categoryKeys": [category],
+        "formatKeys": ["short" if "/shorts/" in urlparse(source_url).path else "video"],
+        "audienceTags": tags,
+        "proposedMoodIds": tags[:3],
+        "summary": f"대표 YouTube 영상 '{title}'의 공개 메타데이터를 확인했습니다.",
+        "representativeUrls": [source_url],
+        "publicSignals": {
+            "fetchStatus": "FETCHED",
+            "sourceTitle": title,
+            "sourceDescription": description,
+            "profileCounts": {},
+            "contentHints": tags,
+            "recentPostUrls": [source_url],
+            "analysisNotes": [
+                "YouTube oEmbed 공개 메타데이터를 반영했습니다.",
+                "조회수·구독자 수는 YouTube Data API 연결 후 자동 수집됩니다.",
+            ],
+        },
+        "unknownFields": [
+            "followerCount",
+            "averageViews",
+            "engagementRate",
+            "recentPosts",
+        ],
+        "safetyFlags": [],
+        "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
+    }
+    return AnalysisDraftResult(
+        draft=draft,
+        provider="youtube-oembed",
+        model=None if settings.gemini_mode == "off" else settings.gemini_model,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _gemini_youtube_creator_profile_draft(
+    source_url: str,
+    fetched: FetchedSourcePage,
+    settings: Settings,
+) -> tuple[AnalysisDraftResult | None, str | None]:
+    prompt: dict[str, object] = {
+        "task": "Extract KNOT creator style signals from public YouTube metadata.",
+        "rules": [
+            "Use only the supplied YouTube title, channel, and public metadata.",
+            "Do not invent subscriber, view, engagement, or audience metrics.",
+            "Return only JSON matching the requested schema.",
+        ],
+        "sourceUrl": source_url,
+        "youtube": _page_prompt_payload(fetched),
+        "outputSchema": {
+            "categoryKeys": ["string"],
+            "formatKeys": ["video|short"],
+            "audienceTags": ["string"],
+            "proposedMoodIds": ["string"],
+            "contentHints": ["string"],
+            "summary": "Korean string",
+            "safetyFlags": ["string"],
+        },
+    }
+    generated = structured_analysis_json(settings=settings, prompt=prompt)
+    if generated.data is None:
+        return None, generated.fallback_reason
+    draft = _normalize_gemini_youtube_creator_draft(
+        source_url,
+        fetched,
+        settings,
+        generated.data,
+    )
+    if draft is None:
+        return None, "model_schema_invalid"
+    return draft, None
+
+
+def _normalize_gemini_youtube_creator_draft(
+    source_url: str,
+    fetched: FetchedSourcePage,
+    settings: Settings,
+    data: dict[str, object],
+) -> AnalysisDraftResult | None:
+    summary = _string_value(data.get("summary"))
+    if not summary:
+        return None
+    title = fetched.title or "YouTube video"
+    description = fetched.description or title
+    author_name = _youtube_author_from_description(description) or _host_label(source_url)
+    handle = _youtube_handle_from_links(fetched.links) or _handle_from_text(author_name)
+    format_keys = _string_list(data.get("formatKeys")) or [
+        "short" if "/shorts/" in urlparse(source_url).path else "video"
+    ]
+    tags = list(
+        dict.fromkeys(
+            [
+                *_string_list(data.get("audienceTags")),
+                *_string_list(data.get("proposedMoodIds")),
+                *_string_list(data.get("contentHints")),
+                "youtube",
+            ]
+        )
+    )[:8]
+    draft = {
+        "schemaVersion": "knot.creator-profile.v1",
+        "sourceUrl": source_url,
+        "provider": "vertex-gemini",
+        "model": settings.gemini_model,
+        "fallbackReason": None,
+        "displayName": _field(author_name[:80], source="YOUTUBE_OEMBED", confidence=0.82),
+        "handle": _field(handle, source="YOUTUBE_OEMBED", confidence=0.75),
+        "followerCount": _field(None, source="UNKNOWN", confidence=0.0),
+        "averageViews": _field(None, source="UNKNOWN", confidence=0.0),
+        "engagementRate": _field(None, source="UNKNOWN", confidence=0.0),
+        "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
+        "categoryKeys": _string_list(data.get("categoryKeys")) or [_infer_category(summary)],
+        "formatKeys": format_keys,
+        "audienceTags": tags,
+        "proposedMoodIds": _string_list(data.get("proposedMoodIds")) or tags[:3],
+        "summary": summary[:260],
+        "representativeUrls": [source_url],
+        "publicSignals": {
+            "fetchStatus": "FETCHED",
+            "sourceTitle": title,
+            "sourceDescription": description,
+            "profileCounts": {},
+            "contentHints": tags,
+            "recentPostUrls": [source_url],
+            "analysisNotes": [
+                "YouTube oEmbed 공개 메타데이터를 반영했습니다.",
+                "Gemini가 YouTube 제목과 채널 메타데이터를 분석했습니다.",
+                "조회수·구독자 수는 YouTube Data API 연결 후 자동 수집됩니다.",
+            ],
+        },
+        "unknownFields": [
+            "followerCount",
+            "averageViews",
+            "engagementRate",
+            "recentPosts",
+        ],
+        "safetyFlags": _string_list(data.get("safetyFlags")),
+        "fetched": {"finalUrl": fetched.final_url, "title": fetched.title},
+    }
+    return AnalysisDraftResult(
+        draft=draft,
+        provider="vertex-gemini",
+        model=settings.gemini_model,
+        fallback_reason=None,
+    )
+
+
+def _safe_https_url(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = urlparse(value.strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        return None
+    return parsed.geturl()
+
+
+def _youtube_author_from_description(value: str) -> str | None:
+    parts = [part.strip() for part in value.split("·")]
+    return parts[-1] if len(parts) > 1 and parts[-1] else None
+
+
+def _youtube_handle_from_links(links: tuple[str, ...]) -> str | None:
+    for link in links:
+        parsed = urlparse(link)
+        if "youtube." not in (parsed.hostname or "").lower():
+            continue
+        first = parsed.path.strip("/").split("/")[0]
+        if first.startswith("@"):
+            return first
+    return None
+
+
+def _handle_from_text(value: str) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-z가-힣_]+", "", value).strip("_") or "youtube_creator"
+    return f"@{cleaned[:40]}"
 
 
 def _is_creator_profile_access_limited(

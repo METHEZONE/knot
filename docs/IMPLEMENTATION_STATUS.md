@@ -1315,3 +1315,37 @@ Updated: 2026-08-20 KST
 - No Firestore reset, wallet funding, Secret Manager change, Solana program
   change, or on-chain transaction was performed.
 - API/Web deployment is pending explicit approval.
+
+## 2026-08-20 Creator YouTube Onboarding Analysis
+
+### Changed
+
+- Switched Creator signup source analysis from Instagram-first to
+  YouTube-first.
+- Updated `/creator/connect` copy and placeholder to ask for a YouTube channel,
+  video, or Shorts URL.
+- Bare handles now normalize to `https://www.youtube.com/@...`.
+- Creator profile creation now preserves the analyzed source URL instead of
+  forcing an Instagram URL.
+- Added backend YouTube URL detection and YouTube oEmbed metadata fetch.
+- Added Gemini structured analysis over YouTube public metadata when Vertex
+  Gemini is enabled.
+- Added a truthful `youtube-oembed` fallback when Gemini is off or unavailable.
+- Kept subscriber, view, and engagement metrics unknown until YouTube Data API
+  statistics are explicitly connected.
+- Updated `docs/04_CARD_DECK_ONBOARDING_UX.md` so Creator Card 1 is YouTube
+  source input, not Instagram scraping.
+
+### Verification
+
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py::test_creator_profile_analysis_uses_youtube_oembed_metadata backend/tests/test_api_onboarding.py::test_creator_profile_analysis_uses_gemini_for_youtube_metadata backend/tests/test_api_onboarding.py::test_creator_profile_analysis_treats_instagram_login_wall_as_limited -q`:
+  3 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+
+### Scope Guard
+
+- No Firestore reset, wallet funding, Secret Manager change, Solana program
+  change, or on-chain transaction was performed.
+- API/Web deployment is pending explicit approval.

@@ -349,6 +349,116 @@ def test_creator_profile_analysis_treats_instagram_login_wall_as_limited(
     ]
 
 
+def test_creator_profile_analysis_uses_youtube_oembed_metadata(monkeypatch) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("creator-youtube", "creator-youtube@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-youtube-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def fetched_youtube_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="Pilates Morning Routine | Form Check",
+                description="Pilates Morning Routine | Form Check · Move With Mina",
+                text=(
+                    "YouTube public video metadata. Title: Pilates Morning Routine. "
+                    "Channel: Move With Mina"
+                ),
+                links=(
+                    source_url,
+                    "https://www.youtube.com/@MoveWithMina",
+                ),
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_youtube_oembed_source_page", fetched_youtube_page)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-youtube-analysis"},
+        json={"sourceUrl": "https://www.youtube.com/watch?v=demo123"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "youtube-oembed"
+    assert draft["displayName"]["value"] == "Move With Mina"
+    assert draft["handle"]["value"] == "@MoveWithMina"
+    assert draft["formatKeys"] == ["video"]
+    assert draft["representativeUrls"] == ["https://www.youtube.com/watch?v=demo123"]
+    assert draft["publicSignals"]["sourceTitle"] == "Pilates Morning Routine | Form Check"
+    assert draft["publicSignals"]["recentPostUrls"] == [
+        "https://www.youtube.com/watch?v=demo123"
+    ]
+    assert "followerCount" in draft["unknownFields"]
+
+
+def test_creator_profile_analysis_uses_gemini_for_youtube_metadata(
+    monkeypatch,
+) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("creator-youtube-gemini", "creator-youtube-gemini@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-youtube-gemini-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def fetched_youtube_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=source_url,
+                title="5 minute leggings fit check",
+                description="5 minute leggings fit check · Fit Studio",
+                text="YouTube public video metadata. Channel: Fit Studio",
+                links=(source_url, "https://www.youtube.com/@FitStudio"),
+            ),
+            None,
+        )
+
+    class Generated:
+        data = {
+            "categoryKeys": ["fitness"],
+            "formatKeys": ["short"],
+            "audienceTags": ["leggings", "pilates"],
+            "proposedMoodIds": ["fit_check"],
+            "contentHints": ["착용샷", "움직임"],
+            "summary": "레깅스 핏과 움직임을 짧게 보여주는 피트니스 영상입니다.",
+            "safetyFlags": [],
+        }
+        fallback_reason = None
+
+    monkeypatch.setattr(routes, "_youtube_oembed_source_page", fetched_youtube_page)
+    monkeypatch.setattr(routes, "structured_analysis_json", lambda **_kwargs: Generated())
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-youtube-gemini-analysis"},
+        json={"sourceUrl": "https://www.youtube.com/shorts/demo123"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "vertex-gemini"
+    assert draft["displayName"]["value"] == "Fit Studio"
+    assert draft["handle"]["value"] == "@FitStudio"
+    assert draft["categoryKeys"] == ["fitness"]
+    assert draft["formatKeys"] == ["short"]
+    assert draft["summary"] == "레깅스 핏과 움직임을 짧게 보여주는 피트니스 영상입니다."
+    assert "Gemini가 YouTube 제목과 채널 메타데이터를 분석했습니다." in draft[
+        "publicSignals"
+    ]["analysisNotes"]
+
+
 def test_product_analysis_normalizes_http_and_reuses_without_idempotency(monkeypatch) -> None:
     client, _ = authed_client_and_repository()
     headers = auth_headers("product-http", "product-http@example.com")
