@@ -84,7 +84,7 @@ The seeded accounts are already completed, so this is for replay or explanation.
   `필라테스/러닝 루틴에서 제품 착용감, 핏, 움직임을 자연스럽게 보여주는 인스타그램 릴스 1개를 제작한다.`
 - Category: `fitness`
 - Deliverable: `Instagram reel`, count `1`
-- Posting window: `2026-08-10` to `2026-08-18`
+- Posting window: `2026-09-01` to `2026-09-08`
 - Usage rights: `organicOnly`
 - Required disclosures: `#ad`, `#sponsored`
 - Prohibited claims: `체형 교정 효과 단정`, `의학적 효능 표현`, `비교 비방`

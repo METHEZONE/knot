@@ -972,4 +972,51 @@ Updated: 2026-08-20 KST
 
 ### Local Verification
 
-- Pending final Firestore seed and deployed-link verification.
+- `./.venv/bin/python -m ruff check scripts/seed_xexymix_final_demo.py backend/tests/test_final_demo_seed.py`:
+  passed.
+- `./.venv/bin/pytest backend/tests/test_final_demo_seed.py -q`: 1 passed.
+- `PYTHONPATH=backend python scripts/seed_xexymix_final_demo.py --target memory`:
+  generated 155 documents and 30 creator discovery profiles.
+
+### Firestore Seed And Live Verification
+
+- Firestore reset/reseed completed with 155 documents and 30
+  `creatorDiscoveryProfiles`.
+- Read-only Firestore matching verification after seed:
+  - `creatorProfiles=31`
+  - `discoveryProfiles=30`
+  - `publicFilterMatched=30`
+  - `formatMatched=30`
+  - `ranked=30`
+  - `detailReads=20`
+  - `detailed=20`
+  - `eligibleDetailed=20`
+  - top candidate `creator-devnet-phantom / 민지핏로그`
+- Creator Agent was redeployed because the deployed image was stale
+  (`7f97e86`) and did not reflect the current embedded policy context path.
+  New live revision: `knot-creator-agent-00015-8hx`, image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-creator-agent:787d091`.
+- Final deployed Brand Agent run produced:
+  - `matchRunId=match-954b9104-e730-41a3-8d6e-ee8891c3cb28`
+  - `discoveryReturnedCount=30`
+  - `detailReadCount=20`
+  - candidate endpoint `count=20`, `eligible=20`
+  - selected creator `creator-devnet-phantom`
+  - selected agent `agent-creator-devnet-phantom`
+  - pay.sh `SETTLED`, receipt
+    `receipt-paysh-d5974f95-6a09-546a-9a35-fbc53ac0c0b6`
+  - negotiation `negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+    reached `AGREED`
+  - agreement `agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+    reached `FUNDING_REQUIRED`
+  - amount `1 devnet USDC`
+- Deployed negotiation messages showed:
+  - `SYSTEM / VERIFICATION_EVENT / pay.sh / SETTLED`
+  - Brand Agent `OFFER` at `1 USDC`
+  - Creator Agent `ACCEPT` at `1 USDC`
+- Creator authenticated API returned 200 for `/me`, dashboard, offers, final
+  offer detail, agreements, and final agreement detail.
+- Public deployed Web routes returned 200 for the final Brand promotion,
+  negotiation, agreement, Creator offer, and Creator agreement pages.
+- No wallet funding, Solana program deployment, Secret Manager change, or new
+  on-chain transaction was performed.

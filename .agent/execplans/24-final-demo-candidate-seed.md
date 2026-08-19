@@ -31,12 +31,12 @@ negotiation, and Agreement creation without relying on mock fallback.
 3. [x] Design a 30-creator candidate pool with 20 detailed eligible candidates.
 4. [x] Add scoped reset/reseed script `scripts/seed_xexymix_final_demo.py`.
 5. [x] Add final demo scenario and input-value runbook.
-6. [ ] Run local dry-run, lint, and ranking validation.
-7. [ ] Seed Firestore with `--reset-demo`.
-8. [ ] Verify deployed API sees 30 discovery profiles and 20 detailed eligible
+6. [x] Run local dry-run, lint, and ranking validation.
+7. [x] Seed Firestore with `--reset-demo`.
+8. [x] Verify deployed API sees 30 discovery profiles and 20 detailed eligible
    candidates.
-9. [ ] Run deployed Brand Agent flow and verify pay.sh/system negotiation output.
-10. [ ] Update `docs/IMPLEMENTATION_STATUS.md` with final results.
+9. [x] Run deployed Brand Agent flow and verify pay.sh/system negotiation output.
+10. [x] Update `docs/IMPLEMENTATION_STATUS.md` with final results.
 
 ## Expected Demo Shape
 
@@ -49,3 +49,33 @@ negotiation, and Agreement creation without relying on mock fallback.
 - Selected creator: `creator-devnet-phantom / agent-creator-devnet-phantom`.
 - Contract amount: 1 devnet USDC.
 - pay.sh verification: sandbox, expected 0.02 USDC.
+
+## Final Live Results
+
+- Firestore reset/reseed installed 155 documents and 30
+  `creatorDiscoveryProfiles`.
+- Firestore matching verification:
+  - `creatorProfiles=31`
+  - `discoveryProfiles=30`
+  - `publicFilterMatched=30`
+  - `formatMatched=30`
+  - `ranked=30`
+  - `detailReads=20`
+  - `detailed=20`
+  - `eligibleDetailed=20`
+- Creator Agent was redeployed from stale image `7f97e86` to
+  `knot-creator-agent-00015-8hx` with image tag `787d091`.
+- Final deployed Brand Agent run:
+  - `matchRunId=match-954b9104-e730-41a3-8d6e-ee8891c3cb28`
+  - `discoveryReturnedCount=30`
+  - `detailReadCount=20`
+  - candidate endpoint returned `count=20`, `eligible=20`
+  - selected `creator-devnet-phantom / agent-creator-devnet-phantom`
+  - pay.sh `SETTLED`, receipt
+    `receipt-paysh-d5974f95-6a09-546a-9a35-fbc53ac0c0b6`
+  - negotiation `negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+    reached `AGREED`
+  - agreement `agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+    reached `FUNDING_REQUIRED`
+  - amount `1 devnet USDC`
+- Creator API and Web routes returned 200 for the final offer and agreement.
