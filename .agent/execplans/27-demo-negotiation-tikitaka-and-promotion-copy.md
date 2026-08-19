@@ -61,10 +61,24 @@ users.
 - `./.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`:
   17 passed after the cache refresh fix.
 
-## Pending
+## Deployment And Final Verification
 
-- Deploy the Creator Agent cache refresh fix.
-- Reseed Firestore again if a clean final demo state is needed after
-  verification runs.
-- Re-run deployed Agent-run verification and confirm
-  `OFFER 1 → COUNTER 2 → ACCEPT → ACCEPT`.
+- Creator Agent cache refresh fix deployed from `c0b5a16` to Cloud Run
+  revision `knot-creator-agent-00016-vsw`.
+- Firestore final demo seed reset/reseeded again after deployment.
+- Deployed Web/API verification confirmed:
+  - pay.sh candidate verification status `SETTLED`.
+  - Selected creator `creator-devnet-phantom /
+    agent-creator-devnet-phantom`.
+  - Negotiation `negotiation-fabd9f47-e503-400a-bbe5-44578c42d98b`,
+    status `AGREED`.
+  - Agreement `agreement-f92c6470-212d-4bb6-bd66-a6dd83cf1ef9`,
+    amount `2 devnet USDC`.
+  - Persisted conversation:
+    `VERIFICATION_EVENT pay.sh 0.02 → OFFER 1 → COUNTER 2 → ACCEPT 2 → ACCEPT 2`.
+
+## Remaining Guardrail
+
+- This phase did not perform wallet funding, escrow lock, evidence submission,
+  milestone release, Secret Manager changes, Solana program changes, or new
+  on-chain transactions.

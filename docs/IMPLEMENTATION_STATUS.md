@@ -1225,3 +1225,36 @@ Updated: 2026-08-20 KST
 
 - No wallet funding, Secret Manager change, Solana program change, or on-chain
   transaction was performed.
+
+### Creator Agent Deployment And Verification
+
+- Pushed main to `origin/main` through commit
+  `c0b5a16 Refresh creator agent policy context`.
+- Built Creator Agent image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-creator-agent:c0b5a16`.
+- Cloud Build ID:
+  `48030fe2-1888-444b-ad4f-4bd7aad08951`, status `SUCCESS`.
+- Deployed Cloud Run Creator Agent revision `knot-creator-agent-00016-vsw`.
+- `knot-creator-agent-00016-vsw` is serving 100% traffic.
+- Firestore final demo seed was reset/reseeded again after deployment:
+  155 documents, 30 creator discovery profiles, contract amount
+  `2 devnet USDC`, pay.sh sandbox verification quote `0.02 USDC`.
+- Deployed Web/API verification at
+  `https://knot-web-7k3walthgq-uc.a.run.app` with Brand login produced:
+  - Match run: `match-e0fa1dc1-e81d-40e6-8cfe-a861bdaef7d2`.
+  - pay.sh candidate verification status: `SETTLED`.
+  - Selected creator: `creator-devnet-phantom /
+    agent-creator-devnet-phantom`.
+  - Negotiation: `negotiation-fabd9f47-e503-400a-bbe5-44578c42d98b`,
+    status `AGREED`.
+  - Agreement: `agreement-f92c6470-212d-4bb6-bd66-a6dd83cf1ef9`,
+    amount `2 devnet USDC`.
+  - Persisted conversation:
+    `VERIFICATION_EVENT pay.sh 0.02 → OFFER 1 → COUNTER 2 → ACCEPT 2 → ACCEPT 2`.
+
+### Remaining Notes
+
+- The verification above confirms the deployed pay.sh sandbox candidate
+  verification and real A2A negotiation path.
+- It does not perform escrow lock, evidence submission, milestone release,
+  wallet funding, or any new Solana transaction.
