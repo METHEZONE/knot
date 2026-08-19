@@ -1118,3 +1118,20 @@ Updated: 2026-08-20 KST
 
 - No API contract, Firestore data, deployment, wallet funding, Secret Manager,
   Solana program, or on-chain transaction change was made.
+
+### Web Deployment
+
+- Pushed main to `origin/main` through commit
+  `a5c44ae Polish demo UI copy and deadline input`.
+- Built Web image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:a5c44ae`.
+- Cloud Build ID:
+  `e94e4cd2-3824-4b92-96fa-454a04116bcf`, status `SUCCESS`.
+- Deployed Cloud Run Web revision `knot-web-00020-r6r`.
+- `knot-web-00020-r6r` is serving 100% traffic at
+  `https://knot-web-7k3walthgq-uc.a.run.app`.
+- Public route verification returned 200 for:
+  - `/login`
+  - `/brand/promotions/new`
+  - `/brand/negotiations/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+  - `/creator/offers/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
