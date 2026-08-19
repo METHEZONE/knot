@@ -1361,6 +1361,76 @@ def build_api_router(
             }
         )
 
+    @router.post("/brand/promotions/{promotion_id}/agent-run", status_code=status.HTTP_201_CREATED)
+    def run_brand_promotion_agent(
+        promotion_id: str,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        key = _require_idempotency_key(idempotency_key)
+        auth_user = _require_auth_user(token_verifier, authorization)
+        user = _require_completed_role(repository, auth_user, "BRAND")
+        promotion = _require_brand_promotion_document(repository, user, promotion_id)
+
+        match_run_response = run_matches(promotion_id, key)
+        match_run = match_run_response["data"]["matchRun"]  # type: ignore[index]
+        if not isinstance(match_run, dict):
+            raise _problem(
+                status.HTTP_409_CONFLICT,
+                "INVALID_STATE_TRANSITION",
+                "MatchRun response was not usable.",
+            )
+
+        negotiation: dict[str, object] | None = None
+        agreement: dict[str, object] | None = None
+        match_run_id = _require_document_str(match_run, "matchRunId")
+        selected_creator_agent_id = match_run.get("selectedCreatorAgentId")
+        if isinstance(selected_creator_agent_id, str) and selected_creator_agent_id:
+            _, candidate = _match_candidate_by_agent_id(
+                repository,
+                match_run_id,
+                selected_creator_agent_id,
+            )
+            existing_negotiation_id = candidate.get("negotiationId") if candidate else None
+            if isinstance(existing_negotiation_id, str) and existing_negotiation_id:
+                existing_negotiation = repository.get_raw_document(
+                    FirestorePaths.negotiation(existing_negotiation_id)
+                )
+                if existing_negotiation is not None:
+                    negotiation = existing_negotiation
+                    agreement = _find_agreement_by_negotiation(repository, existing_negotiation_id)
+            if negotiation is None:
+                negotiation_response = start_negotiation(match_run_id)
+                negotiation_data = negotiation_response["data"]  # type: ignore[index]
+                negotiation_value = (
+                    negotiation_data.get("negotiation")
+                    if isinstance(negotiation_data, dict)
+                    else None
+                )
+                agreement_value = (
+                    negotiation_data.get("agreement")
+                    if isinstance(negotiation_data, dict)
+                    else None
+                )
+                negotiation = negotiation_value if isinstance(negotiation_value, dict) else None
+                agreement = agreement_value if isinstance(agreement_value, dict) else None
+
+        candidates = repository.list_raw_documents(
+            f"{COLLECTIONS.match_runs}/{match_run_id}/{COLLECTIONS.match_candidates}"
+        )
+        candidates.sort(key=lambda item: (item.get("rank") is None, item.get("rank") or 9999))
+        return _ok(
+            {
+                "promotion": promotion,
+                "matchRun": match_run,
+                "candidates": candidates,
+                "negotiation": negotiation,
+                "agreement": agreement,
+                "timeline": _promotion_events(repository, {promotion_id}, limit=50),
+                "waitingForCreator": negotiation is None,
+            }
+        )
+
     @router.delete("/brand/promotions/{promotion_id}")
     def delete_brand_promotion(
         promotion_id: str,
@@ -2075,6 +2145,21 @@ def build_api_router(
         candidate = repository.get_raw_document(candidate_path)
         if candidate is None:
             raise _not_found("candidate", match_candidate_id)
+        existing_negotiation_id = candidate.get("negotiationId")
+        if isinstance(existing_negotiation_id, str) and existing_negotiation_id:
+            existing_negotiation = repository.get_raw_document(
+                FirestorePaths.negotiation(existing_negotiation_id)
+            )
+            if existing_negotiation is not None:
+                return _ok(
+                    {
+                        "negotiation": existing_negotiation,
+                        "agreement": _find_agreement_by_negotiation(
+                            repository,
+                            existing_negotiation_id,
+                        ),
+                    }
+                )
         agent_policy = repository.get_agent_policy(creator_agent_id)
         if agent_policy is None:
             raise _not_found("agentPolicy", creator_agent_id)
@@ -2676,6 +2761,27 @@ def build_api_router(
         creator_agent_id = negotiation.get("creatorAgentId")
 
         if match_run_id and creator_agent_id:
+            match_run = (
+                repository.get_raw_document(FirestorePaths.match_run(str(match_run_id)))
+                if isinstance(match_run_id, str)
+                else None
+            )
+            paid_verification = match_run.get("paidVerification") if match_run is not None else None
+            paid_status = (
+                str(paid_verification.get("status") or "").upper()
+                if isinstance(paid_verification, dict)
+                else ""
+            )
+            if (
+                isinstance(paid_verification, dict)
+                and (paid_verification.get("receiptId") or paid_status in {"SETTLED", "FAILED"})
+            ):
+                system_messages.append(
+                    _paysh_negotiation_system_message(
+                        negotiation=negotiation,
+                        paid_verification=paid_verification,
+                    )
+                )
             # Find the match candidate
             candidates = repository.list_raw_documents(
                 f"{COLLECTIONS.match_runs}/{match_run_id}/{COLLECTIONS.match_candidates}"
@@ -2685,7 +2791,14 @@ def build_api_router(
                 None
             )
 
-            if candidate and candidate.get("verificationReceipt"):
+            if (
+                candidate
+                and candidate.get("verificationReceipt")
+                and not any(
+                    message.get("messageId") == f"system-paysh-{match_run_id}"
+                    for message in system_messages
+                )
+            ):
                 receipt = candidate["verificationReceipt"]
                 result = receipt.get("verificationResult", {})
 
@@ -2693,9 +2806,32 @@ def build_api_router(
                 system_messages.append({
                     "messageId": f"system-paysh-creator-{candidate.get('creatorId', 'unknown')}",
                     "negotiationId": negotiation_id,
+                    "contextId": negotiation.get("contextId"),
+                    "taskId": negotiation.get("taskId"),
+                    "role": "ROLE_SYSTEM",
                     "sender": "SYSTEM",
                     "senderRole": "SYSTEM",
                     "messageType": "VERIFICATION_EVENT",
+                    "payload": {
+                        "schema": "knot.agent-payment.v1",
+                        "type": "VERIFICATION_EVENT",
+                        "event": "CREATOR_VERIFICATION",
+                        "provider": "pay.sh",
+                        "protocol": "x402",
+                        "status": "CONFIRMED" if candidate.get("verificationPassed") else "FAILED",
+                        "amountUsdc": receipt.get("costUsdc", 0.10),
+                        "receiptId": receipt.get("receiptId", "N/A"),
+                        "network": receipt.get("network", "SANDBOX"),
+                        "display": {
+                            "headline": "pay.sh 후보 검증",
+                            "message": (
+                                "후보 검증 API를 사용했어요. "
+                                f"{receipt.get('costUsdc', 0.10)} USDC · "
+                                f"{receipt.get('network', 'SANDBOX')}"
+                            ),
+                            "rationale": "크리에이터 보상이 아니라 Agent 운영 검증 비용입니다.",
+                        },
+                    },
                     "content": {
                         "event": "CREATOR_VERIFICATION",
                         "provider": "pay.sh (Nansen API)",
@@ -7852,6 +7988,72 @@ def _record_paysh_operation(
         }
         repository.save_raw_document(FirestorePaths.transaction_receipt(receipt_id), receipt)
     return result
+
+
+def _paysh_negotiation_system_message(
+    *,
+    negotiation: dict[str, object],
+    paid_verification: dict[str, object],
+) -> dict[str, object]:
+    status_value = str(paid_verification.get("status") or "UNKNOWN").upper()
+    amount = paid_verification.get("quote")
+    amount_usdc = (
+        amount.get("amountUsdc")
+        if isinstance(amount, dict)
+        else paid_verification.get("amountUsdc")
+    )
+    mode = str(paid_verification.get("mode") or "unknown")
+    receipt_id = paid_verification.get("receiptId")
+    external_receipt_id = paid_verification.get("externalReceiptId")
+    if status_value == "SETTLED":
+        message = f"후보 검증 API를 사용했어요. {amount_usdc} USDC · 결제 완료"
+        rationale = "pay.sh/x402 영수증을 기록했고 후보 선택은 정책 코드가 다시 검증했습니다."
+    elif status_value in {"SKIPPED", "DISABLED"}:
+        message = "무료 정보만으로 후보를 결정했어요."
+        rationale = str(paid_verification.get("detail") or "유료 검증을 사용하지 않은 환경입니다.")
+    else:
+        message = "유료 검증을 완료하지 못해 공개 정보만 사용했어요."
+        rationale = str(
+            paid_verification.get("detail")
+            or paid_verification.get("continuation")
+            or status_value
+        )
+
+    payload = {
+        "schema": "knot.agent-payment.v1",
+        "type": "VERIFICATION_EVENT",
+        "event": "CANDIDATE_VERIFICATION",
+        "provider": "pay.sh",
+        "protocol": paid_verification.get("protocol", "x402"),
+        "mode": mode,
+        "status": status_value,
+        "amountUsdc": amount_usdc,
+        "receiptId": receipt_id,
+        "externalReceiptId": external_receipt_id,
+        "resourceId": paid_verification.get("resourceId"),
+        "resultDigest": paid_verification.get("resultDigest"),
+        "continuation": paid_verification.get("continuation"),
+        "nonAuthoritative": paid_verification.get("nonAuthoritative", True),
+        "display": {
+            "headline": "pay.sh 후보 검증",
+            "message": message,
+            "rationale": rationale,
+        },
+    }
+    return {
+        "messageId": f"system-paysh-{negotiation.get('matchRunId')}",
+        "negotiationId": negotiation.get("negotiationId"),
+        "contextId": negotiation.get("contextId"),
+        "taskId": negotiation.get("taskId"),
+        "role": "ROLE_SYSTEM",
+        "sender": "SYSTEM",
+        "senderRole": "SYSTEM",
+        "messageType": "VERIFICATION_EVENT",
+        "sequence": 0,
+        "payload": payload,
+        "content": payload,
+        "createdAt": negotiation.get("createdAt") or _now(),
+    }
 
 
 def _agent_payment_event_status(status_value: str) -> str:

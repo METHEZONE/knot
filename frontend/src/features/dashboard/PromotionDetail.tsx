@@ -311,7 +311,7 @@ function AgreementRecord({
       <span className="grid gap-2 text-right">
         <Money usdc={agreement.terms.compensation.baseAmountUsdc} />
         <span className="font-mono text-xs text-muted">
-          {agreement.status} · escrow {escrow?.status ?? "not-created"}
+          {agreementMoneyStateLabel(agreement, escrow, latestSettlement)}
         </span>
         <span className="font-mono text-xs text-muted">
           released {baseUnitsToUsdcLabel(escrow?.releasedAmountBaseUnits)} · tx {latestSettlement?.signature ? "있음" : "없음"}
@@ -410,6 +410,19 @@ function eventLabel(event: ApiTimelineEvent) {
   if (event.type === "ESCROW_FUNDED" || event.type === "ESCROW_LOCKED") return "에스크로 예치";
   if (event.type === "API_PAYMENT") return "pay.sh 검증";
   return event.type;
+}
+
+function agreementMoneyStateLabel(
+  agreement: ApiAgreement,
+  escrow: ApiAgreementEscrowBundle["escrow"],
+  latestSettlement: ApiAgreementEscrowBundle["settlements"][number] | null | undefined,
+) {
+  if (escrow?.status === "RELEASED") return "money RELEASED · on-chain settled";
+  if (escrow?.status === "PARTIALLY_RELEASED") return "money PARTIALLY_RELEASED · on-chain";
+  if (latestSettlement?.signature) return `money SETTLED · agreement ${agreement.status}`;
+  if (escrow?.status === "FUNDED" || escrow?.status === "LOCKED") return `money FUNDED · agreement ${agreement.status}`;
+  if (escrow?.status) return `money ${escrow.status} · agreement ${agreement.status}`;
+  return `agreement ${agreement.status} · escrow not-created`;
 }
 
 function deliverableSummary(deliverables: Array<{ format: string; count: number }> | undefined) {

@@ -485,13 +485,11 @@ test("API client does not start negotiation when matching has no eligible creato
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, method: init?.method ?? "GET" });
-    if (url.endsWith("/api/v1/promotions/promotion-no-candidate")) {
-      return Response.json({ data: { promotion } });
-    }
-    if (url.endsWith("/api/v1/promotions/promotion-no-candidate/matches:run")) {
+    if (url.endsWith("/api/v1/brand/promotions/promotion-no-candidate/agent-run")) {
       return Response.json(
         {
           data: {
+            promotion,
             matchRun: {
               matchRunId: "match-no-candidate",
               promotionId: "promotion-no-candidate",
@@ -500,27 +498,22 @@ test("API client does not start negotiation when matching has no eligible creato
               selectedCreatorId: null,
               selectedCreatorAgentId: null,
             },
+            candidates: [
+              {
+                creatorId: "creator-001",
+                creatorAgentId: "creator-agent-001",
+                eligible: false,
+                hardFilterReasons: ["CATEGORY_MISMATCH", "RATE_EXCEEDS_MAX_PER_CREATOR"],
+              },
+            ],
+            negotiation: null,
+            agreement: null,
+            timeline: [],
+            waitingForCreator: true,
           },
         },
         { status: 201 },
       );
-    }
-    if (url.endsWith("/api/v1/match-runs/match-no-candidate/candidates")) {
-      return Response.json({
-        data: {
-          candidates: [
-            {
-              creatorId: "creator-001",
-              creatorAgentId: "creator-agent-001",
-              eligible: false,
-              hardFilterReasons: ["CATEGORY_MISMATCH", "RATE_EXCEEDS_MAX_PER_CREATOR"],
-            },
-          ],
-        },
-      });
-    }
-    if (url.endsWith("/api/v1/promotions/promotion-no-candidate/timeline")) {
-      return Response.json({ data: { events: [] } });
     }
     return Response.json({ detail: { title: "Unexpected request", code: "TEST_ERROR" } }, { status: 500 });
   }) as typeof fetch;
@@ -529,8 +522,9 @@ test("API client does not start negotiation when matching has no eligible creato
     const flow = await new ProductApiClient("").runAgentForPromotion("promotion-no-candidate");
     assert.equal(flow.waitingForCreator, true);
     assert.equal(flow.negotiation, null);
-    assert.deepEqual(calls.map((call) => call.method), ["GET", "POST", "GET", "GET"]);
+    assert.deepEqual(calls.map((call) => call.method), ["POST"]);
     assert.ok(!calls.some((call) => call.url.includes(":start-negotiation")));
+    assert.ok(!calls.some((call) => call.url.includes("matches:run")));
   } finally {
     globalThis.fetch = previousFetch;
   }

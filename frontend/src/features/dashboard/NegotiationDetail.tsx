@@ -23,6 +23,7 @@ import {
 } from "@/features/wallet/phantom";
 
 type Role = "brand" | "creator";
+type MessageSide = Role | "system";
 
 type DetailState = {
   negotiation: ApiNegotiation | null;
@@ -440,20 +441,21 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
       {visible.map((message, index) => {
         const side = messageSide(message, index);
         const mine = side === role;
+        const system = side === "system";
         return (
           <motion.div
             key={message.messageId}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`flex ${mine ? "justify-end" : "justify-start"}`}
+            className={`flex ${system ? "justify-center" : mine ? "justify-end" : "justify-start"}`}
           >
             <div
               className={`sketch-alt ink max-w-[86%] border border-border-subtle px-4 py-3 ${
-                mine ? "bg-accent text-background" : "bg-surface"
+                system ? "bg-background text-foreground" : mine ? "bg-accent text-background" : "bg-surface"
               }`}
             >
               <p className="font-mono text-[10px] uppercase opacity-70">
-                {side === "brand" ? "Brand Agent" : "Creator Agent"} · #{message.sequence ?? index + 1}
+                {messageActorLabel(side)} · #{message.sequence ?? index + 1}
               </p>
               <p className="mt-1 font-mono text-[10px] opacity-70">
                 {String(message.payload?.type ?? "협상")} · {message.taskId}
@@ -461,7 +463,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
               <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
               <details className="mt-3">
                 <summary className="cursor-pointer font-mono text-[10px] uppercase opacity-70">
-                  상세 조건
+                  {system ? "검증 영수증" : "상세 조건"}
                 </summary>
                 <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[10px] text-foreground">
                   {formatA2aPayload(message)}
@@ -885,16 +887,24 @@ function TypingDots() {
   );
 }
 
-function messageSide(message: ApiNegotiationMessage, index: number): Role {
+function messageActorLabel(side: MessageSide) {
+  if (side === "system") return "System";
+  return side === "brand" ? "Brand Agent" : "Creator Agent";
+}
+
+function messageSide(message: ApiNegotiationMessage, index: number): MessageSide {
+  const payload = message.payload ?? message.content ?? {};
+  if (String(message.role ?? "") === "ROLE_SYSTEM") return "system";
+  if (String(payload.type ?? "").toUpperCase() === "VERIFICATION_EVENT") return "system";
   if (String(message.role ?? "") === "ROLE_AGENT") return "creator";
   if (String(message.role ?? "") === "ROLE_USER") return "brand";
-  const type = String(message.payload?.type ?? "").toUpperCase();
+  const type = String(payload.type ?? "").toUpperCase();
   if (type === "ACCEPT" || type === "REJECT") return "creator";
   return index % 2 === 0 ? "brand" : "creator";
 }
 
 function messageLine(message: ApiNegotiationMessage, index: number) {
-  const payload = message.payload ?? {};
+  const payload = message.payload ?? message.content ?? {};
   const display = isRecord(payload.display) ? payload.display : null;
   if (typeof display?.message === "string" && display.message.trim()) {
     const headline =
@@ -908,6 +918,12 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
     return `${headline}${display.message}${rationale}`;
   }
   const type = String(payload.type ?? (index === 0 ? "OFFER" : "COUNTER")).toUpperCase();
+  if (type === "VERIFICATION_EVENT") {
+    const amount = numberFromUnknown(payload.amountUsdc);
+    const status = String(payload.status ?? "검증 기록");
+    const provider = String(payload.provider ?? "pay.sh");
+    return `${provider} 검증 ${status}${amount === null ? "" : ` · ${amount.toLocaleString()} USDC`}`;
+  }
   const terms = isRecord(payload.terms) ? payload.terms : null;
   const compensation = terms && isRecord(terms.compensation) ? terms.compensation : null;
   const amount = numberFromUnknown(compensation?.baseAmountUsdc);
@@ -924,7 +940,7 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
 
 function formatA2aPayload(message: ApiNegotiationMessage) {
   const a2aData = firstA2aPartData(message.a2aMessage);
-  return JSON.stringify(a2aData ?? message.payload ?? {}, null, 2);
+  return JSON.stringify(a2aData ?? message.payload ?? message.content ?? {}, null, 2);
 }
 
 function firstA2aPartData(a2aMessage: Record<string, unknown> | undefined) {

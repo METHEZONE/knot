@@ -365,6 +365,7 @@ export type ApiNegotiationMessage = {
   role?: string;
   sequence?: number;
   payload?: Record<string, unknown>;
+  content?: Record<string, unknown>;
   a2aMessage?: Record<string, unknown>;
   createdAt: string;
 };
@@ -975,25 +976,17 @@ export class ProductApiClient {
     );
   }
 
-  async runAgentForPromotion(promotionId: string): Promise<AgentPromotionRunResult> {
-    const promotion = await this.getPromotion(promotionId);
-    const matchRun = await this.runMatches(promotionId);
-    const candidates = await this.listCandidates(matchRun.matchRunId);
-    if (!matchRun.selectedCreatorAgentId) {
-      const timeline = await this.getTimeline(promotionId);
-      return {
-        promotion,
-        matchRun,
-        candidates,
-        negotiation: null,
-        agreement: null,
-        timeline,
-        waitingForCreator: true,
-      };
-    }
-    const { negotiation, agreement } = await this.startNegotiation(matchRun.matchRunId);
-    const timeline = await this.getTimeline(promotionId);
-    return { promotion, matchRun, candidates, negotiation, agreement, timeline, waitingForCreator: false };
+  async runAgentForPromotion(
+    promotionId: string,
+    idempotencyKey = `frontend-agent-run-${promotionId}-${Date.now()}`,
+  ): Promise<AgentPromotionRunResult> {
+    return this.request<AgentPromotionRunResult>(
+      `/api/v1/brand/promotions/${promotionId}/agent-run`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
   }
 
   async getPromotion(promotionId: string) {

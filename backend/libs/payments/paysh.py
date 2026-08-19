@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +20,18 @@ class PayShError(Exception):
     pass
 
 
-def _pay_bin() -> str:
+def pay_available() -> bool:
+    return shutil.which("pay") is not None or shutil.which("npx") is not None
+
+
+def _pay_command() -> list[str]:
     path = shutil.which("pay")
-    if not path:
-        raise PayCliNotFound("pay CLI was not found on PATH")
-    return path
+    if path:
+        return [path]
+    npx_path = shutil.which("npx")
+    if npx_path:
+        return [npx_path, "-y", "@solana/pay"]
+    raise PayCliNotFound("pay CLI was not found on PATH")
 
 
 @dataclass(frozen=True)
@@ -42,7 +49,7 @@ class PaymentReceipt:
     cost_usdc: float
     paid_at: datetime
     verification_result: dict[str, Any]
-    transaction_id: Optional[str] = None
+    transaction_id: str | None = None
 
 
 def fetch(resource_id: str, *, sandbox: bool = True, timeout_seconds: int = 90) -> PayResult:
@@ -52,7 +59,7 @@ def fetch(resource_id: str, *, sandbox: bool = True, timeout_seconds: int = 90) 
     the returned receipt is authoritative for display; it must never authorize
     matching, escrow lock, or release decisions.
     """
-    args = [_pay_bin()]
+    args = _pay_command()
     if sandbox:
         args.append("--sandbox")
     args += ["fetch", resource_id]
@@ -122,7 +129,7 @@ def verify_creator(
         )
 
     except Exception as e:
-        raise PayShError(f"Creator verification failed: {e}")
+        raise PayShError(f"Creator verification failed: {e}") from e
 
 
 def verify_content(
@@ -179,7 +186,7 @@ def verify_content(
         )
 
     except Exception as e:
-        raise PayShError(f"Content verification failed: {e}")
+        raise PayShError(f"Content verification failed: {e}") from e
 
 
 def _pay_curl(
@@ -191,7 +198,7 @@ def _pay_curl(
 ) -> dict:
     """Execute pay curl with x402 payment"""
     try:
-        args = [_pay_bin()]
+        args = _pay_command()
         if sandbox:
             args.append("--sandbox")
 
@@ -220,9 +227,9 @@ def _pay_curl(
         return response
 
     except json.JSONDecodeError as e:
-        raise PayShError(f"Invalid JSON response from pay curl: {e}")
+        raise PayShError(f"Invalid JSON response from pay curl: {e}") from e
     except Exception as e:
-        raise PayShError(f"pay curl execution error: {e}")
+        raise PayShError(f"pay curl execution error: {e}") from e
 
 
 def _get_verification_api_url(provider: str, endpoint_type: str) -> str:
@@ -254,8 +261,8 @@ def _simulate_creator_verification(
     Simulate creator verification for sandbox mode
     Returns realistic fake data for development
     """
-    import random
     import hashlib
+    import random
 
     # Deterministic fake data based on URL hash
     url_hash = int(hashlib.md5(profile_url.encode()).hexdigest()[:8], 16)
@@ -303,8 +310,8 @@ def _simulate_content_verification(
     Simulate content verification for sandbox mode
     Returns realistic fake data for development
     """
-    import random
     import hashlib
+    import random
 
     # Deterministic fake data based on URL hash
     url_hash = int(hashlib.md5(content_url.encode()).hexdigest()[:8], 16)

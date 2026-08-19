@@ -1,4 +1,5 @@
-import shutil
+import base64
+import json
 from datetime import date, timedelta
 
 import pytest
@@ -9,7 +10,7 @@ from apps.api import routes as api_routes
 from apps.api.main import create_app
 from libs.domain.hashing import terms_hash
 from libs.domain.models import AgreementTerms
-from libs.payments.paysh import PayResult
+from libs.payments.paysh import PayResult, pay_available
 from libs.payments.settlement import lock_amount_base_units, milestone_amounts_base_units
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.seed import seed_demo_repository
@@ -49,6 +50,25 @@ def client_and_repository_with_seed(
     repository = KnotRepository(store)
     seed_demo_repository(repository)
     return TestClient(create_app(settings=settings, repository=repository)), repository
+
+
+def auth_headers(uid: str = "user-brand-1", email: str = "t1@knot.com") -> dict[str, str]:
+    header = _b64({"alg": "none", "typ": "JWT"})
+    payload = _b64(
+        {
+            "sub": uid,
+            "user_id": uid,
+            "email": email,
+            "name": "KNOT Tester",
+            "aud": "knot-dev-503505",
+        }
+    )
+    return {"Authorization": f"Bearer {header}.{payload}."}
+
+
+def _b64(payload: dict[str, object]) -> str:
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    return encoded.rstrip("=")
 
 
 def set_creator_min_base(
@@ -388,10 +408,86 @@ def test_run_match_records_paysh_sandbox_receipt(monkeypatch) -> None:
     assert receipts[0]["status"] == "CONFIRMED"
 
 
+def test_brand_agent_run_starts_a2a_and_projects_paysh_message(monkeypatch) -> None:
+    def fake_fetch(resource_id: str, *, sandbox: bool, timeout_seconds: int) -> PayResult:
+        assert resource_id == "https://debugger.pay.sh/mpp/quote/AAPL"
+        assert sandbox is True
+        return PayResult(
+            ok=True,
+            returncode=0,
+            body='{"receiptId": "receipt-pay-agent-run", "result": {"ok": true}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("apps.api.routes.fetch_paysh", fake_fetch)
+    client, repository = client_and_repository_with_seed(
+        Settings(
+            auth_mode="emulator",
+            firebase_project_id="knot-dev-503505",
+            paysh_mode="sandbox",
+            paysh_resource_id="https://debugger.pay.sh/mpp/quote/AAPL",
+        )
+    )
+    repository.save_raw_document(
+        FirestorePaths.user("legacy-brand-owner"),
+        {
+            "userId": "legacy-brand-owner",
+            "uid": "legacy-brand-owner",
+            "email": "legacy-brand@example.com",
+            "role": "BRAND",
+            "activeRole": "brand",
+            "onboardingStatus": "COMPLETED",
+            "status": "ACTIVE",
+            "brandId": "brand-001",
+            "agentId": "brand-agent-001",
+        },
+    )
+
+    response = client.post(
+        "/api/v1/brand/promotions/promotion-001/agent-run",
+        headers={
+            **auth_headers("legacy-brand-owner", "legacy-brand@example.com"),
+            "Idempotency-Key": "agent-run-paysh-visible",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    flow = response.json()["data"]
+    assert flow["waitingForCreator"] is False
+    assert flow["matchRun"]["paidVerification"]["status"] == "SETTLED"
+    assert flow["negotiation"]["status"] == "AGREED"
+    assert flow["agreement"]["agreementId"].startswith("agreement-")
+
+    second = client.post(
+        "/api/v1/brand/promotions/promotion-001/agent-run",
+        headers={
+            **auth_headers("legacy-brand-owner", "legacy-brand@example.com"),
+            "Idempotency-Key": "agent-run-paysh-visible",
+        },
+    )
+    assert second.status_code == 201
+    assert (
+        second.json()["data"]["negotiation"]["negotiationId"]
+        == flow["negotiation"]["negotiationId"]
+    )
+
+    messages = client.get(
+        f"/api/v1/negotiations/{flow['negotiation']['negotiationId']}/messages"
+    ).json()["data"]["messages"]
+    pay_message = next(
+        message for message in messages if message["messageId"].startswith("system-paysh-")
+    )
+    assert pay_message["role"] == "ROLE_SYSTEM"
+    assert pay_message["payload"]["type"] == "VERIFICATION_EVENT"
+    assert pay_message["payload"]["status"] == "SETTLED"
+    assert pay_message["payload"]["externalReceiptId"] == "receipt-pay-agent-run"
+    assert len(repository.list_raw_documents(COLLECTIONS.payment_operations)) == 1
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(
-    shutil.which("pay") is None,
-    reason="pay CLI 미설치 (npm i -g @solana/pay)",
+    not pay_available(),
+    reason="pay CLI/npx 미설치 (npm i -g @solana/pay)",
 )
 def test_run_match_pays_a_real_paysh_sandbox_call() -> None:
     """monkeypatch 없이 실제 pay CLI 로 x402 결제를 수행한다.

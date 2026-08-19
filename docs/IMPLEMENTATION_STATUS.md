@@ -2,6 +2,50 @@
 
 Updated: 2026-08-20 KST
 
+## Final Demo Risk Tightening (2026-08-20 KST)
+
+### Changed
+
+- Added authenticated `POST /api/v1/brand/promotions/{promotion_id}/agent-run` for the Brand Agent run entry point. The endpoint verifies the Brand owns the Promotion, runs/reuses matching through the existing idempotent MatchRun path, starts or reuses the A2A negotiation, and returns the Promotion, MatchRun, candidates, negotiation, Agreement, timeline, and waiting state in one response.
+- Made `start_negotiation` idempotent when the selected match candidate already has a persisted negotiation, preventing repeated UI clicks or retries from creating duplicate negotiations/Agreements.
+- Projected stored `matchRun.paidVerification` into negotiation messages as a neutral `ROLE_SYSTEM` `VERIFICATION_EVENT` when a real receipt or terminal payment status exists. The message exposes pay.sh/x402 mode, amount, receipt IDs, digest, continuation, and a user-facing display summary without treating pay.sh as creator compensation.
+- Updated Negotiation Detail to render verification events as centered system cards with a "검증 영수증" detail panel, so the Agent negotiation flow visibly includes the pay.sh verification step when the MatchRun recorded one.
+- Updated Brand Promotion Agreement summaries to prioritize the current escrow/settlement money state over stale Agreement projection status, reducing demo confusion when an Agreement document lags behind released escrow state.
+- Updated the frontend Agent run client so Brand `협찬 제안하기` uses the server-side orchestration endpoint instead of browser-side `getPromotion -> matches:run -> candidates -> start-negotiation -> timeline` sequencing.
+- Added regression coverage for the server-side Agent run path, pay.sh system message projection, retry idempotency, and the no-candidate frontend flow.
+- Added a pay.sh CLI fallback from `pay` to `npx -y @solana/pay`, matching pay.sh's documented one-shot install path, so local/CI sandbox verification can execute even when the global `pay` binary is not installed.
+- Updated the Cloud Run demo deploy script to default `PAYSH_RESOURCE_ID` to the pay.sh sandbox debugger quote endpoint and keep demo services warm with min instances during the final demo.
+
+### Verification
+
+- `./.venv/bin/python -m ruff check backend/libs/payments/paysh.py backend/apps/api/routes.py backend/tests/test_api_promotions.py`: passed.
+- `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py backend/tests/test_paysh_sandbox.py backend/tests/test_api_a2a_http_integration.py -q`: 35 passed, 2 skipped.
+- `npx -y @solana/pay --sandbox curl https://debugger.pay.sh/mpp/quote/AAPL`: passed and returned a sandbox AAPL quote.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_run_match_pays_a_real_paysh_sandbox_call -q -rs`: 1 passed.
+- `./.venv/bin/pytest backend/tests -q`: 167 passed, 6 skipped.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend test -- --runInBand`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+
+### Live Deployment Link Verification
+
+- Public Cloud Run route smoke returned 200 for deployed Web routes: `/login`, Brand dashboard/promotions/promotion detail/negotiation detail/agreement detail, and Creator dashboard/offers/offer detail/agreements/settlements.
+- Public service health returned 200 for deployed `knot-api`, `knot-web3`, and `knot-creator-agent` `/readyz`.
+- Firebase sign-in succeeded for `t1@knot.com / 000000` and `c1@knot.com / 000000`.
+- Deployed authenticated API smoke returned 200 for Brand `/me`, dashboard, promotions, XEXYMIX promotion detail, agreements, devnet Agreement detail, negotiation messages, and Agreement escrow.
+- Deployed authenticated API smoke returned 200 for Creator `/me`, dashboard, agent, offers, XEXYMIX offer detail, agreements, and devnet Agreement detail.
+- Deployed Web proxy API smoke returned 200 for `/api/v1/me`, Brand promotions, Brand negotiation messages, and Creator offers.
+- Current deployed API and Web proxy both return 404 for `POST /api/v1/brand/promotions/{promotion_id}/agent-run`; the server-side Agent run orchestration change is not deployed yet.
+- Current deployed `negotiation-xexymix-devnet` messages are only OFFER, COUNTER, and ACCEPT; no pay.sh `VERIFICATION_EVENT` system message is present on the deployment link yet.
+- Playwright CLI screenshot against the deployed login page was attempted but did not complete within 60 seconds in this executor; it was stopped and not used as evidence.
+
+### Demo Boundary
+
+- No deployment, IAM/Secret change, wallet funding, program deployment, or on-chain transaction was performed in this phase.
+- pay.sh visibility is now driven by stored MatchRun verification receipts/status. It should be demoed as an Agent-paid external verification/x402 proof, not as the creator payout rail.
+
 ## Final Hackathon QA Smoke (2026-08-20 KST)
 
 ### Verification
