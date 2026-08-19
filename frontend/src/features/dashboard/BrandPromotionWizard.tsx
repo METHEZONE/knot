@@ -37,7 +37,31 @@ type DeliverableCounts = {
   post: number;
 };
 
-const RECOMMENDED_MOODS = ["설명형", "루틴", "클로즈업", "정보", "신뢰", "솔직함"];
+const CATEGORY_OPTIONS = [
+  { value: "fitness", label: "피트니스/운동" },
+  { value: "fashion", label: "패션/스타일" },
+  { value: "beauty", label: "뷰티/스킨케어" },
+  { value: "food", label: "음식/카페" },
+  { value: "lifestyle", label: "라이프스타일" },
+  { value: "wellness", label: "웰니스/건강관리" },
+  { value: "tech", label: "테크/가전" },
+  { value: "outdoor", label: "아웃도어/여행" },
+];
+const CONTENT_ANGLES = [
+  "착용샷/사용 장면",
+  "일상 루틴",
+  "핏/사용감 후기",
+  "제품 설명",
+  "스타일링/활용법",
+  "비교/체크",
+  "언박싱/첫인상",
+  "문제 해결 팁",
+];
+const USAGE_RIGHT_OPTIONS = [
+  { value: "organicOnly", label: "브랜드 채널 재게시만" },
+  { value: "paidBoost30d", label: "재게시 + 30일 광고 활용" },
+  { value: "fullLicense90d", label: "90일 광고/상세페이지 활용" },
+];
 const DELIVERABLE_CONTROLS: Array<{ key: keyof DeliverableCounts; label: string }> = [
   { key: "reel", label: "릴스" },
   { key: "short", label: "숏츠" },
@@ -168,12 +192,17 @@ export function BrandPromotionWizard() {
                 </label>
                 <label className="mt-4 block text-sm text-muted">
                   카테고리
-                  <input
+                  <select
                     value={draft.category}
                     onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                    placeholder="beauty, food, tech..."
                     className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
-                  />
+                  >
+                    {CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <p className="mt-3 text-sm text-muted">{draft.summary}</p>
                 <p className="mt-2 text-xs text-muted">
@@ -184,7 +213,7 @@ export function BrandPromotionWizard() {
                   <textarea
                     value={draft.workBrief}
                     onChange={(event) => setDraft({ ...draft, workBrief: event.target.value })}
-                    placeholder="예: 릴스 1개에서 제품 사용 장면과 사용감을 보여주고, 설명란에 브랜드명과 필수 해시태그를 넣기"
+                    placeholder="예: 필라테스 루틴 릴스 1개에서 착용샷, 움직일 때의 핏, 하루 코디 활용 장면을 자연스럽게 보여주기"
                     className="sketch-alt ink mt-2 min-h-20 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
                   />
                 </label>
@@ -193,12 +222,12 @@ export function BrandPromotionWizard() {
                   <textarea
                     value={draft.prohibitedClaims}
                     onChange={(event) => setDraft({ ...draft, prohibitedClaims: event.target.value })}
-                    placeholder="줄바꿈 또는 쉼표로 입력"
+                    placeholder="예: 체형 교정 보장, 통증 치료 효과, 다이어트 효과 단정, 경쟁사 비방, 실제와 다른 할인/성능 표현"
                     className="sketch-alt ink mt-2 min-h-16 w-full border border-border-subtle bg-surface px-3 py-2 text-base outline-none"
                   />
                 </label>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {RECOMMENDED_MOODS.map((mood) => {
+                  {CONTENT_ANGLES.map((mood) => {
                     const active = draft.moodTags.includes(mood);
                     return (
                       <button
@@ -270,16 +299,21 @@ export function BrandPromotionWizard() {
                   </span>
                 </label>
                 <label className="mt-4 block text-sm text-muted">
-                  사용권
+                  콘텐츠 활용 범위
                   <select
                     value={draft.usageRights}
                     onChange={(event) => setDraft({ ...draft, usageRights: event.target.value })}
                     className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface-raised px-3 py-2 text-sm outline-none"
                   >
-                    <option value="organicOnly">Organic only</option>
-                    <option value="paidBoost30d">Paid boost 30d</option>
-                    <option value="fullLicense90d">Full license 90d</option>
+                    {USAGE_RIGHT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
+                  <span className="mt-1 block text-xs text-muted">
+                    광고 집행이나 상세페이지 활용까지 필요한지 정합니다.
+                  </span>
                 </label>
                 <label className="mt-4 block text-sm text-muted">
                   게시 마감일
@@ -392,8 +426,8 @@ function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
     productName: stringField(product.name) || "",
     priceKrw: priceField(product.price),
     summary: stringField(product.summary) || "",
-    category: stringField(product.category) || "",
-    moodTags: keywords.filter((item) => RECOMMENDED_MOODS.includes(item)).slice(0, 3),
+    category: normalizedCategory(stringField(product.category)),
+    moodTags: defaultContentAngles(keywords),
     totalUsdc: "",
     maxPerDealUsdc: "",
     deadline: deadlineAfterDays(14),
@@ -404,6 +438,22 @@ function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
     provider: analysis.provider,
     fallbackReason: analysis.fallbackReason,
   };
+}
+
+function normalizedCategory(value: string | null) {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) return "fitness";
+  const direct = CATEGORY_OPTIONS.find((option) => option.value === normalized);
+  if (direct) return direct.value;
+  const labelMatch = CATEGORY_OPTIONS.find((option) => option.label.includes(value ?? ""));
+  return labelMatch?.value ?? "fitness";
+}
+
+function defaultContentAngles(keywords: string[]) {
+  const selected = CONTENT_ANGLES.filter((angle) =>
+    keywords.some((keyword) => angle.includes(keyword) || keyword.includes(angle)),
+  );
+  return (selected.length ? selected : ["착용샷/사용 장면", "일상 루틴", "핏/사용감 후기"]).slice(0, 3);
 }
 
 function deadlineAfterDays(days: number) {

@@ -30,7 +30,7 @@ DEMO_OWNER_PREFIX = "demo-xexymix-final"
 CREATOR_PREFIX = "creator-xexymix-demo"
 AGENT_PREFIX = "agent-creator-xexymix-demo"
 TOTAL_CREATOR_COUNT = 30
-CONTRACT_AMOUNT_USDC = 1
+CONTRACT_AMOUNT_USDC = 2
 INITIAL_OFFER_USDC = 1
 
 

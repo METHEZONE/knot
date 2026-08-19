@@ -29,7 +29,7 @@ class SeedArgs:
     brand_wallet = seed.base.DEFAULT_BRAND_WALLET
     creator_wallet = seed.base.DEFAULT_CREATOR_WALLET
     creator_count = 30
-    amount_usdc = 1
+    amount_usdc = 2
     initial_offer_usdc = 1
 
 
@@ -40,6 +40,11 @@ def test_final_demo_seed_creates_twenty_detailed_eligible_candidates() -> None:
     promotion = Promotion.model_validate(
         documents[FirestorePaths.promotion(seed.xexymix.PROMOTION_ID)]
     )
+    top_creator_policy = documents[FirestorePaths.agent_policy(seed.base.CREATOR_AGENT_ID)]
+    promotion_document = documents[FirestorePaths.promotion(seed.xexymix.PROMOTION_ID)]
+    assert promotion.budget.max_per_creator_usdc == 2
+    assert promotion_document["initialOffer"] == 1
+    assert top_creator_policy["creator"]["minBaseUsdc"] == 2
     projections = [
         document
         for path, document in documents.items()

@@ -72,7 +72,7 @@ The seeded accounts are already completed, so this is for replay or explanation.
 - Minimum lead time: `5 days`
 - Monthly capacity: `5`
 - Completed deals: `28`
-- Minimum/maximum demo rate: `1 USDC`
+- Minimum/maximum demo rate: `2 USDC`
 - Social URL: `https://www.instagram.com/minji.fitlog`
 - Blocked industries: `tobacco`, `gambling`, `alcohol`
 
@@ -88,10 +88,10 @@ The seeded accounts are already completed, so this is for replay or explanation.
 - Usage rights: `organicOnly`
 - Required disclosures: `#ad`, `#sponsored`
 - Prohibited claims: `체형 교정 효과 단정`, `의학적 효능 표현`, `비교 비방`
-- Contract amount: `1 devnet USDC`
+- Contract amount: `2 devnet USDC`
 - Initial offer: `1 devnet USDC`
-- Max per creator: `1 devnet USDC`
-- Total seeded budget: `30 devnet USDC`
+- Max per creator: `2 devnet USDC`
+- Total seeded budget: `60 devnet USDC`
 - Agent max rounds: `5`
 - Auto escrow: `false` for the demo seed; Phantom/on-chain funding is a separate
   approved action.
@@ -130,13 +130,16 @@ while keeping the selected creator tied to the live Creator demo account.
 5. Confirm the selected creator is `민지핏로그`.
 6. Open the negotiation detail and show:
    - System pay.sh verification event.
-   - Brand Agent offer.
-   - Creator Agent acceptance/counter flow.
+   - Brand Agent offer at `1 USDC`.
+   - Creator Agent counter at `2 USDC`.
+   - Brand Agent acceptance.
+   - Creator Agent final acceptance.
    - Generated Agreement.
 7. Log in as Creator `c1@knot.com`.
 8. Open Creator offers and show the same negotiation from the creator side.
 9. Open Agreement/settlement view. Explain that contract amount is only
-   `1 devnet USDC` to stay within faucet limits.
+   `2 devnet USDC` to stay within faucet limits while still showing a real
+   counteroffer.
 10. Only run Phantom escrow funding/release if separate on-chain approval and
     test wallet balances are ready.
 
@@ -169,9 +172,11 @@ extension.
    - 30 discovery profiles.
    - 20 detailed eligible candidates.
    - selected Creator `민지핏로그`.
-   - pay.sh/x402 verification summary.
-   - Brand Agent `OFFER`.
-   - Creator Agent response.
+   - pay.sh/x402 candidate verification message inside the conversation.
+   - Brand Agent `OFFER` at `1 USDC`.
+   - Creator Agent `COUNTER` at `2 USDC`.
+   - Brand Agent `ACCEPT`.
+   - Creator Agent final `ACCEPT`.
    - Agreement creation.
 6. Open the Brand Agreement page.
 7. If showing on-chain funding, keep Phantom on the Brand wallet and click

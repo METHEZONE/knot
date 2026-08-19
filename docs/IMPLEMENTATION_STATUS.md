@@ -1135,3 +1135,48 @@ Updated: 2026-08-20 KST
   - `/brand/promotions/new`
   - `/brand/negotiations/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
   - `/creator/offers/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+
+## 2026-08-20 Demo Negotiation Tiki-Taka And Promotion Copy
+
+### Changed
+
+- Updated final demo seed defaults so the live demo can show a real A2A
+  counteroffer path:
+  - Contract amount / creator minimum: `2 devnet USDC`.
+  - Initial Brand offer: `1 devnet USDC`.
+  - Expected flow after reseed and a fresh Agent run:
+    `OFFER 1 → COUNTER 2 → ACCEPT → ACCEPT`.
+- Kept the amount faucet-friendly while avoiding the previous immediate
+  `OFFER → ACCEPT` path.
+- Changed Brand promotion creation category from free text to fixed
+  user-facing options such as `피트니스/운동`, `패션/스타일`, `음식/카페`,
+  `라이프스타일`, and `테크/가전`.
+- Replaced abstract mood tags with practical content-angle tags:
+  `착용샷/사용 장면`, `일상 루틴`, `핏/사용감 후기`, `제품 설명`,
+  `스타일링/활용법`, `비교/체크`, `언박싱/첫인상`, and `문제 해결 팁`.
+- Updated prohibited-claims placeholder with realistic examples such as
+  `체형 교정 보장`, `통증 치료 효과`, `다이어트 효과 단정`, `경쟁사 비방`,
+  and `실제와 다른 할인/성능 표현`.
+- Replaced usage-right option labels with clearer user copy:
+  `브랜드 채널 재게시만`, `재게시 + 30일 광고 활용`,
+  `90일 광고/상세페이지 활용`.
+- Increased negotiation message font size again and split message text into
+  short displayed lines using `·` and sentence punctuation boundaries.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `./.venv/bin/pytest backend/tests/test_final_demo_seed.py backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`:
+  2 passed.
+- `PYTHONPATH=backend ./.venv/bin/python scripts/seed_xexymix_final_demo.py --target memory --reset-demo`:
+  passed, generated 155 documents and reported contract amount
+  `2 devnet USDC`.
+
+### Scope Guard
+
+- Firestore was not reset or reseeded.
+- No deployment, wallet funding, Secret Manager change, Solana program change,
+  or on-chain transaction was performed.
