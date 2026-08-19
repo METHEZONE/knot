@@ -289,6 +289,13 @@ function numberMap(value: unknown): Record<string, number> {
 
 function creatorStats(found: CreatorDraft) {
   const counts = found.publicSignals.profileCounts;
+  const limited = found.publicSignals.fetchStatus === "LIMITED";
+  if (limited && !Object.keys(counts).length) {
+    return [
+      { label: "사용자이름", value: found.handle },
+      { label: "공개 지표", value: "확인 필요" },
+    ];
+  }
   const stats = [
     ["팔로워", counts.followerCount ?? found.followers],
     ["팔로잉", counts.followingCount],

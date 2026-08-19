@@ -1281,3 +1281,37 @@ Updated: 2026-08-20 KST
 - No backend, Firestore, wallet, Secret Manager, Solana, or on-chain changes
   were made.
 - Deployment is pending explicit approval.
+
+## 2026-08-20 Creator Instagram Limited Analysis
+
+### Changed
+
+- Fixed Creator signup Instagram analysis so Instagram login-wall pages are not
+  treated as valid scraped profile content.
+- Added Creator profile access-wall detection for Instagram login/signup pages.
+- When Instagram blocks public profile access, the API now returns a truthful
+  limited analysis with:
+  - `provider=deterministic`
+  - `fallbackReason=instagram_access_limited`
+  - handle/display name derived from the URL path
+  - unknown public metrics left unknown
+- Updated onboarding copy to explain that Instagram showed a login page and
+  public metrics need user confirmation.
+- Changed Creator onboarding stats so unknown public metrics are not displayed
+  as `0`; limited access shows `공개 지표: 확인 필요`.
+
+### Verification
+
+- Reproduced the deployed issue before the fix: `https://instagram.com/ye__5o`
+  was fetched as an Instagram login page and produced `displayName=Instagram`.
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py::test_creator_profile_analysis_treats_instagram_login_wall_as_limited backend/tests/test_api_onboarding.py::test_creator_profile_analysis_extracts_public_metrics_when_present backend/tests/test_api_onboarding.py::test_creator_profile_analysis_and_confirmation_are_owner_scoped -q`:
+  3 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+
+### Scope Guard
+
+- No Firestore reset, wallet funding, Secret Manager change, Solana program
+  change, or on-chain transaction was performed.
+- API/Web deployment is pending explicit approval.

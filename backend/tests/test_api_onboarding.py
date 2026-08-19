@@ -298,6 +298,57 @@ def test_creator_profile_analysis_extracts_public_metrics_when_present(monkeypat
     assert "averageViews" not in draft["unknownFields"]
 
 
+def test_creator_profile_analysis_treats_instagram_login_wall_as_limited(
+    monkeypatch,
+) -> None:
+    client, _ = authed_client_and_repository()
+    headers = auth_headers("creator-login-wall", "creator-login-wall@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-login-wall-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def fetched_source_page(source_url: str, _settings: Settings):
+        return (
+            routes.FetchedSourcePage(
+                final_url=(
+                    "https://www.instagram.com/accounts/login/"
+                    "?next=https%3A%2F%2Fwww.instagram.com%2Fye__5o"
+                ),
+                title="Instagram",
+                description=(
+                    "Create an account or log in to Instagram - "
+                    "Share what you're into with the people who get you."
+                ),
+                text="Log in to Instagram to see photos and videos from friends.",
+                links=(),
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(routes, "_secure_fetch_source_page", fetched_source_page)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-login-wall-analysis"},
+        json={"sourceUrl": "instagram.com/ye__5o"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "deterministic"
+    assert analysis["fallbackReason"] == "instagram_access_limited"
+    assert draft["displayName"]["value"] == "ye__5o"
+    assert draft["handle"]["value"] == "@ye__5o"
+    assert draft["publicSignals"]["fetchStatus"] == "LIMITED"
+    assert draft["publicSignals"]["analysisNotes"] == [
+        "Instagram이 로그인 화면을 반환해 공개 지표는 직접 확인이 필요합니다."
+    ]
+
+
 def test_product_analysis_normalizes_http_and_reuses_without_idempotency(monkeypatch) -> None:
     client, _ = authed_client_and_repository()
     headers = auth_headers("product-http", "product-http@example.com")

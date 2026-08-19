@@ -6033,6 +6033,12 @@ def _creator_profile_analysis_draft(
 ) -> AnalysisDraftResult:
     fetched, fetch_reason = _secure_fetch_source_page(source_url, settings)
     if fetched is not None:
+        if _is_creator_profile_access_limited(source_url, fetched):
+            return _deterministic_creator_profile_draft(
+                source_url,
+                settings,
+                fallback_reason="instagram_access_limited",
+            )
         gemini_result, gemini_reason = _gemini_creator_profile_draft(
             source_url,
             fetched,
@@ -6047,6 +6053,28 @@ def _creator_profile_analysis_draft(
             fallback_reason=gemini_reason,
         )
     return _deterministic_creator_profile_draft(source_url, settings, fallback_reason=fetch_reason)
+
+
+def _is_creator_profile_access_limited(
+    source_url: str,
+    fetched: FetchedSourcePage,
+) -> bool:
+    source_host = (urlparse(source_url).hostname or "").lower()
+    final = urlparse(fetched.final_url)
+    final_host = (final.hostname or "").lower()
+    if "instagram." not in source_host and "instagram." not in final_host:
+        return False
+    final_path = final.path.lower()
+    if final_path.startswith("/accounts/login"):
+        return True
+    text = f"{fetched.title or ''} {fetched.description or ''} {fetched.text[:600]}".lower()
+    access_wall_markers = [
+        "create an account or log in to instagram",
+        "log in to instagram",
+        "sign up for instagram",
+        "instagram 로그인",
+    ]
+    return any(marker in text for marker in access_wall_markers)
 
 
 def _deterministic_product_draft(
@@ -6651,6 +6679,7 @@ def _creator_fetch_note(reason: str | None) -> str:
     labels = {
         "secure_fetch_disabled": "서버 fetch가 꺼져 있어 URL 기반 제한 분석만 수행했습니다.",
         "secure_fetch_failed": "공개 페이지 요청이 실패해 URL 기반 제한 분석만 수행했습니다.",
+        "instagram_access_limited": "Instagram이 로그인 화면을 반환해 공개 지표는 직접 확인이 필요합니다.",
         "empty_source": "공개 페이지에 분석 가능한 텍스트가 거의 없었습니다.",
         "too_many_redirects": "공개 페이지 리다이렉트가 너무 많아 fetch를 중단했습니다.",
     }

@@ -2,6 +2,9 @@ export function analysisSourceLabel(provider: string, fallbackReason: string | n
   if (provider === "vertex-gemini" && !fallbackReason) {
     return "Gemini가 공개 URL 내용을 분석했습니다.";
   }
+  if (fallbackReason === "instagram_access_limited") {
+    return "Instagram이 로그인 화면을 보여줘 공개 지표는 직접 확인이 필요합니다. 사용자이름은 그대로 사용할 수 있어요.";
+  }
   if (provider === "secure-fetch") {
     return fallbackReason
       ? "URL 내용을 읽어 초안을 만들었습니다. 일부 항목은 직접 확인해 주세요."
