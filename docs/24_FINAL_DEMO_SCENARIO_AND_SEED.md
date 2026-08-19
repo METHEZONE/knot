@@ -140,6 +140,110 @@ while keeping the selected creator tied to the live Creator demo account.
 10. Only run Phantom escrow funding/release if separate on-chain approval and
     test wallet balances are ready.
 
+## One-Browser Demo Flow
+
+Use this when the demo machine has only one browser profile and one Phantom
+extension.
+
+### Preflight
+
+- Phantom network: `Devnet`.
+- Phantom must contain both demo accounts:
+  - Brand funding wallet:
+    `8keJx2mcKFENHcUs4ti79aUurAHrWt8Z4XcQTnKGKks6`
+  - Creator settlement wallet:
+    `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`
+- Start with the app logged out.
+- Start with Phantom selected to the Brand wallet.
+- Do not keep Brand and Creator logged in across two tabs in the same browser
+  profile. Firebase Auth is a single browser session, so switching roles means
+  app logout/login.
+
+### Recommended Sequence
+
+1. Open `https://knot-web-7k3walthgq-uc.a.run.app/login`.
+2. Log in as Brand `t1@knot.com / 000000`.
+3. Open `/brand/promotions/promotion-xexymix-devnet`.
+4. Run the Brand Agent entry point.
+5. Show:
+   - 30 discovery profiles.
+   - 20 detailed eligible candidates.
+   - selected Creator `민지핏로그`.
+   - pay.sh/x402 verification summary.
+   - Brand Agent `OFFER`.
+   - Creator Agent response.
+   - Agreement creation.
+6. Open the Brand Agreement page.
+7. If showing on-chain funding, keep Phantom on the Brand wallet and click
+   escrow funding. This creates the devnet funding transaction.
+8. After funding is confirmed, log out of the app.
+9. In Phantom, switch the selected account to the Creator wallet
+   `63T8p6c4p1fFC7HmYDEqNtyheqMxnYKmiGqTafpzh8zJ`.
+10. Log in as Creator `c1@knot.com / 000000`.
+11. Open Creator offers or the final Creator Agreement page.
+12. Submit evidence only on the `contentLiveVerified` / `content` milestone.
+    Do not submit evidence on `deposit`; deposit is not a content-proof
+    milestone.
+13. If auto settlement succeeds, show the settlement signature. If it is
+    deferred, explain that the fallback is manual Phantom release and do not
+    claim final release until a devnet signature is confirmed.
+
+### Why This Order
+
+- Brand wallet is needed for escrow funding.
+- Creator wallet is needed for settlement destination proof and release UI.
+- A single browser has one Firebase session, so role switching must be explicit.
+- A single Phantom extension has one active selected account, so switch Phantom
+  after Brand funding and before Creator evidence/settlement.
+
+## Presentation Additions
+
+### How pay.sh Is Used
+
+- The Brand Agent pays for a candidate-verification API call through pay.sh/x402
+  before selecting the Creator.
+- The result is recorded as a `SYSTEM / VERIFICATION_EVENT` in the negotiation
+  timeline.
+- pay.sh does not decide who gets selected. It provides a paid verification
+  signal; deterministic policy code still checks candidate eligibility and
+  private constraints.
+- The demo uses pay.sh sandbox with expected verification cost `0.02 USDC`.
+
+### Delegated Payment / BM
+
+- The user does not manually buy API credits or paste API keys.
+- The Brand grants an Agent spending authority with caps: per-call cap, per-run
+  cap, and daily cap.
+- KNOT can monetize as:
+  - SaaS subscription for Brands and agencies.
+  - Usage fee on agent-paid verification calls.
+  - Escrow/payment operation fee.
+  - Premium automation and compliance reporting.
+- The important business point: agentic commerce needs a payment rail for
+  machine-to-machine API purchases, not only human checkout.
+
+### If The User Does Not Understand Wallets
+
+- The product should describe wallets as `예치 지갑` and `정산 받을 지갑`,
+  not as crypto jargon.
+- Brand side: connect wallet only when money is actually being escrowed.
+- Creator side: connect wallet only when choosing where settlement will arrive.
+- All negotiation, matching, pay.sh verification, and Agreement creation work
+  before the user needs to understand a wallet.
+- For later production UX, Passkey/MPC or embedded wallet custody can hide seed
+  phrases while still settling on-chain.
+
+### Why It Is Easier For Non-Web3 Users
+
+- The user sees `협찬`, `계약`, `예치`, `정산`, and `영수증`, not raw protocol
+  actions.
+- Agents handle candidate search, paid API verification, policy checks, and A2A
+  negotiation.
+- The blockchain is used only where it gives clear value: escrowed funds,
+  settlement proof, and auditability.
+- Failed or deferred settlement is not faked. The UI shows the reason and keeps
+  a manual fallback path.
+
 ## Judging Narrative
 
 - Gemini/Vertex proposes explanations and content context.

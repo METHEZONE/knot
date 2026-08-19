@@ -1020,3 +1020,49 @@ Updated: 2026-08-20 KST
   negotiation, agreement, Creator offer, and Creator agreement pages.
 - No wallet funding, Solana program deployment, Secret Manager change, or new
   on-chain transaction was performed.
+
+## 2026-08-20 Final Demo Web UX And One-Browser Runbook
+
+### Changed
+
+- Deployed the Negotiation Detail UI fix that makes pay.sh/x402 verification
+  visible as a summary above the Agent conversation, instead of relying only on
+  a system message inside the thread.
+- Gated evidence submission by milestone trigger. `deposit` /
+  `creatorAccepted` no longer shows the content evidence form; evidence is
+  submitted only for the `contentLiveVerified` / `content` milestone.
+- Added a one-browser demo flow to `docs/24_FINAL_DEMO_SCENARIO_AND_SEED.md`
+  for switching Brand and Creator in one Firebase browser session and one
+  Phantom extension.
+- Added presentation notes explaining how pay.sh is used, the delegated payment
+  / business model, and why wallet complexity is hidden from non-Web3 users.
+
+### Deployment Verification
+
+- Web revision: `knot-web-00019-wqc`.
+- Web image:
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:8974883`.
+- Public deployed Web routes returned 200 for:
+  - `/brand/negotiations/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+  - `/brand/agreements/agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+  - `/creator/offers/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+  - `/creator/agreements/agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+- The deployed Web proxy returned the final negotiation messages:
+  - `SYSTEM / VERIFICATION_EVENT / pay.sh / SETTLED`
+  - Brand Agent `OFFER` at `1 USDC`
+  - Creator Agent `ACCEPT` at `1 USDC`
+
+### Frontend Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
+
+### Scope Guard
+
+- No wallet funding, Solana program deployment, Secret Manager change, or new
+  on-chain transaction was performed.
+- The final seeded agreement
+  `agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9` remains
+  `FUNDING_REQUIRED`; do not present settlement as complete until a devnet
+  funding/release signature is confirmed.

@@ -37,6 +37,11 @@ negotiation, and Agreement creation without relying on mock fallback.
    candidates.
 9. [x] Run deployed Brand Agent flow and verify pay.sh/system negotiation output.
 10. [x] Update `docs/IMPLEMENTATION_STATUS.md` with final results.
+11. [x] Clarify deployed Negotiation Detail pay.sh visibility and milestone
+    evidence gating.
+12. [x] Redeploy Web so the final demo URL serves the pay.sh summary and
+    content-only evidence UI.
+13. [x] Document one-browser Brand/Creator demo order and presentation notes.
 
 ## Expected Demo Shape
 
@@ -79,3 +84,19 @@ negotiation, and Agreement creation without relying on mock fallback.
     reached `FUNDING_REQUIRED`
   - amount `1 devnet USDC`
 - Creator API and Web routes returned 200 for the final offer and agreement.
+
+## Post-Seed Web Verification
+
+- Web was redeployed to revision `knot-web-00019-wqc` with image tag
+  `8974883`.
+- The final deployed Web routes returned 200 for:
+  - `/brand/negotiations/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+  - `/brand/agreements/agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+  - `/creator/offers/negotiation-76b252f1-60b5-4758-9c76-6582e80590da`
+  - `/creator/agreements/agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9`
+- The deployed Web proxy returned the final negotiation messages:
+  - `SYSTEM / VERIFICATION_EVENT / pay.sh / SETTLED`
+  - Brand Agent `OFFER` at `1 USDC`
+  - Creator Agent `ACCEPT` at `1 USDC`
+- No wallet funding, Solana program deployment, Secret Manager change, or new
+  on-chain transaction was performed in the post-seed Web verification.
