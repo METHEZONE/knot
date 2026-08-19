@@ -30,6 +30,7 @@ Updated: 2026-08-20 KST
 - `./.venv/bin/pytest backend/tests -q`: 167 passed, 6 skipped.
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
 - `npm --prefix frontend test -- --runInBand`: 21 passed.
 - `npm --prefix frontend run build`: passed.
 
@@ -528,6 +529,7 @@ Updated: 2026-08-20 KST
 
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
 - `npm --prefix frontend run build`: passed.
 
 ## 2026-08-03 Promotion Detail UI Regression Fix
@@ -1066,3 +1068,20 @@ Updated: 2026-08-20 KST
   `agreement-ab135b84-7876-481a-ace2-dfc24b84e8a9` remains
   `FUNDING_REQUIRED`; do not present settlement as complete until a devnet
   funding/release signature is confirmed.
+
+## 2026-08-20 Promotion Budget Input UX
+
+### Changed
+
+- Updated the Brand promotion creation wizard numeric USDC fields to preserve
+  an empty input state while the user is editing.
+- The default `0` is no longer forced back into the field, so replacing the
+  total budget with `10` no longer produces a visible `010` state.
+- Submission still normalizes the values to integer USDC and keeps total budget
+  greater than or equal to the per-deal cap.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.

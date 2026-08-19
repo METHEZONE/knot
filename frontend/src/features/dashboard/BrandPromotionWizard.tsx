@@ -18,8 +18,8 @@ type MoodDraft = {
   summary: string;
   category: string;
   moodTags: string[];
-  totalUsdc: number;
-  maxPerDealUsdc: number;
+  totalUsdc: NumericDraftValue;
+  maxPerDealUsdc: NumericDraftValue;
   workBrief: string;
   deliverables: DeliverableCounts;
   prohibitedClaims: string;
@@ -27,6 +27,8 @@ type MoodDraft = {
   provider: string;
   fallbackReason: string | null;
 };
+
+type NumericDraftValue = number | "";
 
 type DeliverableCounts = {
   reel: number;
@@ -72,8 +74,8 @@ export function BrandPromotionWizard() {
     setBusy(true);
     setError(null);
     try {
-      const maxPerCreator = normalizedUsdc(draft.maxPerDealUsdc, 1);
-      const totalBudget = Math.max(normalizedUsdc(draft.totalUsdc, maxPerCreator), maxPerCreator);
+      const maxPerCreator = normalizedUsdc(numericDraftValue(draft.maxPerDealUsdc), 1);
+      const totalBudget = Math.max(normalizedUsdc(numericDraftValue(draft.totalUsdc), maxPerCreator), maxPerCreator);
       const initialOffer = initialOfferForMax(maxPerCreator);
       const promotionPayload = {
         productName: draft.productName,
@@ -258,7 +260,7 @@ export function BrandPromotionWizard() {
                       step={1}
                       value={draft.totalUsdc}
                       onChange={(event) => {
-                        const totalUsdc = normalizedUsdc(Number(event.target.value), draft.maxPerDealUsdc);
+                        const totalUsdc = usdcInputValue(event.target.value);
                         setDraft({ ...draft, totalUsdc });
                       }}
                       className="sketch-alt ink w-36 border border-border-subtle bg-surface-raised px-3 py-2 font-mono text-xl outline-none"
@@ -287,11 +289,13 @@ export function BrandPromotionWizard() {
                       step={1}
                       value={draft.maxPerDealUsdc}
                       onChange={(event) => {
-                        const maxPerDealUsdc = normalizedUsdc(Number(event.target.value), 1);
+                        const maxPerDealUsdc = usdcInputValue(event.target.value);
+                        const normalizedMax = normalizedUsdc(numericDraftValue(maxPerDealUsdc), 1);
+                        const currentTotal = numericDraftValue(draft.totalUsdc);
                         setDraft({
                           ...draft,
                           maxPerDealUsdc,
-                          totalUsdc: Math.max(draft.totalUsdc, maxPerDealUsdc),
+                          totalUsdc: currentTotal > 0 ? Math.max(currentTotal, normalizedMax) : draft.totalUsdc,
                         });
                       }}
                       className="sketch-alt ink w-36 border border-border-subtle bg-surface-raised px-3 py-2 font-mono text-xl outline-none"
@@ -301,7 +305,7 @@ export function BrandPromotionWizard() {
                 </label>
                 <div className="mt-4">
                   <p className="text-xs text-muted">협상 시작 금액</p>
-                  <Money usdc={initialOfferForMax(draft.maxPerDealUsdc)} size="lg" />
+                  <Money usdc={initialOfferForMax(numericDraftValue(draft.maxPerDealUsdc))} size="lg" />
                 </div>
               </div>
             </div>
@@ -317,8 +321,8 @@ export function BrandPromotionWizard() {
                   !draft.workBrief.trim() ||
                   draft.moodTags.length === 0 ||
                   deliverablesFromDraft(draft.deliverables).length === 0 ||
-                  normalizedUsdc(draft.maxPerDealUsdc, 0) < 1 ||
-                  normalizedUsdc(draft.totalUsdc, 0) < normalizedUsdc(draft.maxPerDealUsdc, 1)
+                  normalizedUsdc(numericDraftValue(draft.maxPerDealUsdc), 0) < 1 ||
+                  normalizedUsdc(numericDraftValue(draft.totalUsdc), 0) < normalizedUsdc(numericDraftValue(draft.maxPerDealUsdc), 1)
                 }
                 className="sketch-pill bg-accent px-6 py-3 text-background disabled:opacity-50"
               >
@@ -378,8 +382,8 @@ function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
     summary: stringField(product.summary) || "",
     category: stringField(product.category) || "",
     moodTags: keywords.filter((item) => RECOMMENDED_MOODS.includes(item)).slice(0, 3),
-    totalUsdc: 0,
-    maxPerDealUsdc: 0,
+    totalUsdc: "",
+    maxPerDealUsdc: "",
     workBrief: "",
     deliverables: { reel: 0, short: 0, post: 0 },
     prohibitedClaims: "",
@@ -405,6 +409,15 @@ function initialOfferForMax(maxPerDealUsdc: number) {
 function normalizedUsdc(value: number, fallback: number) {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(0, Math.floor(value));
+}
+
+function numericDraftValue(value: NumericDraftValue) {
+  return value === "" ? Number.NaN : value;
+}
+
+function usdcInputValue(value: string): NumericDraftValue {
+  if (!value) return "";
+  return normalizedUsdc(Number(value), 0);
 }
 
 function deliverablesFromDraft(deliverables: DeliverableCounts) {
