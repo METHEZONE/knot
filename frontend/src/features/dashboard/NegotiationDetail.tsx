@@ -141,7 +141,7 @@ export function NegotiationDetail({
         return;
       }
       if (prepared.funding.brandAuthority !== wallet.address) {
-        throw new Error("연결된 Phantom 지갑과 Agreement Brand 지갑이 다릅니다.");
+        throw new Error("연결된 Phantom 지갑과 이 계약의 브랜드 예치 지갑이 다릅니다.");
       }
       setFundingState("signing");
       const signature = await sendPreparedSolanaTransaction(prepared.funding);
@@ -239,7 +239,7 @@ export function NegotiationDetail({
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="계약과 예치금" title="마일스톤 정산" />
+        <SectionHeader eyebrow="계약과 예치금" title="정산 단계" />
         {agreement ? (
           <MilestonePanel
             role={role}
@@ -255,15 +255,14 @@ export function NegotiationDetail({
         ) : (
           <PanelMessage
             title="아직 계약이 생성되지 않았습니다"
-            body="협상이 합의되면 마일스톤과 예치 상태가 이 영역에 표시됩니다."
+            body="협상이 합의되면 정산 단계와 예치 상태가 이 영역에 표시됩니다."
           />
         )}
         {actionError ? <p className="mt-4 text-sm text-negative">{actionError}</p> : null}
       </section>
 
       <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-        <SectionHeader eyebrow="협상 메시지" title="Agent 대화" />
-        <PayShVerificationSummary messages={messages} />
+        <SectionHeader eyebrow="협상 메시지" title="매니저 대화" />
         <MessageThread role={role} messages={messages} />
       </section>
     </div>
@@ -321,14 +320,14 @@ export function AgreementNegotiationDetail({
   }, [agreementId, client]);
 
   if (state.loading) {
-    return <PanelMessage title="계약 상세 불러오는 중" body="Agreement와 연결된 협상 기록을 조회하고 있습니다." />;
+    return <PanelMessage title="계약 상세 불러오는 중" body="계약과 연결된 협상 기록을 조회하고 있습니다." />;
   }
 
   if (state.error || !state.negotiationId) {
     return (
       <PanelMessage
         title="계약 상세를 불러오지 못했습니다"
-        body={state.error ?? "이 Agreement에 연결된 negotiationId가 없습니다."}
+        body={state.error ?? "이 계약에 연결된 협상 기록이 없습니다."}
       />
     );
   }
@@ -361,11 +360,11 @@ function CounterpartyProfilePanel({
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
       <SectionHeader
-        eyebrow={role === "brand" ? "Creator profile" : "Brand profile"}
+        eyebrow={role === "brand" ? "크리에이터 정보" : "브랜드 정보"}
         title={counterpartyTitle}
       />
       <div className="grid gap-3">
-        <Metric label={role === "brand" ? "Creator Agent" : "Brand Agent"} value={counterpartyAgent} />
+        <Metric label={role === "brand" ? "크리에이터 매니저" : "브랜드 매니저"} value={counterpartyAgent} />
         {role === "brand" ? (
           <>
             <Metric label="카테고리" value={listValue(counterparty, "categories")} />
@@ -384,8 +383,8 @@ function CounterpartyProfilePanel({
       </div>
       <p className="mt-3 text-sm text-muted">
         {role === "brand"
-          ? "이 협상은 위 Creator Agent와 체결된 기록입니다."
-          : "이 협상은 위 Brand Agent가 보낸 제안에서 체결된 기록입니다."}
+          ? "이 협상은 위 크리에이터 매니저와 체결된 기록입니다."
+          : "이 협상은 위 브랜드 매니저가 보낸 제안에서 체결된 기록입니다."}
       </p>
     </section>
   );
@@ -406,7 +405,7 @@ function WorkSummaryPanel({
   const productName = agreement?.productName ?? negotiation.productName ?? negotiation.promotionTitle ?? "프로모션";
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <SectionHeader eyebrow="Agent 결과" title={negotiation.status} />
+      <SectionHeader eyebrow="협상 결과" title={negotiationStatusLabel(negotiation.status)} />
       <div className="grid gap-3">
         <Metric label="연동된 크리에이터" value={creatorName} />
         <Metric label="제품/프로모션" value={productName} />
@@ -438,7 +437,7 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
   }
 
   return (
-    <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-3">
+    <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto rounded-lg bg-background/60 p-4">
       {visible.map((message, index) => {
         const side = messageSide(message, index);
         const mine = side === role;
@@ -455,22 +454,22 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
                 system ? "bg-background text-foreground" : mine ? "bg-accent text-background" : "bg-surface"
               }`}
             >
-              <p className="font-mono text-[10px] uppercase opacity-70">
+              <p className="font-mono text-[11px] uppercase opacity-70">
                 {messageActorLabel(side)} · #{message.sequence ?? index + 1}
               </p>
-              <p className="mt-1 font-mono text-[10px] opacity-70">
-                {String(message.payload?.type ?? "협상")} · {message.taskId}
+              <p className="mt-1 font-mono text-[11px] opacity-70">
+                {messageTypeLabel(message)} · {message.taskId}
               </p>
-              <p className="mt-1 text-[15px] leading-relaxed">{messageLine(message, index)}</p>
+              <p className="mt-1 text-base leading-relaxed">{messageLine(message, index)}</p>
               <details className="mt-3">
-                <summary className="cursor-pointer font-mono text-[10px] uppercase opacity-70">
+                <summary className="cursor-pointer font-mono text-[11px] uppercase opacity-70">
                   {system ? "검증 영수증" : "상세 조건"}
                 </summary>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[10px] text-foreground">
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[11px] text-foreground">
                   {formatA2aPayload(message)}
                 </pre>
               </details>
-              <p className="mt-2 font-mono text-[10px] opacity-60">{formatTime(message.createdAt)}</p>
+              <p className="mt-2 font-mono text-[11px] opacity-60">{formatTime(message.createdAt)}</p>
             </div>
           </motion.div>
         );
@@ -480,33 +479,6 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
           <TypingDots /> 다음 협상 메시지
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function PayShVerificationSummary({ messages }: { messages: ApiNegotiationMessage[] }) {
-  const event = messages.map(payShVerificationEvent).find((item): item is Record<string, unknown> => item !== null);
-  if (!event) return null;
-  const display = isRecord(event.display) ? event.display : null;
-  const status = String(event.status ?? "RECORDED");
-  const amount = numberFromUnknown(event.amountUsdc);
-  const receiptId = typeof event.receiptId === "string" ? event.receiptId : null;
-  const resourceId = typeof event.resourceId === "string" ? event.resourceId : null;
-  const message =
-    typeof display?.message === "string" && display.message.trim()
-      ? display.message
-      : `후보 검증 ${status}${amount === null ? "" : ` · ${amount.toLocaleString()} USDC`}`;
-  return (
-    <div className="mb-3 grid gap-2 border border-border-subtle bg-background p-3 text-xs sm:grid-cols-[1fr_auto]">
-      <div>
-        <p className="font-mono uppercase text-muted">pay.sh / x402</p>
-        <p className="mt-1 text-sm">{message}</p>
-        {resourceId ? <p className="mt-1 break-all font-mono text-[10px] text-muted">{resourceId}</p> : null}
-      </div>
-      <div className="font-mono text-[10px] text-muted sm:text-right">
-        <p>{status}</p>
-        {receiptId ? <p className="mt-1 break-all">{shortAddress(receiptId) ?? receiptId}</p> : null}
-      </div>
     </div>
   );
 }
@@ -554,7 +526,7 @@ function SettlementSummaryPanel({
       <div className="grid gap-3">
         <Metric label="지갑 연결" value={walletAddress ? shortAddress(walletAddress) ?? walletAddress : "연결 필요"} />
         <Metric label="계약 금액" value={agreement ? `${agreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
-        <Metric label="예치 상태" value={escrow ? escrow.status : agreement ? "CREATED 전" : "계약 전"} />
+        <Metric label="예치 상태" value={escrow ? escrowStatusLabel(escrow.status) : agreement ? "예치 전" : "계약 전"} />
         <Metric label={role === "brand" ? "남은 예치금" : "지급 완료"} value={role === "brand" ? baseUnitsToUsdcLabel(remainingBaseUnits) : baseUnitsToUsdcLabel(releasedBaseUnits)} />
         <Metric label={role === "brand" ? "예치 기록" : "정산 기록"} value={primaryTx ? "확인 가능" : role === "brand" ? "예치 전" : "정산 전"} />
       </div>
@@ -643,8 +615,8 @@ function MilestonePanel({
           <div key={milestone.id} className="sketch-alt ink border border-border-subtle bg-surface-raised p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xl">{milestone.trigger}</p>
-                <p className="mt-1 font-mono text-xs text-muted">{milestone.id} · {milestone.releasePct}%</p>
+                <p className="text-xl">{milestoneDisplayTitle(milestone)}</p>
+                <p className="mt-1 text-xs text-muted">{milestone.releasePct}% 정산</p>
               </div>
               <Money usdc={amount} />
             </div>
@@ -655,13 +627,13 @@ function MilestonePanel({
                   ? milestoneSettlementRequirement(milestone, agreement.terms)
                   : evidenceRequired
                     ? `에스크로가 잠긴 뒤 ${deliverableRequirement(agreement.terms)} 완료 URL을 제출할 수 있습니다.`
-                    : "에스크로가 잠기고 콘텐츠 검증이 끝나면 함께 정산됩니다."}
+                    : "에스크로가 잠기고 콘텐츠 확인이 끝나면 함께 정산됩니다."}
             </p>
             {settlement?.signature ? (
               <TransactionReference
                 signature={settlement.signature}
                 network={escrow?.network}
-                label="settlement tx"
+                label="정산 영수증"
               />
             ) : null}
             <WorkItemList terms={agreement.terms} compact />
@@ -680,7 +652,7 @@ function MilestonePanel({
             ) : null}
             {role === "creator" && escrow && !released && !evidenceRequired ? (
               <p className="mt-4 text-xs text-muted">
-                이 마일스톤은 별도 URL 제출 대상이 아닙니다. 콘텐츠 검증 마일스톤이 통과되면 순서대로 정산됩니다.
+                이 단계는 별도 URL 제출 대상이 아닙니다. 콘텐츠 확인이 끝나면 순서대로 정산됩니다.
               </p>
             ) : null}
           </div>
@@ -765,9 +737,9 @@ function EvidenceForm({
       }
       if (verified.evidence.status === "PASSED") {
         throw new Error(
-          `증빙 검증은 통과했지만 자동 정산이 아직 완료되지 않았습니다. 사유: ${
-            verified.autoSettlement?.reason ?? "AUTO_SETTLEMENT_DEFERRED"
-          }`,
+          `증빙 확인은 통과했지만 자동 정산이 아직 완료되지 않았습니다. ${settlementDeferReasonLabel(
+            verified.autoSettlement?.reason,
+          )}`,
         );
       }
       await onRefresh();
@@ -807,7 +779,7 @@ function EvidenceForm({
           {outcomeNotice}
         </p>
       ) : null}
-      {lastEvidence ? <p className="text-xs text-muted">최근 검토: {lastEvidence.status}</p> : null}
+      {lastEvidence ? <p className="text-xs text-muted">최근 검토: {evidenceStatusLabel(lastEvidence.status)}</p> : null}
       {lastSettlementSignature ? (
         <TransactionReference signature={lastSettlementSignature} network={escrow.network} label="정산 기록" />
       ) : null}
@@ -924,8 +896,8 @@ function TypingDots() {
 }
 
 function messageActorLabel(side: MessageSide) {
-  if (side === "system") return "System";
-  return side === "brand" ? "Brand Agent" : "Creator Agent";
+  if (side === "system") return "검증 기록";
+  return side === "brand" ? "브랜드 매니저" : "크리에이터 매니저";
 }
 
 function messageSide(message: ApiNegotiationMessage, index: number): MessageSide {
@@ -956,9 +928,9 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
   const type = String(payload.type ?? (index === 0 ? "OFFER" : "COUNTER")).toUpperCase();
   if (type === "VERIFICATION_EVENT") {
     const amount = numberFromUnknown(payload.amountUsdc);
-    const status = String(payload.status ?? "검증 기록");
+    const status = paymentStatusLabel(String(payload.status ?? "RECORDED"));
     const provider = String(payload.provider ?? "pay.sh");
-    return `${provider} 검증 ${status}${amount === null ? "" : ` · ${amount.toLocaleString()} USDC`}`;
+    return `${provider} 후보 검증 ${status}${amount === null ? "" : ` · ${amount.toLocaleString()} USDC`}`;
   }
   const terms = isRecord(payload.terms) ? payload.terms : null;
   const compensation = terms && isRecord(terms.compensation) ? terms.compensation : null;
@@ -974,6 +946,73 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
   return rationale ?? type;
 }
 
+function messageTypeLabel(message: ApiNegotiationMessage) {
+  const type = String(messagePayload(message).type ?? "").toUpperCase();
+  if (type === "VERIFICATION_EVENT") return "후보 검증";
+  if (type === "OFFER") return "제안";
+  if (type === "COUNTER") return "역제안";
+  if (type === "ACCEPT") return "수락";
+  if (type === "REJECT") return "거절";
+  if (type === "ESCALATE") return "사람 검토";
+  return "협상";
+}
+
+function negotiationStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "AGREED") return "합의 완료";
+  if (normalized === "PENDING") return "협상 대기";
+  if (normalized === "NEGOTIATING") return "협상 중";
+  if (normalized === "REJECTED") return "거절됨";
+  if (normalized === "EXPIRED") return "기간 만료";
+  return status;
+}
+
+function escrowStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "CREATED") return "예치 준비 중";
+  if (normalized === "LOCKED" || normalized === "FUNDED") return "예치 완료";
+  if (normalized === "PARTIALLY_RELEASED") return "일부 정산 완료";
+  if (normalized === "RELEASED") return "정산 완료";
+  if (normalized === "REFUNDED") return "환불 완료";
+  return status;
+}
+
+function evidenceStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "PASSED") return "통과";
+  if (normalized === "FAILED") return "재제출 필요";
+  if (normalized === "MANUAL_REVIEW") return "사람 검토 중";
+  if (normalized === "SUBMITTED") return "제출 완료";
+  return status;
+}
+
+function paymentStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "SETTLED" || normalized === "CONFIRMED") return "결제 완료";
+  if (normalized === "SUBMITTED") return "결제 확인 중";
+  if (normalized === "FAILED") return "결제 실패";
+  if (normalized === "RECORDED") return "기록됨";
+  return status;
+}
+
+function settlementDeferReasonLabel(reason: string | null | undefined) {
+  if (!reason) return "정산 조건을 다시 확인해야 합니다.";
+  const normalized = reason.toUpperCase();
+  if (normalized === "POLICY_VIOLATION") {
+    return "제출한 증빙이 이 정산 단계의 조건과 맞지 않아 정산이 보류되었습니다.";
+  }
+  if (normalized === "FUNDING_REQUIRED" || normalized === "ESCROW_NOT_FUNDED") {
+    return "브랜드 예치가 아직 완료되지 않아 정산이 보류되었습니다.";
+  }
+  if (normalized === "WALLET_REQUIRED") {
+    return "정산 받을 지갑 연결이 필요합니다.";
+  }
+  if (normalized === "AUTO_SETTLEMENT_DEFERRED") {
+    return "자동 정산 준비가 끝나지 않아 잠시 보류되었습니다.";
+  }
+  return "정산 조건을 다시 확인해야 합니다.";
+}
+
 function formatA2aPayload(message: ApiNegotiationMessage) {
   const a2aData = firstA2aPartData(message.a2aMessage);
   return JSON.stringify(a2aData ?? messagePayload(message), null, 2);
@@ -983,17 +1022,17 @@ function messagePayload(message: ApiNegotiationMessage) {
   return message.payload ?? message.content ?? {};
 }
 
-function payShVerificationEvent(message: ApiNegotiationMessage) {
-  const payload = messagePayload(message);
-  if (String(payload.type ?? "").toUpperCase() !== "VERIFICATION_EVENT") return null;
-  if (String(payload.provider ?? "").toLowerCase() !== "pay.sh") return null;
-  return payload;
-}
-
 function milestoneRequiresEvidence(milestone: ApiAgreementTerms["milestones"][number]) {
   const trigger = String(milestone.trigger ?? "").toLowerCase();
   if (trigger === "creatoraccepted" || milestone.id === "deposit") return false;
   return true;
+}
+
+function milestoneDisplayTitle(milestone: ApiAgreementTerms["milestones"][number]) {
+  const trigger = String(milestone.trigger ?? "").toLowerCase();
+  if (trigger === "creatoraccepted" || milestone.id === "deposit") return "계약금";
+  if (trigger === "contentliveverified" || milestone.id === "content") return "콘텐츠 확인 후 잔금";
+  return "정산 단계";
 }
 
 function milestoneSettlementRequirement(
@@ -1001,9 +1040,9 @@ function milestoneSettlementRequirement(
   terms: ApiAgreementTerms,
 ) {
   if (!milestoneRequiresEvidence(milestone)) {
-    return "콘텐츠 검증이 통과되면 계약금이 먼저 정산되고 잔금이 이어서 정산됩니다.";
+    return "콘텐츠 확인이 통과되면 계약금이 먼저 정산되고 잔금이 이어서 정산됩니다.";
   }
-  return `에스크로 잔금 수령 조건: ${deliverableRequirement(terms)} 완료 URL 제출 후 Agent 검토 통과`;
+  return `잔금 수령 조건: ${deliverableRequirement(terms)} 완료 URL 제출 후 자동 검토 통과`;
 }
 
 function firstA2aPartData(a2aMessage: Record<string, unknown> | undefined) {

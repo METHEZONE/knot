@@ -88,7 +88,7 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
         router.refresh();
         return;
       }
-      setWaitingMessage("조건에 맞는 Creator가 아직 없습니다. 새 Creator가 들어오면 다시 탐색할 수 있습니다.");
+      setWaitingMessage("조건에 맞는 크리에이터가 아직 없습니다. 새 크리에이터가 들어오면 다시 탐색할 수 있습니다.");
       await refresh();
     } catch (caught) {
       setRunError(readableError(caught));
@@ -98,7 +98,7 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
   }
 
   if (state.loading) {
-    return <PanelMessage title="프로모션 상세 불러오는 중" body="Promotion, Agreement, Escrow 상태를 조회하고 있습니다." />;
+    return <PanelMessage title="프로모션 상세 불러오는 중" body="협찬 프로젝트, 계약, 예치 상태를 조회하고 있습니다." />;
   }
 
   if (state.error || !state.data) {
@@ -151,7 +151,7 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="Agent 기록" title="체결된 협상과 상세보기" />
+        <SectionHeader eyebrow="매니저 기록" title="체결된 협상과 상세보기" />
         {agreements.length ? (
           <div className="grid gap-3">
             {agreements.map((agreement) => (
@@ -164,18 +164,18 @@ export function BrandPromotionDetail({ promotionId }: { promotionId: string }) {
           </div>
         ) : (
           <EmptyState
-            title="아직 체결된 Agreement가 없습니다"
+            title="아직 체결된 계약이 없습니다"
             body={
               latestEvent?.type === "MATCH_RUN_WAITING_FOR_CREATOR"
-                ? "조건에 맞는 Creator가 들어오면 이 프로모션에서 다시 탐색할 수 있습니다."
-                : "Agent가 Creator를 선택하고 A2A 협상을 완료하면 이곳에 기록됩니다."
+                ? "조건에 맞는 크리에이터가 들어오면 이 협찬 프로젝트에서 다시 탐색할 수 있습니다."
+                : "매니저가 크리에이터를 선택하고 협상을 완료하면 이곳에 기록됩니다."
             }
           />
         )}
       </section>
 
       <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-        <SectionHeader eyebrow="Promotion timeline" title="실행 로그" />
+      <SectionHeader eyebrow="진행 기록" title="실행 로그" />
         {detail.activity.length ? (
           <div className="grid gap-3">
             {detail.activity.map((event) => (
@@ -225,10 +225,10 @@ function AgentRunPanel({
   const latest = activity.at(-1);
   return (
     <section className="sketch ink border border-border-subtle bg-surface p-5">
-      <SectionHeader eyebrow="Agent 관리" title="실행 상태" />
+      <SectionHeader eyebrow="매니저 관리" title="실행 상태" />
       <div className="grid gap-3">
-        <Metric label="Brand Agent" value={promotion.brandAgentId} />
-        <Metric label="Promotion 상태" value={promotion.status} />
+        <Metric label="브랜드 매니저" value={promotion.brandAgentId} />
+        <Metric label="프로젝트 상태" value={promotionStatusLabel(promotion.status)} />
         <Metric label="마지막 이벤트" value={latest ? eventLabel(latest) : "실행 전"} />
         <Metric label="딜당 한도" value={`${promotion.budget.maxPerCreatorUsdc.toLocaleString()} USDC`} />
         <Metric label="총 예산" value={`${promotion.budget.totalUsdc.toLocaleString()} USDC`} />
@@ -245,7 +245,7 @@ function AgentRunPanel({
             disabled={running}
             className="sketch-pill bg-accent px-4 py-2 text-background disabled:opacity-50"
           >
-            {running ? "Creator 탐색 중…" : "Creator 탐색·협상 시작"}
+            {running ? "크리에이터 탐색 중…" : "크리에이터 탐색·협상 시작"}
           </button>
         )}
       </div>
@@ -268,11 +268,11 @@ function EscrowSummaryPanel({
     <section className="sketch ink border border-border-subtle bg-surface p-5">
       <SectionHeader eyebrow="정산" title="에스크로 요약" />
       <div className="grid gap-3">
-        <Metric label="Agreement" value={`${agreementCount}건`} />
+        <Metric label="계약" value={`${agreementCount}건`} />
         <Metric label="계약 금액" value={primaryAgreement ? `${primaryAgreement.terms.compensation.baseAmountUsdc.toLocaleString()} USDC` : "계약 전"} />
-        <Metric label="Escrow 총액" value={baseUnitsToUsdcLabel(escrowSummary.totalBaseUnits)} />
+        <Metric label="예치 총액" value={baseUnitsToUsdcLabel(escrowSummary.totalBaseUnits)} />
         <Metric label="지급 완료" value={baseUnitsToUsdcLabel(escrowSummary.releasedBaseUnits)} />
-        <Metric label="Escrow 잔액" value={baseUnitsToUsdcLabel(escrowSummary.remainingBaseUnits)} />
+        <Metric label="예치 잔액" value={baseUnitsToUsdcLabel(escrowSummary.remainingBaseUnits)} />
         <Metric label="상태" value={escrowSummary.statusLabel} />
       </div>
       {primaryAgreement ? (
@@ -280,7 +280,7 @@ function EscrowSummaryPanel({
           href={`/brand/agreements/${primaryAgreement.agreementId}`}
           className="sketch-pill mt-4 inline-flex border border-border-subtle px-4 py-2"
         >
-          에스크로 상세보기
+          예치/정산 상세보기
         </Link>
       ) : null}
     </section>
@@ -314,7 +314,7 @@ function AgreementRecord({
           {agreementMoneyStateLabel(agreement, escrow, latestSettlement)}
         </span>
         <span className="font-mono text-xs text-muted">
-          released {baseUnitsToUsdcLabel(escrow?.releasedAmountBaseUnits)} · tx {latestSettlement?.signature ? "있음" : "없음"}
+          정산 {baseUnitsToUsdcLabel(escrow?.releasedAmountBaseUnits)} · 영수증 {latestSettlement?.signature ? "있음" : "없음"}
         </span>
       </span>
     </Link>
@@ -396,16 +396,13 @@ function summarizeEscrows(
     totalBaseUnits: total.toString(),
     releasedBaseUnits: released.toString(),
     remainingBaseUnits: remaining.toString(),
-    statusLabel: created === 0 ? "생성 전" : `${funded}/${created} funded`,
+    statusLabel: created === 0 ? "예치 전" : `${funded}/${created}건 예치 완료`,
   };
 }
 
 function eventLabel(event: ApiTimelineEvent) {
-  if (event.type === "MATCH_RUN_WAITING_FOR_CREATOR") return "Creator 대기 중";
-  if (event.type === "MATCH_RUN_COMPLETED") {
-    const selected = event.data.selectedCreatorAgentId;
-    return typeof selected === "string" && selected ? `${selected} 선택 완료` : "매칭 완료";
-  }
+  if (event.type === "MATCH_RUN_WAITING_FOR_CREATOR") return "크리에이터 대기 중";
+  if (event.type === "MATCH_RUN_COMPLETED") return "크리에이터 선택 완료";
   if (event.type === "NEGOTIATION_ACCEPT") return "협상 체결";
   if (event.type === "ESCROW_FUNDED" || event.type === "ESCROW_LOCKED") return "에스크로 예치";
   if (event.type === "API_PAYMENT") return "pay.sh 검증";
@@ -417,12 +414,43 @@ function agreementMoneyStateLabel(
   escrow: ApiAgreementEscrowBundle["escrow"],
   latestSettlement: ApiAgreementEscrowBundle["settlements"][number] | null | undefined,
 ) {
-  if (escrow?.status === "RELEASED") return "money RELEASED · on-chain settled";
-  if (escrow?.status === "PARTIALLY_RELEASED") return "money PARTIALLY_RELEASED · on-chain";
-  if (latestSettlement?.signature) return `money SETTLED · agreement ${agreement.status}`;
-  if (escrow?.status === "FUNDED" || escrow?.status === "LOCKED") return `money FUNDED · agreement ${agreement.status}`;
-  if (escrow?.status) return `money ${escrow.status} · agreement ${agreement.status}`;
-  return `agreement ${agreement.status} · escrow not-created`;
+  if (escrow?.status === "RELEASED") return "정산 완료";
+  if (escrow?.status === "PARTIALLY_RELEASED") return "일부 정산 완료";
+  if (latestSettlement?.signature) return `정산 기록 확인 가능 · ${agreementStatusLabel(agreement.status)}`;
+  if (escrow?.status === "FUNDED" || escrow?.status === "LOCKED") return `예치 완료 · ${agreementStatusLabel(agreement.status)}`;
+  if (escrow?.status) return `${escrowStatusLabel(escrow.status)} · ${agreementStatusLabel(agreement.status)}`;
+  return `${agreementStatusLabel(agreement.status)} · 예치 전`;
+}
+
+function promotionStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "DRAFT") return "작성 중";
+  if (normalized === "ACTIVE") return "진행 중";
+  if (normalized === "AGREED") return "계약 완료";
+  if (normalized === "PAUSED") return "일시 중지";
+  if (normalized === "CLOSED") return "종료";
+  return status;
+}
+
+function agreementStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "FUNDING_REQUIRED") return "예치 필요";
+  if (normalized === "FUNDED") return "예치 완료";
+  if (normalized === "PARTIALLY_RELEASED") return "일부 정산 완료";
+  if (normalized === "RELEASED") return "정산 완료";
+  if (normalized === "AGREED") return "합의 완료";
+  if (normalized === "CANCELLED") return "취소됨";
+  return status;
+}
+
+function escrowStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "CREATED") return "예치 준비 중";
+  if (normalized === "LOCKED" || normalized === "FUNDED") return "예치 완료";
+  if (normalized === "PARTIALLY_RELEASED") return "일부 정산 완료";
+  if (normalized === "RELEASED") return "정산 완료";
+  if (normalized === "REFUNDED") return "환불 완료";
+  return status;
 }
 
 function deliverableSummary(deliverables: Array<{ format: string; count: number }> | undefined) {

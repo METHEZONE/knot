@@ -102,7 +102,7 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
         router.refresh();
         return;
       }
-      setWaitingMessage("조건에 맞는 Creator가 아직 없습니다. 새 Creator가 들어오면 다시 탐색할 수 있습니다.");
+      setWaitingMessage("조건에 맞는 크리에이터가 아직 없습니다. 새 크리에이터가 들어오면 다시 탐색할 수 있습니다.");
       await load(false);
     } catch (caught) {
       setActionError(readableError(caught));
@@ -119,13 +119,13 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
   return (
     <DashboardShell
       role="brand"
-      title="Brand dashboard"
-      subtitle="제품을 검토하고, Agent가 Creator Agent와 협상한 결과만 확인합니다."
+      title="브랜드 대시보드"
+      subtitle="제품을 검토하고, 브랜드 매니저가 크리에이터 매니저와 협상한 결과만 확인합니다."
       agentId={context.account.agentId ?? "brand-agent-glow"}
     >
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="sketch ink border border-border-subtle bg-surface p-5">
-          <SectionHeader eyebrow="정산" title="전체 escrow 요약" />
+          <SectionHeader eyebrow="정산" title="전체 예치금 요약" />
           <SettlementOverview
             lockedBaseUnits={dashboard.data?.summary.lockedEscrowBaseUnits}
             agreementCount={dashboard.data?.summary.agreements ?? agreements.length}
@@ -135,7 +135,7 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
             <Metric label="진행 중" value={String(dashboard.data?.summary.negotiationsInProgress ?? "-")} />
             <Metric label="계약" value={String(dashboard.data?.summary.agreements ?? agreements.length)} />
             <Metric
-              label="잠긴 escrow"
+              label="예치된 금액"
               value={baseUnitsToUsdcLabel(dashboard.data?.summary.lockedEscrowBaseUnits)}
             />
           </div>
@@ -143,7 +143,7 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
         </section>
 
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="에이전트 관리" title="협찬 제안하기" />
+          <SectionHeader eyebrow="매니저 관리" title="협찬 제안하기" />
           {promotions.length ? (
             <BrandProjectReview
               promotion={promotions[0]}
@@ -170,7 +170,7 @@ function BrandAgentDashboard({ context }: { context: CurrentUserContext }) {
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="Agent 기록" title="만든 프로모션과 협상 결과" />
+        <SectionHeader eyebrow="매니저 기록" title="만든 프로모션과 협상 결과" />
         {promotions.length ? (
           <BrandRecordList
             promotions={promotions}
@@ -257,8 +257,8 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
   return (
     <DashboardShell
       role="creator"
-      title="Creator dashboard"
-      subtitle="받을 제안 조건을 관리하고, Agent가 처리한 협상과 정산만 확인합니다."
+      title="크리에이터 대시보드"
+      subtitle="받을 제안 조건을 관리하고, 매니저가 처리한 협상과 정산만 확인합니다."
       agentId={context.account.agentId ?? "creator-agent-mina"}
     >
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
@@ -278,7 +278,7 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
         </section>
 
         <section className="sketch-alt ink border border-border-subtle bg-surface-raised p-5">
-          <SectionHeader eyebrow="에이전트 관리" title="협찬 받기 상태" />
+          <SectionHeader eyebrow="매니저 관리" title="협찬 받기 상태" />
           <div className="flex flex-wrap items-center gap-5">
             <AgentCharacter
               agentId={agent?.agentId ?? context.account.agentId ?? "creator-agent-mina"}
@@ -291,8 +291,8 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
               <p className="text-2xl">{agent?.acceptingOffers ? "제안 받는 중" : "제안 멈춤"}</p>
               <p className="mt-1 text-sm text-muted">
                 {agent
-                  ? `${agent.publicationStatus} · 동시 협상 ${agent.activeNegotiations}/${agent.maxConcurrentNegotiations}`
-                  : "Agent 상태를 불러오고 있습니다."}
+                  ? `${agentPublicationStatusLabel(agent.publicationStatus)} · 동시 협상 ${agent.activeNegotiations}/${agent.maxConcurrentNegotiations}`
+                  : "매니저 상태를 불러오고 있습니다."}
               </p>
             </div>
           </div>
@@ -315,7 +315,7 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
       </div>
 
       <section className="sketch ink border border-border-subtle bg-surface p-5">
-        <SectionHeader eyebrow="Agent 기록" title="받은 제안과 결과" />
+        <SectionHeader eyebrow="매니저 기록" title="받은 제안과 결과" />
         <div className="grid gap-3">
           {(dashboard.data?.offers ?? []).slice(0, 5).map((offer, index) => (
             <OfferRow key={String(offer.negotiationId ?? offer.offerId ?? index)} offer={offer} />
@@ -323,7 +323,7 @@ function CreatorAgentDashboard({ context }: { context: CurrentUserContext }) {
           {!dashboard.loading && !(dashboard.data?.offers ?? []).length ? (
             <EmptyState
               title="표시할 협상 기록이 없습니다"
-              body="Brand Agent가 제안을 보내면 공개 가능한 조건과 결과만 이곳에 남습니다."
+              body="브랜드 매니저가 제안을 보내면 공개 가능한 조건과 결과만 이곳에 남습니다."
             />
           ) : null}
         </div>
@@ -428,7 +428,7 @@ function BrandProjectReview({
             disabled={busy}
             className="sketch-pill mt-4 bg-accent px-4 py-2 text-sm text-background disabled:opacity-50"
           >
-            {busy ? "Creator 탐색 중…" : "Creator 탐색·협상 시작"}
+            {busy ? "크리에이터 탐색 중…" : "크리에이터 탐색·협상 시작"}
           </button>
         )}
       </div>
@@ -451,14 +451,14 @@ function SettlementOverview({
       <div className="mt-1 flex flex-wrap items-baseline gap-3">
         <Money usdc={contractedUsdc} size="lg" />
         <span className="sketch-pill ink border border-border-subtle px-3 py-1 font-mono text-xs">
-          {agreementCount} agreements
+          계약 {agreementCount}건
         </span>
       </div>
       <p className="mt-2 text-sm text-muted">
-        실제 잠긴 escrow: <span className="font-mono text-foreground">{baseUnitsToUsdcLabel(lockedBaseUnits)}</span>
+        실제 예치된 금액: <span className="font-mono text-foreground">{baseUnitsToUsdcLabel(lockedBaseUnits)}</span>
       </p>
       <p className="mt-1 text-xs text-muted">
-        escrow가 아직 잠기지 않은 계약 금액은 계약 금액으로만 표시하고, 잠긴 금액으로 합산하지 않습니다.
+        아직 예치되지 않은 계약 금액은 계약 금액으로만 표시하고, 예치 금액으로 합산하지 않습니다.
       </p>
     </div>
   );
@@ -494,7 +494,7 @@ function BrandRecordList({
               <span className="min-w-0">
                 <span className="block truncate text-xl">{promotion.title}</span>
                 <span className="font-mono text-xs text-muted">
-                  {promotion.status} · {formatTime(String(promotion.updatedAt ?? promotion.createdAt ?? ""))}
+                  {promotionStatusLabel(promotion.status)} · {formatTime(String(promotion.updatedAt ?? promotion.createdAt ?? ""))}
                 </span>
                 <span className="mt-1 block text-sm text-muted">
                   {agreement?.creatorDisplayName ? `${agreement.creatorDisplayName} · ` : ""}
@@ -548,7 +548,7 @@ function AgreementRow({ agreement }: { agreement: ApiAgreement & Record<string, 
       <span className="min-w-0 truncate font-mono text-xs">{agreement.agreementId}</span>
       <span className="flex items-center gap-2">
         <Money usdc={agreement.terms.compensation.baseAmountUsdc} />
-        <span className="text-sm text-muted">{agreement.status}</span>
+        <span className="text-sm text-muted">{agreementStatusLabel(agreement.status)}</span>
       </span>
       <span className="w-full text-sm text-muted">{deliverableSummary(agreement.terms.deliverables)}</span>
     </Link>
@@ -568,7 +568,7 @@ function OfferRow({ offer }: { offer: Record<string, unknown> }) {
     >
       <span>
         <span className="block text-xl">{label}</span>
-        <span className="font-mono text-xs text-muted">{status}</span>
+        <span className="font-mono text-xs text-muted">{offerStatusLabel(status)}</span>
         {work ? <span className="mt-1 block text-sm text-muted">{work}</span> : null}
       </span>
       {amount === null ? <span className="text-sm text-muted">금액 확인 중</span> : <Money usdc={amount} />}
@@ -626,6 +626,45 @@ function baseUnitsToUsdcLabel(value: string | undefined) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return value;
   return `${(raw / 1_000_000).toLocaleString()} USDC`;
+}
+
+function promotionStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "DRAFT") return "작성 중";
+  if (normalized === "ACTIVE") return "진행 중";
+  if (normalized === "AGREED") return "계약 완료";
+  if (normalized === "PAUSED") return "일시 중지";
+  if (normalized === "CLOSED") return "종료";
+  return status;
+}
+
+function agreementStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "FUNDING_REQUIRED") return "예치 필요";
+  if (normalized === "FUNDED") return "예치 완료";
+  if (normalized === "PARTIALLY_RELEASED") return "일부 정산 완료";
+  if (normalized === "RELEASED") return "정산 완료";
+  if (normalized === "AGREED") return "합의 완료";
+  if (normalized === "REJECTED") return "거절됨";
+  return status;
+}
+
+function offerStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "OFFER") return "제안 도착";
+  if (normalized === "PENDING") return "확인 대기";
+  if (normalized === "AGREED" || normalized === "ACCEPTED") return "수락 완료";
+  if (normalized === "REJECTED") return "거절됨";
+  if (normalized === "EXPIRED") return "기간 만료";
+  return status;
+}
+
+function agentPublicationStatusLabel(status: string) {
+  const normalized = status.toUpperCase();
+  if (normalized === "PUBLISHED") return "제안 받는 중";
+  if (normalized === "PAUSED") return "제안 멈춤";
+  if (normalized === "DRAFT") return "설정 중";
+  return status;
 }
 
 function deliverableSummary(deliverables: Array<{ format: string; count: number }> | undefined) {

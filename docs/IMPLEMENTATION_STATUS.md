@@ -31,6 +31,7 @@ Updated: 2026-08-20 KST
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
 - `npm --prefix frontend test -- --runInBand`: 21 passed.
 - `npm --prefix frontend run build`: passed.
 
@@ -1085,3 +1086,35 @@ Updated: 2026-08-20 KST
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run lint`: passed.
 - `npm --prefix frontend run test`: 21 passed.
+
+## 2026-08-20 Demo UI Copy And Deadline UX
+
+### Changed
+
+- Removed the duplicate pay.sh/x402 summary card above the negotiation
+  conversation. pay.sh remains visible as a verification message inside the
+  conversation timeline.
+- Slightly increased negotiation message, metadata, detail, and timestamp font
+  sizes for demo readability.
+- Added a `게시 마감일` date picker to the Brand promotion creation wizard; the
+  selected date is now sent as the promotion deadline instead of always using
+  an implicit 14-day default.
+- Replaced visible internal labels such as `Agent`, `Agreement`, `Escrow`,
+  `milestone`, `creatorAccepted`, and `contentLiveVerified` with user-facing
+  Korean copy such as `매니저`, `계약`, `예치`, `정산 단계`, `계약금`, and
+  `콘텐츠 확인 후 잔금`.
+- Mapped common promotion, agreement, escrow, pay.sh, evidence, and offer status
+  codes to readable Korean labels in the dashboard, promotion detail, and
+  negotiation detail screens.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+
+### Scope Guard
+
+- No API contract, Firestore data, deployment, wallet funding, Secret Manager,
+  Solana program, or on-chain transaction change was made.

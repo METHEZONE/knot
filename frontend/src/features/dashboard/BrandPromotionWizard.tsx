@@ -20,6 +20,7 @@ type MoodDraft = {
   moodTags: string[];
   totalUsdc: NumericDraftValue;
   maxPerDealUsdc: NumericDraftValue;
+  deadline: string;
   workBrief: string;
   deliverables: DeliverableCounts;
   prohibitedClaims: string;
@@ -90,7 +91,7 @@ export function BrandPromotionWizard() {
         maximumRounds: 3,
         deliverables: deliverablesFromDraft(draft.deliverables),
         usageRights: draft.usageRights,
-        deadline: deadlineAfterDays(14),
+        deadline: draft.deadline,
         prohibitedClaims: splitList(draft.prohibitedClaims),
       };
       const promotion = await client.createBrandPromotion(
@@ -117,7 +118,7 @@ export function BrandPromotionWizard() {
           <p className="font-mono text-xs uppercase tracking-wide text-muted">promotion setup</p>
           <h1 className="mt-2 text-5xl">프로모션 만들기</h1>
           <p className="mt-2 max-w-2xl text-muted">
-            제품 URL에서 무드를 추출하고, 사람이 검토한 뒤 Brand Agent가 바로 협상을 시작합니다.
+            제품 URL에서 무드를 추출하고, 사람이 검토한 뒤 브랜드 매니저가 바로 협상을 시작합니다.
           </p>
         </div>
         <AgentCharacter agentId="brand-agent-glow" side="brand" category={draft?.category ?? "beauty"} pose="knock" size={140} />
@@ -281,6 +282,16 @@ export function BrandPromotionWizard() {
                   </select>
                 </label>
                 <label className="mt-4 block text-sm text-muted">
+                  게시 마감일
+                  <input
+                    type="date"
+                    value={draft.deadline}
+                    min={todayDate()}
+                    onChange={(event) => setDraft({ ...draft, deadline: event.target.value })}
+                    className="sketch-alt ink mt-2 w-full border border-border-subtle bg-surface-raised px-3 py-2 font-mono text-sm outline-none"
+                  />
+                </label>
+                <label className="mt-4 block text-sm text-muted">
                   딜당 한도
                   <span className="mt-2 flex items-baseline gap-2">
                     <input
@@ -319,6 +330,7 @@ export function BrandPromotionWizard() {
                   !draft.productName.trim() ||
                   !draft.category.trim() ||
                   !draft.workBrief.trim() ||
+                  !draft.deadline ||
                   draft.moodTags.length === 0 ||
                   deliverablesFromDraft(draft.deliverables).length === 0 ||
                   normalizedUsdc(numericDraftValue(draft.maxPerDealUsdc), 0) < 1 ||
@@ -352,7 +364,7 @@ export function BrandPromotionWizard() {
                 />
               ))}
             </span>
-            Brand Agent가 Creator Agent와 협상 중입니다.
+            브랜드 매니저가 크리에이터 매니저와 협상 중입니다.
           </div>
         ) : null}
       </section>
@@ -384,6 +396,7 @@ function draftFromAnalysis(analysis: AnalysisJob): MoodDraft {
     moodTags: keywords.filter((item) => RECOMMENDED_MOODS.includes(item)).slice(0, 3),
     totalUsdc: "",
     maxPerDealUsdc: "",
+    deadline: deadlineAfterDays(14),
     workBrief: "",
     deliverables: { reel: 0, short: 0, post: 0 },
     prohibitedClaims: "",
@@ -397,6 +410,10 @@ function deadlineAfterDays(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function initialOfferForMax(maxPerDealUsdc: number) {
