@@ -949,3 +949,27 @@ Updated: 2026-08-20 KST
 - `npm --prefix frontend run test`: 21 passed.
 - `npm --prefix frontend run build`: passed.
 - `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
+
+## 2026-08-20 Final Demo Candidate Seed
+
+### Changed
+
+- Added `scripts/seed_xexymix_final_demo.py` to reset and reinstall a scoped
+  XEXYMIX final-demo baseline.
+- Added `docs/24_FINAL_DEMO_SCENARIO_AND_SEED.md` with demo login, onboarding,
+  promotion, pricing, candidate-pool, reset, and run-of-show values.
+- The seed is designed to create 30 creator discovery profiles while keeping the
+  selected top creator tied to the live Creator demo account `c1@knot.com`.
+- The demo contract amount is `1 devnet USDC`, and pay.sh remains a sandbox
+  verification call expected to quote `0.02 USDC`.
+
+### Scope Guard
+
+- Reset/reseed is bounded to `promotion-xexymix-devnet` operational documents,
+  `creator-xexymix-demo-*`, and `agent-creator-xexymix-demo-*`.
+- Firebase Auth users, wallet secrets, Secret Manager, Solana programs, and
+  on-chain state are not reset by this script.
+
+### Local Verification
+
+- Pending final Firestore seed and deployed-link verification.
