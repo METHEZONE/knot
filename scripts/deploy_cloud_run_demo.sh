@@ -67,6 +67,10 @@ require_env "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"
 require_env "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"
 require_env "KNOT_SETTLEMENT_AUTHORITY"
 
+if [[ -z "${PAYSH_RESOURCE_ID:-}" || "${PAYSH_RESOURCE_ID}" == "replace-me" ]]; then
+  PAYSH_RESOURCE_ID="https://debugger.pay.sh/mpp/quote/AAPL"
+fi
+
 build_image "infra/cloudbuild/creator-agent.yaml" "${CREATOR_IMAGE}"
 deploy_service "knot-creator-agent" "${CREATOR_IMAGE}" \
   --allow-unauthenticated \

@@ -1,13 +1,13 @@
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 from typing import Protocol
-import logging
 
 from libs.domain.categories import category_set
 from libs.domain.models import CreatorProfile, Promotion
-from libs.payments import verify_creator, PayShError, PaymentReceipt
+from libs.payments import PaymentReceipt, PayShError, verify_creator
 from libs.repositories.firestore_paths import COLLECTIONS
 from libs.repositories.serialization import DocumentData
 from libs.repositories.store import DocumentQueryFilter, KnotRepository
@@ -58,11 +58,23 @@ class FirestoreCreatorDiscoveryRepository:
         filters = _public_filters(promotion)
         # Query with larger limit to account for post-filtering
         query_limit = min(limit * 3, DISCOVERY_LIMIT)
-        projections = self._repository.query_raw_documents(
-            COLLECTIONS.creator_discovery_profiles,
-            filters,
-            limit=query_limit,
-        )
+        try:
+            projections = self._repository.query_raw_documents(
+                COLLECTIONS.creator_discovery_profiles,
+                filters,
+                limit=query_limit,
+            )
+        except Exception as exc:
+            if not _query_requires_index(exc):
+                raise
+            logger.warning(
+                "creator discovery index missing; falling back to bounded real-document scan"
+            )
+            projections = _filter_without_composite_index(
+                self._repository.list_raw_documents(COLLECTIONS.creator_discovery_profiles),
+                filters,
+                limit=query_limit,
+            )
         # Post-filter for format (can't use 2 array_contains in Firestore)
         required_format = _required_format(promotion)
         filtered = [
@@ -267,6 +279,41 @@ def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:
         ),
         DocumentQueryFilter("nextAvailableAt", "<=", promotion.posting_window.start.isoformat()),
     ]
+
+
+def _filter_without_composite_index(
+    documents: Sequence[DocumentData],
+    filters: Sequence[DocumentQueryFilter],
+    *,
+    limit: int,
+) -> list[DocumentData]:
+    results: list[DocumentData] = []
+    for document in documents:
+        if all(_matches_query_filter(document, query_filter) for query_filter in filters):
+            results.append(document)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _matches_query_filter(
+    document: Mapping[str, object],
+    query_filter: DocumentQueryFilter,
+) -> bool:
+    value = document.get(query_filter.field_path)
+    expected = query_filter.value
+    if query_filter.op == "==":
+        return value == expected
+    if query_filter.op == "<=":
+        return isinstance(value, type(expected)) and value <= expected
+    if query_filter.op == "array_contains":
+        return expected in _string_list(value)
+    raise ValueError(f"unsupported discovery filter op: {query_filter.op}")
+
+
+def _query_requires_index(exc: Exception) -> bool:
+    message = str(exc)
+    return "requires an index" in message or "FAILED_PRECONDITION" in message
 
 
 def _score_projection(

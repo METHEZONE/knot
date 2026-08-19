@@ -15,11 +15,14 @@ Updated: 2026-08-20 KST
 - Added regression coverage for the server-side Agent run path, pay.sh system message projection, retry idempotency, and the no-candidate frontend flow.
 - Added a pay.sh CLI fallback from `pay` to `npx -y @solana/pay`, matching pay.sh's documented one-shot install path, so local/CI sandbox verification can execute even when the global `pay` binary is not installed.
 - Updated the Cloud Run demo deploy script to default `PAYSH_RESOURCE_ID` to the pay.sh sandbox debugger quote endpoint and keep demo services warm with min instances during the final demo.
+- Added a Creator discovery fallback for missing Firestore composite indexes. When Firestore reports that the indexed query requires a new index, the API now reads real `creatorDiscoveryProfiles` documents and applies the same public filters in deterministic code instead of failing the live Agent run.
 
 ### Verification
 
 - `./.venv/bin/python -m ruff check backend/libs/payments/paysh.py backend/apps/api/routes.py backend/tests/test_api_promotions.py`: passed.
+- `./.venv/bin/python -m ruff check backend/libs/agents/discovery.py backend/tests/test_creator_discovery.py backend/tests/test_api_promotions.py backend/libs/payments/paysh.py`: passed.
 - `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
+- `./.venv/bin/pytest backend/tests/test_creator_discovery.py backend/tests/test_api_promotions.py::test_brand_agent_run_starts_a2a_and_projects_paysh_message backend/tests/test_api_promotions.py::test_run_match_pays_a_real_paysh_sandbox_call -q -rs`: 4 passed.
 - `./.venv/bin/pytest backend/tests/test_api_promotions.py backend/tests/test_paysh_sandbox.py backend/tests/test_api_a2a_http_integration.py -q`: 35 passed, 2 skipped.
 - `npx -y @solana/pay --sandbox curl https://debugger.pay.sh/mpp/quote/AAPL`: passed and returned a sandbox AAPL quote.
 - `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_run_match_pays_a_real_paysh_sandbox_call -q -rs`: 1 passed.
