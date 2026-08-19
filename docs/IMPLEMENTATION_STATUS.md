@@ -2,6 +2,42 @@
 
 Updated: 2026-08-20 KST
 
+## Final Presentation Handoff Cleanup (2026-08-20 KST)
+
+### Changed
+
+- Added `docs/PRESENTATION_HANDOFF_FINAL.md` as the single handoff document for
+  the pitch deck owner.
+- The handoff covers:
+  - current live URL, demo accounts, and clean demo DB shape;
+  - one-line pitch, problem, and 현직 인터뷰 기반 메시지;
+  - judging-criteria narrative for AI autonomy, business/UX, GCP, Solana, and
+    presentation;
+  - pay.sh/x402 usage as Agent-paid verification, separate from Creator payout;
+  - GCP usage including Cloud Run, Firestore, Firebase Auth, Vertex AI, Secret
+    Manager, and YouTube Data API;
+  - non-Web3 user framing, business model, slide outline, live demo script, and
+    judge Q&A.
+- Updated `docs/00_DOCUMENT_INDEX.md` to point presentation work to the new final
+  handoff.
+- Removed stale presentation/mentoring documents superseded by the final handoff:
+  - `docs/PITCH_DECK_FINAL_MENTORING_UPDATED.md`
+  - `docs/IMPROVED_SPEC_MENTORING_FEEDBACK.md`
+  - `docs/BLOCKCHAIN_NARRATIVE.md`
+
+### Verification
+
+- `git diff --check`: passed.
+- Active-reference check for removed presentation docs in
+  `docs/00_DOCUMENT_INDEX.md`, `docs/17_DISPUTE_AND_TIMELOCK_SYSTEM.md`,
+  `README.md`, and `docs/PRESENTATION_HANDOFF_FINAL.md`: no matches.
+- Manual review of `docs/PRESENTATION_HANDOFF_FINAL.md`: completed.
+
+### Boundary
+
+- No code, deployment, Firestore, Secret Manager, wallet, pay.sh, or Solana
+  changes were made in this phase.
+
 ## Creator YouTube Public Stats (2026-08-20 KST)
 
 ### Changed

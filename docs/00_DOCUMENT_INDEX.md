@@ -39,9 +39,8 @@ When this bundle conflicts with an older KNOT v1/v2 document, this bundle wins f
 | `18_UI_COPY_AND_STATE_DICTIONARY.md` | Korean copy, labels, empty/error states |
 | `19_PAYMENT_AND_SETTLEMENT_HANDOFF.md` | What payment/settlement actually does today, per layer — deploy state, on-chain instructions, evidence outcomes, wallet proof, and the refund gap |
 | `24_FINAL_DEMO_SCENARIO_AND_SEED.md` | Final XEXYMIX demo seed, reset runbook, fixed input values, candidate pool, pricing, and demo flow |
+| `PRESENTATION_HANDOFF_FINAL.md` | Final single handoff for pitch deck content, judging narrative, pay.sh/GCP/Web3 positioning, and live demo script |
 | `22_REFERENCES.md` | Source documents and official references |
-| `IMPROVED_SPEC_MENTORING_FEEDBACK.md` | Mentoring feedback integration - pay.sh, disputes, automation |
-| `PITCH_DECK_FINAL_MENTORING_UPDATED.md` | Final pitch deck with mentoring feedback responses |
 
 ## Maintained implementation artifact
 

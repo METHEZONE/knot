@@ -460,7 +460,6 @@ pytest tests/test_api_timelock.py -v
 
 ## 11. References
 
-- **Mentoring Feedback**: `docs/IMPROVED_SPEC_MENTORING_FEEDBACK.md`
-- **Pitch Deck**: `docs/PITCH_DECK_FINAL_MENTORING_UPDATED.md`
+- **Final Presentation Handoff**: `docs/PRESENTATION_HANDOFF_FINAL.md`
 - **Settlement Spec**: `docs/13_AGREEMENT_ESCROW_EVIDENCE_SETTLEMENT.md`
 - **Implementation Status**: `docs/IMPLEMENTATION_STATUS.md`
