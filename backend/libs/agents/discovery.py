@@ -56,16 +56,26 @@ class FirestoreCreatorDiscoveryRepository:
         if limit <= 0 or limit > DISCOVERY_LIMIT:
             raise ValueError("creator discovery limit must be between 1 and 100")
         filters = _public_filters(promotion)
+        # Query with larger limit to account for post-filtering
+        query_limit = min(limit * 3, DISCOVERY_LIMIT)
         projections = self._repository.query_raw_documents(
             COLLECTIONS.creator_discovery_profiles,
             filters,
-            limit=limit,
+            limit=query_limit,
         )
+        # Post-filter for format (can't use 2 array_contains in Firestore)
+        required_format = _required_format(promotion)
+        filtered = [
+            p for p in projections
+            if required_format in _string_list(p.get("formatKeys"))
+        ]
+        # Limit results after filtering
+        filtered = filtered[:limit]
         return DiscoverySearchResult(
-            projections=projections,
+            projections=filtered,
             metrics=DiscoveryMetrics(
-                query_limit=limit,
-                returned_count=len(projections),
+                query_limit=query_limit,
+                returned_count=len(filtered),
                 detail_read_limit=DETAIL_READ_LIMIT,
                 detail_read_count=0,
             ),
@@ -242,6 +252,8 @@ def _get_primary_social_url(profile: CreatorProfile) -> str | None:
 
 
 def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:
+    # NOTE: Firestore allows max 1 array_contains filter per query
+    # Format filtering is done in-memory in search() method
     return [
         DocumentQueryFilter("agentStatus", "==", "PUBLISHED"),
         DocumentQueryFilter("acceptingOffers", "==", True),
@@ -253,7 +265,6 @@ def _public_filters(promotion: Promotion) -> list[DocumentQueryFilter]:
             "array_contains",
             _primary_required_category(promotion),
         ),
-        DocumentQueryFilter("formatKeys", "array_contains", _required_format(promotion)),
         DocumentQueryFilter("nextAvailableAt", "<=", promotion.posting_window.start.isoformat()),
     ]
 
