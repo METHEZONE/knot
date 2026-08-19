@@ -1258,3 +1258,26 @@ Updated: 2026-08-20 KST
   verification and real A2A negotiation path.
 - It does not perform escrow lock, evidence submission, milestone release,
   wallet funding, or any new Solana transaction.
+
+## 2026-08-20 Negotiation Message Render Rollback
+
+### Changed
+
+- Restored the negotiation message window to the previous stable single-line
+  paragraph rendering.
+- Removed the recently added sentence-splitting display helpers that caused the
+  conversation UI to break.
+- Restored message metadata, details, payload JSON, and timestamp font sizes to
+  the previous `text-[11px]` values.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run build`: passed.
+
+### Scope Guard
+
+- No backend, Firestore, wallet, Secret Manager, Solana, or on-chain changes
+  were made.
+- Deployment is pending explicit approval.

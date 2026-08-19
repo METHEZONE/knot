@@ -454,26 +454,22 @@ function MessageThread({ role, messages }: { role: Role; messages: ApiNegotiatio
                 system ? "bg-background text-foreground" : mine ? "bg-accent text-background" : "bg-surface"
               }`}
             >
-              <p className="font-mono text-xs uppercase opacity-70">
+              <p className="font-mono text-[11px] uppercase opacity-70">
                 {messageActorLabel(side)} · #{message.sequence ?? index + 1}
               </p>
-              <p className="mt-1 font-mono text-xs opacity-70">
+              <p className="mt-1 font-mono text-[11px] opacity-70">
                 {messageTypeLabel(message)} · {message.taskId}
               </p>
-              <div className="mt-2 space-y-1 text-[17px] leading-relaxed">
-                {messageLines(message, index).map((line, lineIndex) => (
-                  <p key={`${message.messageId}-line-${lineIndex}`}>{line}</p>
-                ))}
-              </div>
+              <p className="mt-1 text-base leading-relaxed">{messageLine(message, index)}</p>
               <details className="mt-3">
-                <summary className="cursor-pointer font-mono text-xs uppercase opacity-70">
+                <summary className="cursor-pointer font-mono text-[11px] uppercase opacity-70">
                   {system ? "검증 영수증" : "상세 조건"}
                 </summary>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-xs text-foreground">
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/80 p-2 font-mono text-[11px] text-foreground">
                   {formatA2aPayload(message)}
                 </pre>
               </details>
-              <p className="mt-2 font-mono text-xs opacity-60">{formatTime(message.createdAt)}</p>
+              <p className="mt-2 font-mono text-[11px] opacity-60">{formatTime(message.createdAt)}</p>
             </div>
           </motion.div>
         );
@@ -948,20 +944,6 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
   if (type === "REJECT") return `조건을 거절했습니다.${rationale ? ` ${rationale}` : ""}`;
   if (type === "ESCALATE") return `사람 검토가 필요한 조건입니다.${rationale ? ` ${rationale}` : ""}`;
   return rationale ?? type;
-}
-
-function messageLines(message: ApiNegotiationMessage, index: number) {
-  return splitDisplayLines(messageLine(message, index));
-}
-
-function splitDisplayLines(value: string) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized) return [""];
-  const parts = normalized.split(/\s*·\s*/).flatMap((part) => {
-    const sentenceParts = part.match(/[^.!?。！？]+[.!?。！？]?/g) ?? [part];
-    return sentenceParts.map((sentence) => sentence.trim()).filter(Boolean);
-  });
-  return parts.length > 1 ? parts : [normalized];
 }
 
 function messageTypeLabel(message: ApiNegotiationMessage) {
