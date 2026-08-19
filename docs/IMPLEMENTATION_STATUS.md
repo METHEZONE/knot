@@ -882,3 +882,70 @@ Updated: 2026-08-20 KST
 - `cd frontend && npm test`: 17 passed, 2 failed. The failures are existing
   test expectation drift around auth-copy text and API data-source projection;
   they are not caused by the signup idempotency change.
+
+## 2026-08-20 Final Demo Cloud Run Deployment And Live Verification
+
+### Changed
+
+- Deployed the final demo risk-tightening source state to Cloud Run.
+- `knot-api` now serves revision `knot-api-00023-d7n` at 100% traffic with image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-api:96616ca`.
+- The API image now preinstalls the native pay.sh binary path dependencies,
+  including `curl`, and the deploy script normalizes empty/placeholder
+  `PAYSH_RESOURCE_ID` to `https://debugger.pay.sh/mpp/quote/AAPL`.
+- Firestore creator discovery now falls back to a real-document deterministic
+  filter when a missing composite index blocks the optimized query. This avoids
+  a production mock fallback while keeping candidate selection policy-owned.
+
+### Live Deployment Verification
+
+- API env confirmed `PAYSH_MODE=sandbox`,
+  `PAYSH_RESOURCE_ID=https://debugger.pay.sh/mpp/quote/AAPL`, GCP Firestore
+  backend, Vertex Gemini mode, HTTP Creator A2A, and Web3 Gateway mode.
+- `/readyz` returned 200 for:
+  - `https://knot-api-260001601654.us-central1.run.app/readyz`
+  - `https://knot-web3-7k3walthgq-uc.a.run.app/readyz`
+  - `https://knot-creator-agent-7k3walthgq-uc.a.run.app/readyz`
+- Public Web routes returned 200 for `/login`, Brand dashboard/promotion/
+  negotiation pages, and Creator dashboard/offers/agreements/settlements pages.
+- `POST /api/v1/brand/promotions/promotion-xexymix-devnet/agent-run` returned
+  401 without Firebase auth through both direct API and Web proxy when an
+  idempotency key was supplied, confirming the route is deployed and protected.
+- Authenticated Brand `agent-run` returned 201 on the deployment:
+  - `matchRunId=match-11fa1c95-3840-48fe-a7e0-10184bb6ed46`
+  - `paidStatus=SETTLED`
+  - `receiptId=receipt-paysh-c345a5b4-3001-5fe4-952f-d0c941dc0ebe`
+  - `negotiationId=negotiation-52aa022e-03e4-4460-ab5f-7a61a455d1df`
+  - `agreementId=agreement-6fa1f7cd-2d13-42b7-b097-063d9118ef49`
+- The deployed Web proxy returned the negotiation pay.sh system event:
+  `SYSTEM`, `VERIFICATION_EVENT`, `provider=pay.sh`, `status=SETTLED`, display
+  message `후보 검증 API를 사용했어요. 0.02 USDC · 결제 완료`.
+- Authenticated Brand API paths returned 200 for `/me`, dashboard, promotion
+  detail, agreement detail, and negotiation detail.
+- Authenticated Creator API paths returned 200 for `/me`, dashboard, offers,
+  the new offer detail, and agreements.
+- Existing devnet escrow proof was checked read-only:
+  - Funding signature
+    `3ePDmJdJXr4mdgkHxpbP67SkZZVC24GiEjMM5Brmqug3F6JUKGhu9vXM6911jQtfVWJ9QD1L4ZWQyGvkkXd5fVLa`
+    confirmed `Finalized`.
+  - Release signature
+    `5GCmf7tRixGgV7ZS1zuJQ7AeNQ7G4QsPCai5jDQXDWyxwY6uVJESJwFvcNx3fKr9yAZAHy7pQB41osRx1ajLnnJf`
+    confirmed `Finalized`.
+  - Devnet program accounts `Aj63B5hLtvJdNQiAi61rMrgfW3pt8Lak3GQB59B6jysj`
+    and `9LjQL46RB4WigamSUmuEehVWF9BLz145Wv4cBxgF4Npn` were readable as
+    executable program accounts.
+- No Secret Manager change, wallet funding, Solana program deployment, or new
+  on-chain transaction was performed during this verification phase.
+
+### Final Test Verification
+
+- `./.venv/bin/python -m ruff check backend/libs/payments/paysh.py backend/apps/api/routes.py backend/libs/agents/discovery.py backend/tests/test_creator_discovery.py backend/tests/test_api_promotions.py`:
+  passed.
+- `./.venv/bin/pytest backend/tests/test_creator_discovery.py backend/tests/test_api_promotions.py::test_brand_agent_run_starts_a2a_and_projects_paysh_message backend/tests/test_api_promotions.py::test_run_match_pays_a_real_paysh_sandbox_call -q -rs`:
+  4 passed.
+- `./.venv/bin/pytest backend/tests -q`: 168 passed, 6 skipped.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `bash -n scripts/deploy_cloud_run_demo.sh`: passed.
