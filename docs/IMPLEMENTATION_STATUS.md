@@ -1685,5 +1685,47 @@ Updated: 2026-08-20 KST
 
 - Local `--refresh-social` did not call Apify because no local `APIFY_TOKEN` is
   configured.
-- Cloud Run Secret Manager update and deployment are pending explicit operator
-  action with a real Apify token.
+- Cloud Run Secret Manager update was completed after explicit operator action.
+  `knot-api` now receives `APIFY_TOKEN` from Secret Manager.
+
+## 2026-08-21 Deployed Social Analysis Verification
+
+### Changed
+
+- Updated Creator onboarding YouTube channel URL analysis so `youtube.com/@...`
+  and `/channel/...` inputs use YouTube Data API v3 directly instead of falling
+  through to oEmbed-only fallback.
+- The YouTube channel draft now includes public subscriber counts, recent video
+  average/median view metrics, representative video URLs, and analysis notes
+  marking recent-video metrics as KNOT-derived values.
+
+### Verification
+
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py backend/tests/test_demo_persona_seed.py -q`:
+  20 passed.
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/tests/test_api_onboarding.py`:
+  passed.
+- Cloud Run deploy of commit `207c389` completed before the YouTube channel
+  analysis patch:
+  - `knot-api-00031-j4c`
+  - `knot-creator-agent-00021-j8m`
+  - `knot-web3-00018-xfs`
+  - `knot-web-00027-dnk`
+- Deployed health checks passed for `knot-api`, `knot-creator-agent`, `knot-web3`,
+  and `knot-web`.
+- Deployed Instagram analysis with `https://www.instagram.com/thehackathonkr/`
+  returned `READY_FOR_CONFIRMATION` through provider
+  `apify-instagram-profile-scraper`.
+- Deployed Beauty matching for `promotion-demo-cheriexx` returned 5 candidates,
+  selected `creator-demo-ssin`, and recorded a sandbox pay.sh/x402 candidate
+  verification receipt with status `SETTLED`.
+- Deployed A2A start negotiation for that match returned `AGREED` and created a
+  `FUNDING_REQUIRED` agreement.
+
+### Scope Guard
+
+- No Firestore reset was performed.
+- No wallet funding or Solana escrow transaction was performed during this
+  verification pass.
+- The YouTube channel URL fix still needs a new Cloud Run deploy after this
+  local patch.

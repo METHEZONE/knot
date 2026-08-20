@@ -76,6 +76,12 @@ from libs.ai.gemini import (
     structured_analysis_json,
 )
 from libs.auth.firebase import AuthenticatedUser, AuthError, FirebaseTokenVerifier
+from libs.demo_seed.social_providers import (
+    SocialProviderError as SocialProfileProviderError,
+)
+from libs.demo_seed.social_providers import (
+    analyze_youtube_creator,
+)
 from libs.domain.discovery import (
     build_creator_discovery_projection,
     non_negative_int,
@@ -6265,6 +6271,9 @@ def _youtube_creator_profile_draft(
     source_url: str,
     settings: Settings,
 ) -> AnalysisDraftResult | None:
+    channel_result = _youtube_channel_creator_profile_draft(source_url, settings)
+    if channel_result is not None:
+        return channel_result
     youtube_stats, youtube_stats_reason = _youtube_data_api_public_stats(source_url, settings)
     fetched, fetch_reason = _youtube_oembed_source_page(source_url, settings)
     if fetched is None:
@@ -6289,6 +6298,153 @@ def _youtube_creator_profile_draft(
         youtube_stats=youtube_stats,
         youtube_stats_reason=youtube_stats_reason,
         fallback_reason=gemini_reason,
+    )
+
+
+def _youtube_channel_creator_profile_draft(
+    source_url: str,
+    settings: Settings,
+) -> AnalysisDraftResult | None:
+    if not settings.youtube_api_key:
+        return None
+    channel_filter = _youtube_channel_filter_from_url(source_url)
+    if channel_filter is None:
+        return None
+    try:
+        analysis = analyze_youtube_creator(
+            source_url,
+            creator_id=f"creator-analysis-{uuid5(NAMESPACE_URL, source_url)}",
+            max_videos=10,
+            api_key=settings.youtube_api_key,
+        )
+    except SocialProfileProviderError:
+        return None
+    snapshot = analysis.get("snapshot")
+    if not isinstance(snapshot, dict):
+        return None
+    observed = snapshot.get("observed")
+    if not isinstance(observed, dict):
+        return None
+    metrics = observed.get("metrics")
+    if not isinstance(metrics, dict):
+        metrics = {}
+    recent_videos = observed.get("recentVideos")
+    if not isinstance(recent_videos, list):
+        recent_videos = []
+
+    display_name = _string_value(observed.get("displayName")) or _host_label(source_url)
+    description = _string_value(observed.get("description")) or ""
+    recent_text = " ".join(
+        " ".join(
+            part
+            for part in [
+                _string_value(video.get("title")) if isinstance(video, dict) else None,
+                _string_value(video.get("description")) if isinstance(video, dict) else None,
+            ]
+            if part
+        )
+        for video in recent_videos
+        if isinstance(video, dict)
+    )
+    combined_text = f"{display_name} {description} {recent_text}"
+    tags = list(
+        dict.fromkeys(
+            [*_keyword_hits(combined_text), *_creator_mood_hints(combined_text), "youtube"]
+        )
+    )[:8]
+    recent_urls = [
+        f"https://www.youtube.com/watch?v={video_id}"
+        for video in recent_videos
+        if isinstance(video, dict)
+        for video_id in [_string_value(video.get("videoId"))]
+        if video_id
+    ][:6]
+    subscriber_count = _positive_int_or_none(metrics.get("subscriberOrFollowerCount"))
+    average_views = _positive_int_or_none(metrics.get("averageRecentViews"))
+    median_views = _positive_int_or_none(metrics.get("medianRecentViews"))
+    engagement_rate = _youtube_recent_engagement_rate(metrics)
+    handle = _youtube_handle_from_channel_url(source_url) or _handle_from_text(display_name)
+    profile_counts = {
+        key: value
+        for key, value in {
+            "subscriberCount": subscriber_count,
+            "totalViewCount": _positive_int_or_none(metrics.get("totalViewCount")),
+            "videoCount": _positive_int_or_none(metrics.get("videoCount")),
+            "recentVideoCount": _positive_int_or_none(metrics.get("recentVideoCount")),
+            "averageRecentViews": average_views,
+            "medianRecentViews": median_views,
+            "maxRecentViews": _positive_int_or_none(metrics.get("maxRecentViews")),
+            "minRecentViews": _positive_int_or_none(metrics.get("minRecentViews")),
+            "averageLikes": _positive_int_or_none(metrics.get("averageLikes")),
+            "averageComments": _positive_int_or_none(metrics.get("averageComments")),
+            "viewSubscriberRatio": _ratio_or_none(metrics.get("viewSubscriberRatio")),
+        }.items()
+        if value is not None
+    }
+    unknown_fields = [
+        field
+        for field, value in {
+            "followerCount": subscriber_count,
+            "averageViews": average_views,
+            "engagementRate": engagement_rate,
+            "recentPosts": recent_urls or None,
+        }.items()
+        if value is None
+    ]
+    draft = {
+        "schemaVersion": "knot.creator-profile.v1",
+        "sourceUrl": source_url,
+        "provider": "youtube-data-api-v3",
+        "model": None if settings.gemini_mode == "off" else settings.gemini_model,
+        "fallbackReason": None,
+        "displayName": _field(display_name[:80], source="YOUTUBE_DATA_API", confidence=0.9),
+        "handle": _field(handle, source="YOUTUBE_DATA_API", confidence=0.86),
+        "followerCount": _field(
+            subscriber_count,
+            source="YOUTUBE_DATA_API" if subscriber_count is not None else "UNKNOWN",
+            confidence=0.92 if subscriber_count is not None else 0.0,
+        ),
+        "averageViews": _field(
+            average_views,
+            source="DERIVED_YOUTUBE_RECENT_VIDEOS" if average_views is not None else "UNKNOWN",
+            confidence=0.78 if average_views is not None else 0.0,
+        ),
+        "engagementRate": _field(
+            engagement_rate,
+            source="DERIVED_YOUTUBE_RECENT_VIDEOS" if engagement_rate is not None else "UNKNOWN",
+            confidence=0.72 if engagement_rate is not None else 0.0,
+        ),
+        "reelShare": _field(None, source="UNKNOWN", confidence=0.0),
+        "categoryKeys": [_infer_category(combined_text)],
+        "formatKeys": ["video"],
+        "audienceTags": tags,
+        "proposedMoodIds": tags[:3],
+        "summary": (
+            f"YouTube Data API로 {display_name} 채널과 최근 공개 영상 "
+            f"{len(recent_videos)}개를 분석했습니다."
+        ),
+        "representativeUrls": recent_urls or [source_url],
+        "publicSignals": {
+            "fetchStatus": "FETCHED",
+            "sourceTitle": display_name,
+            "sourceDescription": description or None,
+            "profileCounts": profile_counts,
+            "contentHints": tags,
+            "recentPostUrls": recent_urls,
+            "analysisNotes": [
+                "YouTube Data API 공개 채널 정보와 최근 공개 영상 통계를 반영했습니다.",
+                "최근 평균 조회수와 조회수 중앙값은 KNOT이 계산한 파생 지표입니다.",
+            ],
+        },
+        "unknownFields": unknown_fields,
+        "safetyFlags": [],
+        "fetched": {"finalUrl": source_url, "title": display_name},
+    }
+    return AnalysisDraftResult(
+        draft=draft,
+        provider="youtube-data-api-v3",
+        model=None if settings.gemini_mode == "off" else settings.gemini_model,
+        fallback_reason=None,
     )
 
 
@@ -6803,6 +6959,25 @@ def _youtube_creator_metrics(stats: YoutubePublicStats | None) -> dict[str, int 
         "averageViews": stats.video_view_count,
         "engagementRate": engagement_rate,
     }
+
+
+def _youtube_recent_engagement_rate(metrics: dict[str, object]) -> float | None:
+    average_views = _positive_int_or_none(metrics.get("averageRecentViews"))
+    if not average_views:
+        return None
+    average_likes = _positive_int_or_none(metrics.get("averageLikes")) or 0
+    average_comments = _positive_int_or_none(metrics.get("averageComments")) or 0
+    interactions = average_likes + average_comments
+    if interactions <= 0:
+        return None
+    return round(interactions / average_views, 4)
+
+
+def _youtube_handle_from_channel_url(source_url: str) -> str | None:
+    path_parts = [part for part in urlparse(source_url).path.split("/") if part]
+    if path_parts and path_parts[0].startswith("@"):
+        return path_parts[0]
+    return None
 
 
 def _youtube_unknown_fields(metrics: dict[str, int | float | None]) -> list[str]:

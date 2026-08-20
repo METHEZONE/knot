@@ -740,6 +740,79 @@ def test_creator_profile_analysis_uses_gemini_for_youtube_metadata(
     ]["analysisNotes"]
 
 
+def test_creator_profile_analysis_uses_youtube_data_api_for_channel_url(
+    monkeypatch,
+) -> None:
+    repository = KnotRepository(InMemoryDocumentStore())
+    settings = Settings(
+        auth_mode="emulator",
+        firebase_project_id="knot-dev-503505",
+        youtube_api_key="test-youtube-key",
+    )
+    client = TestClient(create_app(repository=repository, settings=settings))
+    headers = auth_headers("creator-youtube-channel", "creator-youtube-channel@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-youtube-channel-role"},
+        json={"role": "CREATOR"},
+    )
+
+    def analyzed_channel(*_args, **_kwargs):
+        return {
+            "snapshot": {
+                "observed": {
+                    "displayName": "조코딩 JoCoding",
+                    "description": "프로그래밍과 AI 서비스를 만드는 채널",
+                    "metrics": {
+                        "subscriberOrFollowerCount": 720000,
+                        "totalViewCount": 180000000,
+                        "videoCount": 540,
+                        "recentVideoCount": 2,
+                        "averageRecentViews": 125000,
+                        "medianRecentViews": 120000,
+                        "maxRecentViews": 150000,
+                        "minRecentViews": 100000,
+                        "averageLikes": 2300,
+                        "averageComments": 120,
+                        "viewSubscriberRatio": 0.173611,
+                    },
+                    "recentVideos": [
+                        {
+                            "videoId": "video-a",
+                            "title": "AI 서비스 만들기",
+                            "description": "프로그래밍 튜토리얼",
+                        },
+                        {
+                            "videoId": "video-b",
+                            "title": "웹 앱 배포",
+                            "description": "개발자 도구 소개",
+                        },
+                    ],
+                }
+            }
+        }
+
+    monkeypatch.setattr(routes, "analyze_youtube_creator", analyzed_channel)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-youtube-channel-analysis"},
+        json={"sourceUrl": "https://www.youtube.com/@jocoding"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "youtube-data-api-v3"
+    assert draft["displayName"]["value"] == "조코딩 JoCoding"
+    assert draft["handle"]["value"] == "@jocoding"
+    assert draft["followerCount"]["value"] == 720000
+    assert draft["averageViews"]["value"] == 125000
+    assert draft["publicSignals"]["profileCounts"]["medianRecentViews"] == 120000
+    assert draft["representativeUrls"][0] == "https://www.youtube.com/watch?v=video-a"
+
+
 def test_product_analysis_normalizes_http_and_reuses_without_idempotency(monkeypatch) -> None:
     client, _ = authed_client_and_repository()
     headers = auth_headers("product-http", "product-http@example.com")
