@@ -868,6 +868,61 @@ def test_start_negotiation_uses_saved_initial_offer_for_counter_flow() -> None:
     assert all(isinstance(message["payload"].get("display"), dict) for message in messages)
 
 
+def test_start_negotiation_uses_gemini_for_brand_chat_display(monkeypatch) -> None:
+    generated: list[str] = []
+    examples = {
+        "OFFER": (
+            "제품 착용샷 1건 기준으로 300 USDC를 제안합니다. "
+            "일정과 사용 범위는 공개 조건에 맞춰 정리했습니다."
+        ),
+        "COUNTER": (
+            "예산 안에서 475 USDC까지 조정해 다시 제안합니다. "
+            "산출물과 게시 일정은 기존 조건을 유지합니다."
+        ),
+        "ACCEPT": "제안해주신 650 USDC 조건이 브랜드 권한 범위 안이라 이 조건으로 확정하겠습니다.",
+    }
+
+    def fake_brand_message_display(**kwargs: object) -> api_routes.AnalysisText:
+        message_type = kwargs["message_type"]
+        assert hasattr(message_type, "value")
+        generated.append(str(message_type.value))
+        return api_routes.AnalysisText(
+            text=examples[str(message_type.value)],
+            provider="vertex-gemini",
+            model="gemini-2.5-flash",
+        )
+
+    monkeypatch.setattr(api_routes, "brand_message_display", fake_brand_message_display)
+    client, repository = client_and_repository_with_seed()
+    set_creator_min_base(repository, "agent-creator-1", 650)
+    promotion_path = FirestorePaths.promotion("promotion-001")
+    promotion = repository.get_raw_document(promotion_path)
+    assert promotion is not None
+    repository.save_raw_document(promotion_path, {**promotion, "initialOffer": 300})
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    start_response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}:start-negotiation")
+
+    assert start_response.status_code == 201, start_response.text
+    messages = client.get(
+        f"/api/v1/negotiations/{start_response.json()['data']['negotiation']['negotiationId']}/messages"
+    ).json()["data"]["messages"]
+    brand_messages = [message for message in messages if message["role"] == "ROLE_USER"]
+    assert generated == ["OFFER", "COUNTER", "ACCEPT"]
+    assert [message["payload"]["display"]["messageProvider"] for message in brand_messages] == [
+        "vertex-gemini",
+        "vertex-gemini",
+        "vertex-gemini",
+    ]
+    assert [message["payload"]["display"]["message"] for message in brand_messages] == [
+        examples["OFFER"],
+        examples["COUNTER"],
+        examples["ACCEPT"],
+    ]
+
+
 def test_agreement_document_rejects_artifact_terms_hash_mismatch() -> None:
     terms = {
         "compensation": {"structure": "flat", "baseAmountUsdc": 500, "performancePct": 0},

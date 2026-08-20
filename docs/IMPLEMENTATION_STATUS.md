@@ -2,6 +2,45 @@
 
 Updated: 2026-08-20 KST
 
+## Gemini Negotiation Chat Copy (2026-08-20 KST)
+
+### Changed
+
+- Added Gemini/Vertex-backed Brand Agent display copy generation for negotiation
+  chat messages.
+- Brand Agent OFFER, COUNTER, and ACCEPT payloads now keep policy-fixed terms but
+  can show a smoother Gemini-generated `display.message`.
+- Added `messageProvider`, `messageModel`, and `messageFallbackReason` metadata to
+  Brand Agent display payloads.
+- Added prompt style examples so Gemini keeps the chat in a practical manager
+  tone for OFFER, COUNTER, and ACCEPT turns.
+- Negotiation Detail now renders only the visible `display.message` after the
+  headline, instead of appending internal deterministic rationale to the chat
+  bubble.
+- Preserved deterministic fallback when Gemini is off, unavailable, or returns an
+  invalid shape.
+- Creator Agent rationale generation already used the existing rationale provider;
+  this phase completes the Brand-side visible chat copy path.
+
+### Verification
+
+- `./.venv/bin/python -m ruff check backend/libs/ai/gemini.py backend/apps/api/routes.py backend/tests/test_api_promotions.py`: passed.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow backend/tests/test_a2a_negotiation.py::test_creator_agent_can_use_non_authoritative_rationale_provider -q`: 3 passed.
+- `./.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_a2a_http_integration.py -q`: 16 passed.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py -q`: 33 passed.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`: 2 passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `git diff --check`: passed.
+
+### Boundary
+
+- Gemini only writes user-facing chat copy.
+- Deterministic policy code still decides OFFER/COUNTER/ACCEPT, amounts, terms,
+  Agreement creation, escrow, and settlement.
+- No deployment, Firestore mutation, Secret Manager change, wallet action, pay.sh
+  call, or Solana transaction was performed in this phase.
+
 ## pay.sh and BM Presentation Expansion (2026-08-20 KST)
 
 ### Changed

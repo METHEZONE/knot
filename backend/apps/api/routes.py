@@ -70,6 +70,7 @@ from libs.agents.matching import MATCHING_WEIGHTS_VERSION, hard_filter_creator
 from libs.agents.negotiation import CreatorNegotiationContext
 from libs.ai.gemini import (
     AnalysisText,
+    brand_message_display,
     candidate_explanation,
     creator_rationale,
     structured_analysis_json,
@@ -2192,6 +2193,7 @@ def build_api_router(
             changedFields=[],
             rationale="Initial promotion offer",
             display=_brand_negotiation_display(
+                settings=settings,
                 message_type=NegotiationMessageType.OFFER,
                 terms=terms,
                 promotion=promotion,
@@ -2321,6 +2323,7 @@ def build_api_router(
                         changedFields=["compensation.baseAmountUsdc"],
                         rationale="Brand policy allows one more counteroffer before accepting.",
                         display=_brand_negotiation_display(
+                            settings=settings,
                             message_type=NegotiationMessageType.COUNTER,
                             terms=bridge_terms,
                             promotion=promotion,
@@ -2456,6 +2459,7 @@ def build_api_router(
                         changedFields=changed_fields,
                         rationale="Brand policy accepted Creator counteroffer.",
                         display=_brand_negotiation_display(
+                            settings=settings,
                             message_type=NegotiationMessageType.ACCEPT,
                             terms=counter_terms,
                             promotion=promotion,
@@ -4639,6 +4643,7 @@ def _brand_bridge_counter_terms(
 
 def _brand_negotiation_display(
     *,
+    settings: Settings,
     message_type: NegotiationMessageType,
     terms: AgreementTerms,
     promotion: Promotion,
@@ -4665,11 +4670,22 @@ def _brand_negotiation_display(
     else:
         headline = str(message_type.value)
         message = rationale
+    generated = brand_message_display(
+        settings=settings,
+        message_type=message_type,
+        terms=terms,
+        promotion=promotion,
+        fallback_message=message,
+        fallback_rationale=rationale,
+    )
     return {
         "agentLabel": promotion.brand_agent_id,
         "headline": headline,
-        "message": message,
+        "message": generated.text,
         "rationale": rationale,
+        "messageProvider": generated.provider,
+        "messageModel": generated.model,
+        "messageFallbackReason": generated.fallback_reason,
         "termsSummary": {
             "amountUsdc": amount,
             "deliverables": deliverables,

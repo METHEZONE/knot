@@ -919,11 +919,7 @@ function messageLine(message: ApiNegotiationMessage, index: number) {
       typeof display.headline === "string" && display.headline.trim()
         ? `${display.headline} · `
         : "";
-    const rationale =
-      typeof display.rationale === "string" && display.rationale.trim()
-        ? ` ${display.rationale}`
-        : "";
-    return `${headline}${display.message}${rationale}`;
+    return `${headline}${display.message}`;
   }
   const type = String(payload.type ?? (index === 0 ? "OFFER" : "COUNTER")).toUpperCase();
   if (type === "VERIFICATION_EVENT") {
