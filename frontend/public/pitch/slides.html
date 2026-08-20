@@ -403,10 +403,10 @@
       </div>
 
       <ul class="bullets">
-        <li><b>후보 검증</b>이 어렵다</li>
-        <li><b>조건 협상</b>이 느리다</li>
-        <li><b>선지급</b> 불안</li>
-        <li><b>정산 수동</b> 반복</li>
+        <li><b>후보 검증</b> 어렵다</li>
+        <li><b>조건 협상</b> 느리다</li>
+        <li><b>선지급</b> 불안하다</li>
+        <li><b>수동 정산</b> 반복</li>
       </ul>
     </div>
   </div>
@@ -418,7 +418,7 @@
      SLIDE 3: Interview Insight
      ════════════════════════════════════════════════════════════════ -->
 <section class="slide" id="slide-3">
-  <h2 class="slide-title squig-2">현업 목소리</h2>
+  <h2 class="slide-title squig-2">현업 인터뷰</h2>
 
   <div class="slide-content">
     <div class="sketchbox squig-1" style="max-width: 850px;">
@@ -520,10 +520,10 @@
       </div>
 
       <ul class="bullets">
-        <li>Gemini는 <b>제안</b></li>
-        <li>정책은 <b>승인</b></li>
+        <li>Gemini <b>분석과 제안</b></li>
+        <li>정책 코드 <b>승인</b></li>
         <li>A2A HTTP 협상</li>
-        <li>비공개 정책</li>
+        <li>비공개 정책 유지</li>
       </ul>
     </div>
   </div>
@@ -535,36 +535,45 @@
      SLIDE 6: pay.sh
      ════════════════════════════════════════════════════════════════ -->
 <section class="slide" id="slide-6">
-  <h2 class="slide-title squig-2">검증 시스템</h2>
+  <h2 class="slide-title squig-2">pay.sh 검증</h2>
 
   <div class="slide-content">
-    <div class="two-col">
-      <svg class="visual draw squig-1" viewBox="0 0 300 280">
-        <g>
-          <circle cx="80" cy="80" r="25" stroke-width="3"/>
-          <text x="80" y="90" text-anchor="middle" font-size="24" font-family="Caveat" font-weight="700" fill="#111" stroke="none">$</text>
-        </g>
-        <g>
-          <circle cx="160" cy="100" r="25" stroke-width="3"/>
-          <text x="160" y="110" text-anchor="middle" font-size="24" font-family="Caveat" font-weight="700" fill="#111" stroke="none">$</text>
-        </g>
-        <rect x="50" y="170" width="200" height="100" rx="5" stroke-width="3" stroke-dasharray="5,5"/>
-        <text x="150" y="200" text-anchor="middle" font-family="Caveat" font-size="20" fill="#111" stroke="none">Receipt</text>
-        <text x="150" y="230" text-anchor="middle" font-family="Caveat" font-size="18" fill="#666" stroke="none">0.02 USDC ✓</text>
-      </svg>
+    <div class="sketchbox squig-1" style="max-width: 900px; margin-bottom: 2rem;">
+      <p style="font-size: clamp(1.5rem, 2.8vw, 2.3rem); text-align: center; line-height: 1.8;">
+        에이전트가 <b>외부 검증 API를 직접 구매</b>하는 결제 레일
+      </p>
+    </div>
 
+    <div class="flow-horizontal squig-2" style="margin-bottom: 2.5rem;">
+      <div class="step">후보 발견</div>
+      <span class="arrow">→</span>
+      <div class="step">검증 필요</div>
+      <span class="arrow">→</span>
+      <div class="step" style="border-color: #b00; color: #b00;"><b>pay.sh/x402</b></div>
+      <span class="arrow">→</span>
+      <div class="step">영수증</div>
+      <span class="arrow">→</span>
+      <div class="step">순위 반영</div>
+    </div>
+
+    <div class="two-col" style="align-items: start;">
       <div>
-        <ul class="bullets">
-          <li>에이전트가 <b>검증 API 구매</b></li>
-          <li>타임라인 영수증 기록</li>
-          <li><b>보상과 분리</b></li>
+        <ul class="bullets" style="font-size: clamp(1.5rem, 2.8vw, 2.3rem);">
+          <li>후보 진위 검증</li>
+          <li>콘텐츠 품질 확인</li>
+          <li>브랜드 언급 분석</li>
         </ul>
+      </div>
 
-        <div class="sketchbox squig-2" style="margin-top: 2rem;">
-          <div class="en" style="font-size: 1.1em; text-align: center;">
-            pay.sh = 운영비<br/>
-            Solana = 보상금
-          </div>
+      <div class="sketchbox squig-3" style="text-align: center;">
+        <div style="font-size: clamp(1.6rem, 3vw, 2.5rem); margin-bottom: 0.8em;">
+          <span class="en" style="color: #b00; font-weight: 700;">pay.sh</span> = 운영비
+        </div>
+        <div style="font-size: clamp(1.6rem, 3vw, 2.5rem);">
+          <span class="en" style="color: #0a7d38; font-weight: 700;">Solana</span> = 보상금
+        </div>
+        <div style="margin-top: 1.2em; font-size: clamp(1.3rem, 2.4vw, 2rem); color: #666;">
+          (크리에이터 보상과 분리)
         </div>
       </div>
     </div>
@@ -715,10 +724,10 @@
   <div class="slide-content">
     <div class="two-col">
       <ul class="bullets">
-        <li>AI는 <b>계획하고 협상</b></li>
-        <li>pay.sh로 <b>기계가 결제</b></li>
-        <li>솔라나는 <b>빠르고 저렴</b></li>
-        <li>GCP로 <b>실제 서비스</b></li>
+        <li>AI <b>계획·협상 가능</b></li>
+        <li>pay.sh <b>기계 결제</b></li>
+        <li>솔라나 <b>빠른 정산</b></li>
+        <li>GCP <b>실제 배포</b></li>
       </ul>
 
       <svg class="draw squig-3" viewBox="0 0 400 300">
@@ -750,20 +759,11 @@
     </svg>
 
     <h2 class="squig-1" style="text-align: center; font-size: clamp(2.5rem, 5vw, 4rem);">
-      KNOT는<br/>
-      사람-서비스 거래를 위한<br/>
-      에이전틱 커머스 레이어입니다
+      Thank you
     </h2>
-
-    <p style="margin-top: 2.5rem; font-size: clamp(1.4rem, 2.5vw, 2rem); text-align: center; color: #555; line-height: 1.8;">
-      현업 병목 = <b>거래 신뢰</b><br/>
-      에이전트로 검증·협상·정산을 묶고<br/>
-      GCP로 실제 서비스 배포<br/>
-      <b style="color: #b00;">pay.sh</b> = 운영비, <b style="color: #0a7d38;">솔라나</b> = 정산 증명
-    </p>
   </div>
 
-  <div class="slide-footer">Thank you · 매듭 지으러 오세요 🤝</div>
+  <div class="slide-footer"></div>
   <div class="slide-number">12 / 12</div>
 </section>
 
