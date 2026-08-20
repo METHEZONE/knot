@@ -2,6 +2,28 @@
 
 Updated: 2026-08-20 KST
 
+## Remove Generated Pitch HTML (2026-08-20 KST)
+
+### Changed
+
+- Removed `frontend/public/pitch/slides.html` after the user requested that the
+  presentation file be removed.
+- Kept `docs/PRESENTATION_HANDOFF_FINAL.md` because it remains the source
+  handoff document for deck content and judging narrative.
+
+### Verification
+
+- Active-reference search for `public/pitch/slides.html`, `pitch/slides.html`,
+  `slides.html`, and `/pitch` in `frontend`, `README.md`,
+  `docs/00_DOCUMENT_INDEX.md`, and `docs/PRESENTATION_HANDOFF_FINAL.md`: no
+  matches.
+- `git diff --check`: passed.
+
+### Boundary
+
+- No deployment, Firestore mutation, Secret Manager change, wallet action, pay.sh
+  call, or Solana transaction was performed in this phase.
+
 ## Gemini Negotiation Chat Copy (2026-08-20 KST)
 
 ### Changed
