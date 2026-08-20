@@ -118,6 +118,11 @@ from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.serialization import model_to_document
 from libs.repositories.store import DocumentQueryFilter, IdempotencyConflictError, KnotRepository
 from libs.settings.config import Settings, get_settings
+from libs.social.instagram import (
+    InstagramProfileAnalysis,
+    InstagramProfileProvider,
+    InstagramProviderError,
+)
 from libs.web3.client import Web3GatewayClient, Web3GatewayError, receipt_from_gateway
 from libs.web3.user_wallet import CUSTODY_SELF
 from libs.web3.wallet_proof import (
@@ -6089,6 +6094,10 @@ def _creator_profile_analysis_draft(
         youtube_result = _youtube_creator_profile_draft(source_url, settings)
         if youtube_result is not None:
             return youtube_result
+    if _is_instagram_url(source_url):
+        instagram_result = _instagram_creator_profile_draft(source_url, settings)
+        if instagram_result is not None:
+            return instagram_result
 
     fetched, fetch_reason = _secure_fetch_source_page(source_url, settings)
     if fetched is not None:
@@ -6118,6 +6127,137 @@ def _is_youtube_url(source_url: str) -> bool:
     host = (urlparse(source_url).hostname or "").lower()
     return host in {"youtu.be", "youtube.com", "www.youtube.com", "m.youtube.com"} or host.endswith(
         ".youtube.com"
+    )
+
+
+def _is_instagram_url(source_url: str) -> bool:
+    host = (urlparse(source_url).hostname or "").lower()
+    return host in {"instagram.com", "www.instagram.com"} or host.endswith(".instagram.com")
+
+
+def _instagram_creator_profile_draft(
+    source_url: str,
+    settings: Settings,
+) -> AnalysisDraftResult | None:
+    if settings.instagram_provider != "apify":
+        return None
+    if not settings.apify_token:
+        return None
+    provider = InstagramProfileProvider(
+        apify_token=settings.apify_token,
+        actor_id=settings.instagram_apify_actor_id,
+        timeout_seconds=settings.instagram_apify_timeout_seconds,
+    )
+    try:
+        analysis = provider.analyze_profile(source_url=source_url, max_posts=12)
+    except InstagramProviderError as exc:
+        return _deterministic_creator_profile_draft(
+            source_url,
+            settings,
+            fallback_reason=str(exc),
+        )
+    return _apify_instagram_creator_profile_draft(source_url, settings, analysis)
+
+
+def _apify_instagram_creator_profile_draft(
+    source_url: str,
+    settings: Settings,
+    analysis: InstagramProfileAnalysis,
+) -> AnalysisDraftResult:
+    profile = analysis.profile
+    metrics = analysis.metrics
+    recent_posts = analysis.recent_posts
+    username = _string_value(profile.get("username")) or analysis.username
+    handle = f"@{username.lstrip('@')}"
+    display_name = _string_value(profile.get("displayName")) or username
+    biography = _string_value(profile.get("biography")) or ""
+    post_text = " ".join(
+        str(post.get("caption") or "") for post in recent_posts if isinstance(post, dict)
+    )
+    combined_text = f"{display_name} {biography} {post_text}"
+    content_hints = list(
+        dict.fromkeys([*_keyword_hits(combined_text), *_creator_mood_hints(combined_text)])
+    )[:8]
+    recent_urls = [
+        str(post["url"])
+        for post in recent_posts
+        if isinstance(post.get("url"), str) and str(post["url"]).startswith("https://")
+    ][:6]
+    format_keys = _instagram_format_keys(recent_posts)
+    average_views = _positive_int_or_none(metrics.get("averageRecentViews"))
+    follower_count = _positive_int_or_none(profile.get("followersCount"))
+    engagement_rate = _ratio_or_none(metrics.get("estimatedEngagementRate"))
+    reel_share = _instagram_reel_share(recent_posts)
+    unknown_fields = [
+        field
+        for field, value in {
+            "followerCount": follower_count,
+            "averageViews": average_views,
+            "engagementRate": engagement_rate,
+            "reelShare": reel_share,
+            "recentPosts": recent_urls or None,
+        }.items()
+        if value is None
+    ]
+    profile_counts = _instagram_profile_counts(profile, metrics)
+    draft = {
+        "schemaVersion": "knot.creator-profile.v1",
+        "sourceUrl": source_url,
+        "provider": analysis.provider,
+        "model": None if settings.gemini_mode == "off" else settings.gemini_model,
+        "fallbackReason": None,
+        "displayName": _field(display_name[:80], source="INSTAGRAM_APIFY", confidence=0.9),
+        "handle": _field(handle, source="INSTAGRAM_APIFY", confidence=0.94),
+        "followerCount": _field(
+            follower_count,
+            source="INSTAGRAM_APIFY_PUBLIC_PROFILE" if follower_count is not None else "UNKNOWN",
+            confidence=0.9 if follower_count is not None else 0.0,
+        ),
+        "averageViews": _field(
+            average_views,
+            source="DERIVED_INSTAGRAM_RECENT_POSTS" if average_views is not None else "UNKNOWN",
+            confidence=0.68 if average_views is not None else 0.0,
+        ),
+        "engagementRate": _field(
+            engagement_rate,
+            source="DERIVED_INSTAGRAM_RECENT_POSTS" if engagement_rate is not None else "UNKNOWN",
+            confidence=0.62 if engagement_rate is not None else 0.0,
+        ),
+        "reelShare": _field(
+            reel_share,
+            source="DERIVED_INSTAGRAM_RECENT_POSTS" if reel_share is not None else "UNKNOWN",
+            confidence=0.62 if reel_share is not None else 0.0,
+        ),
+        "categoryKeys": [_infer_category(combined_text)],
+        "formatKeys": format_keys,
+        "audienceTags": content_hints,
+        "proposedMoodIds": content_hints[:3],
+        "summary": (
+            f"Instagram 공개 프로필과 최근 공개 게시물 {len(recent_posts)}개를 기준으로 "
+            f"{display_name}의 협찬 적합 신호를 분석했습니다."
+        ),
+        "representativeUrls": recent_urls,
+        "publicSignals": {
+            "fetchStatus": "FETCHED",
+            "sourceTitle": display_name,
+            "sourceDescription": biography or None,
+            "profileCounts": profile_counts,
+            "contentHints": content_hints,
+            "recentPostUrls": recent_urls,
+            "analysisNotes": _instagram_analysis_notes(analysis),
+        },
+        "unknownFields": unknown_fields,
+        "safetyFlags": ["PRIVATE_PROFILE"] if profile.get("isPrivate") is True else [],
+        "fetched": {
+            "finalUrl": _string_value(profile.get("profileUrl")) or source_url,
+            "title": display_name,
+        },
+    }
+    return AnalysisDraftResult(
+        draft=draft,
+        provider=analysis.provider,
+        model=None if settings.gemini_mode == "off" else settings.gemini_model,
+        fallback_reason=None,
     )
 
 
@@ -7414,12 +7554,89 @@ def _creator_public_signals(
     }
 
 
+def _instagram_format_keys(recent_posts: list[dict[str, object]]) -> list[str]:
+    keys: list[str] = []
+    for post in recent_posts:
+        media_type = str(post.get("mediaType") or "").lower()
+        url = str(post.get("url") or "").lower()
+        if "reel" in media_type or "/reel/" in url:
+            keys.append("reel")
+        elif url:
+            keys.append("post")
+    if not keys:
+        return ["reel", "post"]
+    return list(dict.fromkeys(keys))[:4]
+
+
+def _instagram_reel_share(recent_posts: list[dict[str, object]]) -> int | None:
+    if not recent_posts:
+        return None
+    reel_count = 0
+    counted = 0
+    for post in recent_posts:
+        media_type = str(post.get("mediaType") or "").lower()
+        url = str(post.get("url") or "").lower()
+        if not media_type and not url:
+            continue
+        counted += 1
+        if "reel" in media_type or "/reel/" in url:
+            reel_count += 1
+    if counted == 0:
+        return None
+    return round(reel_count / counted * 100)
+
+
+def _instagram_profile_counts(
+    profile: dict[str, object],
+    metrics: dict[str, object],
+) -> dict[str, int | float]:
+    counts = {
+        "followerCount": profile.get("followersCount"),
+        "followingCount": profile.get("followingCount"),
+        "postCount": profile.get("postsCount"),
+        "recentPostCount": metrics.get("recentPostCount"),
+        "averageRecentViews": metrics.get("averageRecentViews"),
+        "averageLikes": metrics.get("averageLikes"),
+        "averageComments": metrics.get("averageComments"),
+        "estimatedEngagementRate": metrics.get("estimatedEngagementRate"),
+    }
+    return {
+        key: value
+        for key, value in counts.items()
+        if isinstance(value, int | float) and value >= 0
+    }
+
+
+def _instagram_analysis_notes(analysis: InstagramProfileAnalysis) -> list[str]:
+    notes = [
+        "Apify Instagram Profile Scraper로 공개 프로필 데이터를 조회했습니다.",
+        "최근 게시물 기반 평균값은 KNOT이 계산한 파생 지표입니다.",
+    ]
+    if analysis.profile.get("isPrivate") is True:
+        notes.append("비공개 계정으로 표시되어 공개 게시물 분석은 제한됩니다.")
+    if not analysis.recent_posts:
+        notes.append("최근 공개 게시물 목록은 provider 응답에 포함되지 않았습니다.")
+    return notes[:5]
+
+
 def _creator_fetch_note(reason: str | None) -> str:
     labels = {
         "secure_fetch_disabled": "서버 fetch가 꺼져 있어 URL 기반 제한 분석만 수행했습니다.",
         "secure_fetch_failed": "공개 페이지 요청이 실패해 URL 기반 제한 분석만 수행했습니다.",
         "instagram_access_limited": (
             "Instagram이 로그인 화면을 반환해 공개 지표는 직접 확인이 필요합니다."
+        ),
+        "instagram_apify_request_failed": (
+            "Apify Instagram 분석 요청이 실패해 URL 기반 제한 분석만 수행했습니다."
+        ),
+        "instagram_apify_invalid_json": (
+            "Apify Instagram 응답 형식이 예상과 달라 URL 기반 제한 분석만 수행했습니다."
+        ),
+        "instagram_apify_empty_dataset": (
+            "Apify Instagram 결과가 비어 있어 URL 기반 제한 분석만 수행했습니다."
+        ),
+        "instagram_username_missing": (
+            "Instagram 사용자명을 URL에서 찾지 못해 제한 분석만 수행했습니다."
         ),
         "empty_source": "공개 페이지에 분석 가능한 텍스트가 거의 없었습니다.",
         "too_many_redirects": "공개 페이지 리다이렉트가 너무 많아 fetch를 중단했습니다.",
@@ -7428,6 +7645,9 @@ def _creator_fetch_note(reason: str | None) -> str:
         return "공개 페이지에서 수집 가능한 범위 안에서 분석했습니다."
     if reason.startswith("source_http_"):
         return f"공개 페이지가 HTTP {reason.removeprefix('source_http_')} 응답을 반환했습니다."
+    if reason.startswith("instagram_apify_http_"):
+        status_code = reason.removeprefix("instagram_apify_http_")
+        return f"Apify Instagram API가 HTTP {status_code} 응답을 반환했습니다."
     return labels.get(reason, f"제한 사유: {reason}")
 
 

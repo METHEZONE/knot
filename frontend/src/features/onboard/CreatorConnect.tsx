@@ -1,6 +1,6 @@
 "use client";
 
-/** `/creator/connect` — YouTube 채널 또는 대표 영상 링크 하나. */
+/** `/creator/connect` — Instagram or YouTube profile analysis. */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,8 +29,11 @@ type CreatorPublicSignals = {
   analysisNotes: string[];
 };
 
+type SocialPlatform = "instagram" | "youtube";
+
 export function CreatorConnect() {
   const router = useRouter();
+  const [platform, setPlatform] = useState<SocialPlatform>("instagram");
   const [handle, setHandle] = useState("");
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState<CreatorDraft | null>(null);
@@ -41,7 +44,14 @@ export function CreatorConnect() {
     setBusy(true);
     setError(null);
     try {
-      const sourceUrl = socialUrlFromInput(handle);
+      const sourceUrl = socialUrlFromInput(handle, platform);
+      if (!matchesSelectedPlatform(sourceUrl, platform)) {
+        throw new Error(
+          platform === "instagram"
+            ? "Instagram 계정 링크나 @아이디만 입력해주세요."
+            : "YouTube 채널 링크나 @핸들만 입력해주세요.",
+        );
+      }
       const analysis = await new ProductApiClient().analyzeCreatorProfile(sourceUrl);
       setFound(creatorDraftFromAnalysis(analysis));
     } catch (caught) {
@@ -66,17 +76,38 @@ export function CreatorConnect() {
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-10">
       <div>
         <p className="font-mono text-xs uppercase tracking-wide text-muted">1 / 2</p>
-        <h1 className="mt-1 text-4xl">YouTube 링크만 넣으면 돼요</h1>
+        <h1 className="mt-1 text-4xl">SNS 링크만 넣으면 돼요</h1>
         <p className="mt-2 text-muted">
-          채널이나 대표 영상 링크를 알려주세요. 매니저가 공개 정보와 콘텐츠 스타일을 확인합니다.
+          분석할 채널을 하나만 선택하고 계정 링크를 알려주세요. 매니저가 공개 정보와 콘텐츠
+          스타일을 확인합니다.
         </p>
+      </div>
+
+      <div className="sketch-alt ink flex w-fit gap-1 border border-border-subtle bg-surface-raised p-1">
+        {(["instagram", "youtube"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setPlatform(item)}
+            className={[
+              "px-4 py-2 text-sm transition",
+              platform === item ? "bg-ink text-background" : "text-muted hover:text-ink",
+            ].join(" ")}
+          >
+            {item === "instagram" ? "Instagram" : "YouTube"}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
-          placeholder="https://www.youtube.com/watch?v=..."
+          placeholder={
+            platform === "instagram"
+              ? "@thehackathonkr 또는 https://www.instagram.com/creator/"
+              : "@channel 또는 https://www.youtube.com/@channel"
+          }
           className="sketch-alt ink flex-1 border border-border-subtle bg-surface-raised px-4 py-3 text-lg outline-none"
         />
         <button
@@ -210,13 +241,35 @@ function creatorDraftFromAnalysis(analysis: AnalysisJob): CreatorDraft {
   };
 }
 
-function socialUrlFromInput(value: string): string {
+function socialUrlFromInput(value: string, platform: SocialPlatform): string {
   const trimmed = value.trim();
   if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
   if (trimmed.includes(".")) return `https://${trimmed.replace(/^\/+/, "")}`;
-  if (trimmed.startsWith("@")) return `https://www.youtube.com/${trimmed}`;
+  if (trimmed.startsWith("@")) {
+    return platform === "instagram"
+      ? `https://www.instagram.com/${trimmed.slice(1)}/`
+      : `https://www.youtube.com/${trimmed}`;
+  }
   const clean = trimmed.replace(/^@/, "").replace(/^\/+/, "");
-  return `https://www.youtube.com/@${clean}`;
+  return platform === "instagram"
+    ? `https://www.instagram.com/${clean}/`
+    : `https://www.youtube.com/@${clean}`;
+}
+
+function matchesSelectedPlatform(sourceUrl: string, platform: SocialPlatform): boolean {
+  try {
+    const host = new URL(sourceUrl).hostname.toLowerCase();
+    if (platform === "instagram") {
+      return host === "instagram.com" || host.endsWith(".instagram.com");
+    }
+    return (
+      host === "youtu.be" ||
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function handleFromUrl(value: string): string {
@@ -253,7 +306,9 @@ function ratioField(value: unknown): number | null {
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function publicSignalsFromDraft(value: unknown): CreatorPublicSignals {

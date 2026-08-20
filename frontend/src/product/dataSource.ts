@@ -576,6 +576,7 @@ function creatorDealStatus(status: NegotiationFlow["negotiation"]["status"]): Cr
 }
 
 function creatorDisplayName(candidate: ApiCandidate | undefined) {
+  if (candidate?.creatorDisplayName) return candidate.creatorDisplayName;
   if (candidate?.creatorId === "creator-003") return "Demo Lifestyle Creator";
   if (candidate?.creatorId === "creator-001") return "Demo Beauty Creator";
   if (candidate?.creatorId === "creator-002") return "Demo Fitness Creator";

@@ -349,6 +349,99 @@ def test_creator_profile_analysis_treats_instagram_login_wall_as_limited(
     ]
 
 
+def test_creator_profile_analysis_uses_apify_instagram_provider(monkeypatch) -> None:
+    repository = KnotRepository(InMemoryDocumentStore())
+    settings = Settings(
+        auth_mode="emulator",
+        firebase_project_id="knot-dev-503505",
+        apify_token="test-apify-token",
+    )
+    client = TestClient(create_app(repository=repository, settings=settings))
+    headers = auth_headers("creator-instagram-apify", "creator-instagram-apify@example.com")
+    client.get("/api/v1/me", headers=headers)
+    client.post(
+        "/api/v1/me/role",
+        headers={**headers, "Idempotency-Key": "creator-instagram-apify-role"},
+        json={"role": "CREATOR"},
+    )
+
+    class Provider:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def analyze_profile(self, *, source_url: str, max_posts: int):
+            assert source_url == "https://www.instagram.com/mood.creator/"
+            assert max_posts == 12
+            return routes.InstagramProfileAnalysis(
+                provider="apify-instagram-profile-scraper",
+                source_url=source_url,
+                username="mood.creator",
+                profile={
+                    "username": "mood.creator",
+                    "displayName": "Mood Creator",
+                    "biography": "Daily skincare reels #skincare",
+                    "profileUrl": source_url,
+                    "followersCount": 12_400,
+                    "followingCount": 320,
+                    "postsCount": 27,
+                    "isVerified": False,
+                },
+                metrics={
+                    "subscriberOrFollowerCount": 12_400,
+                    "averageRecentViews": 8_200,
+                    "averageLikes": 410,
+                    "averageComments": 22,
+                    "estimatedEngagementRate": 3.48,
+                    "recentPostCount": 2,
+                    "metricType": "DERIVED",
+                },
+                recent_posts=[
+                    {
+                        "url": "https://www.instagram.com/reel/demo-reel-1/",
+                        "caption": "Morning skincare #beauty",
+                        "viewCount": 10_000,
+                        "likeCount": 500,
+                        "commentCount": 30,
+                        "mediaType": "Reel",
+                    },
+                    {
+                        "url": "https://www.instagram.com/p/demo-post-1/",
+                        "caption": "Daily routine",
+                        "likeCount": 320,
+                        "commentCount": 14,
+                        "mediaType": "Image",
+                    },
+                ],
+                raw={"username": "mood.creator"},
+                collected_at="2026-08-21T00:00:00Z",
+            )
+
+    monkeypatch.setattr(routes, "InstagramProfileProvider", Provider)
+
+    response = client.post(
+        "/api/v1/analyses/creator-profile",
+        headers={**headers, "Idempotency-Key": "creator-instagram-apify-analysis"},
+        json={"sourceUrl": "https://www.instagram.com/mood.creator/"},
+    )
+
+    assert response.status_code == 202
+    analysis = response.json()["data"]["analysis"]
+    draft = analysis["draft"]
+    assert analysis["provider"] == "apify-instagram-profile-scraper"
+    assert draft["displayName"]["value"] == "Mood Creator"
+    assert draft["handle"]["value"] == "@mood.creator"
+    assert draft["followerCount"]["value"] == 12_400
+    assert draft["averageViews"]["value"] == 8_200
+    assert draft["engagementRate"]["value"] == 0.0348
+    assert draft["reelShare"]["value"] == 50
+    assert draft["formatKeys"] == ["reel", "post"]
+    assert draft["publicSignals"]["profileCounts"]["followerCount"] == 12_400
+    assert draft["publicSignals"]["recentPostUrls"] == [
+        "https://www.instagram.com/reel/demo-reel-1/",
+        "https://www.instagram.com/p/demo-post-1/",
+    ]
+
+
 def test_creator_profile_analysis_uses_youtube_oembed_metadata(monkeypatch) -> None:
     client, _ = authed_client_and_repository()
     headers = auth_headers("creator-youtube", "creator-youtube@example.com")

@@ -250,6 +250,9 @@ export type ApiMatchRun = {
 export type ApiCandidate = {
   creatorId: string;
   creatorAgentId: string;
+  creatorDisplayName?: string;
+  categories?: string[];
+  supportedDeliverableFormats?: string[];
   rank?: number;
   eligible: boolean;
   overallScore?: number;

@@ -38,6 +38,7 @@ When this bundle conflicts with an older KNOT v1/v2 document, this bundle wins f
 | `17_DISPUTE_AND_TIMELOCK_SYSTEM.md` | Dispute resolution, 72-hour timelock, auto-resolution with Gemini |
 | `18_UI_COPY_AND_STATE_DICTIONARY.md` | Korean copy, labels, empty/error states |
 | `19_PAYMENT_AND_SETTLEMENT_HANDOFF.md` | What payment/settlement actually does today, per layer — deploy state, on-chain instructions, evidence outcomes, wallet proof, and the refund gap |
+| `DEMO_PERSONA_SEED.md` | Demo Brand/Creator persona seed, public vs synthetic data policy, social provider refresh, Firestore mapping, and Matching/A2A verification |
 | `24_FINAL_DEMO_SCENARIO_AND_SEED.md` | Final XEXYMIX demo seed, reset runbook, fixed input values, candidate pool, pricing, and demo flow |
 | `PRESENTATION_HANDOFF_FINAL.md` | Final single handoff for pitch deck content, judging narrative, pay.sh/GCP/Web3 positioning, and live demo script |
 | `22_REFERENCES.md` | Source documents and official references |

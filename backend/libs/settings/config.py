@@ -49,6 +49,10 @@ class Settings(BaseModel):
     gemini_model: str = "gemini-2.5-flash"
     gemini_match_explanations: bool = False
     youtube_api_key: str | None = None
+    apify_token: str | None = None
+    instagram_provider: str = "apify"
+    instagram_apify_actor_id: str = "apify~instagram-profile-scraper"
+    instagram_apify_timeout_seconds: float = 75.0
     secure_fetch_enabled: bool = True
     secure_fetch_timeout_seconds: float = 8.0
     paysh_mode: str = "sandbox"
@@ -115,6 +119,15 @@ def get_settings(service_name: str | None = None) -> Settings:
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         gemini_match_explanations=_truthy(os.getenv("KNOT_GEMINI_MATCH_EXPLANATIONS")),
         youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
+        apify_token=os.getenv("APIFY_TOKEN"),
+        instagram_provider=os.getenv("INSTAGRAM_PROVIDER", "apify"),
+        instagram_apify_actor_id=os.getenv(
+            "INSTAGRAM_APIFY_ACTOR_ID",
+            "apify~instagram-profile-scraper",
+        ),
+        instagram_apify_timeout_seconds=float(
+            os.getenv("INSTAGRAM_APIFY_TIMEOUT_SECONDS", "75")
+        ),
         secure_fetch_enabled=_truthy_default_true(os.getenv("KNOT_SECURE_FETCH_ENABLED")),
         secure_fetch_timeout_seconds=float(os.getenv("KNOT_SECURE_FETCH_TIMEOUT_SECONDS", "8")),
         paysh_mode=os.getenv("PAYSH_MODE", "sandbox"),

@@ -5,6 +5,9 @@ export function analysisSourceLabel(provider: string, fallbackReason: string | n
   if (fallbackReason === "instagram_access_limited") {
     return "Instagram이 로그인 화면을 보여줘 공개 지표는 직접 확인이 필요합니다. 사용자이름은 그대로 사용할 수 있어요.";
   }
+  if (provider === "apify-instagram-profile-scraper") {
+    return "Instagram 공개 프로필과 최근 공개 게시물 신호를 확인했습니다.";
+  }
   if (provider === "youtube-oembed") {
     return "YouTube 공개 메타데이터를 확인했습니다. 조회수와 구독자 수는 직접 확인해 주세요.";
   }

@@ -1597,3 +1597,93 @@ Updated: 2026-08-20 KST
   performed in this phase.
 - A Secret Manager IAM binding for `knot-youtube-api-key` was added after
   explicit approval so Cloud Run can read the YouTube API key secret.
+
+## 2026-08-21 Demo Persona Seed Import
+
+### Changed
+
+- Added schema-aligned demo Brand/Creator persona generation for 10 brands and
+  10 creators across beauty, tech, fitness/wellness, crypto, and gaming.
+- Added `socialSnapshots`, `creatorProfiles`, `creatorDiscoveryProfiles`,
+  `agents`, `agentPolicies`, `agentRegistry`, demo `promotions`, and unresolved
+  account analysis documents through one seed pipeline.
+- Added YouTube Data API v3 profile provider and a reusable
+  `analyze_youtube_creator()` entry point.
+- Added Instagram provider abstraction with truthful unresolved fallback when
+  Apify/Meta credentials are unavailable.
+- Added `backend/scripts/seed_demo_personas.py` with `--dry-run`,
+  `--refresh-social`, `--only-brands`, `--only-creators`, `--write`, and
+  `--reset`.
+- Updated candidate display mapping so API-provided `creatorDisplayName` can be
+  shown on match cards.
+- Added `docs/DEMO_PERSONA_SEED.md`.
+
+### Verification
+
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
+  10 brands, 10 creators, 5 promotions, 96 documents, no validation errors.
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --write --json`:
+  wrote 96 demo documents to Firestore after explicit approval.
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --refresh-social --json`:
+  no validation errors; refresh was skipped because local `YOUTUBE_API_KEY` is
+  not configured.
+- `./.venv/bin/pytest backend/tests/test_demo_persona_seed.py -q`: 3 passed.
+- `./.venv/bin/python -m ruff check backend/libs/demo_seed backend/scripts/seed_demo_personas.py backend/tests/test_demo_persona_seed.py`:
+  passed.
+- `npm --prefix frontend run typecheck`: passed.
+- Cloud Run seed matching verified:
+  - Beauty `promotion-demo-cheriexx` selected `creator-demo-ssin`.
+  - Tech `promotion-demo-samsung` selected `creator-demo-jocoding`.
+  - Fitness/Wellness `promotion-demo-thezonebio` selected
+    `creator-demo-thankyou-bubu`.
+  - Crypto `promotion-demo-upbit` selected `creator-demo-99bitcoins`.
+  - Gaming `promotion-demo-neowiz` selected `creator-demo-dotti`.
+- Cloud Run seed A2A verified on `match-200a02af-2f9f-42c7-8c62-3b2ef69dfe92`.
+  It returned `status=AGREED`, created negotiation
+  `negotiation-063dcf8c-d0ff-40bb-9348-a3263352ce7f`, agreement
+  `agreement-71dc759d-3583-4d99-a58e-2fcfc5ffcc4c`, and terms hash
+  `sha256:3b2d36a676902145b85f07a75a340627b3731806ffcd7144823e380d1199861b`.
+
+### Scope Guard
+
+- Demo persona documents were written to Firestore. No Firestore reset was
+  performed.
+- No wallet funding, Solana program change, or new on-chain transaction was
+  performed in this phase.
+
+## 2026-08-21 Instagram Apify Onboarding Analysis
+
+### Changed
+
+- Added a reusable `libs.social.instagram.InstagramProfileProvider` using
+  Apify's synchronous Actor dataset endpoint.
+- Added API settings and deploy-secret wiring for `APIFY_TOKEN`,
+  `INSTAGRAM_PROVIDER`, `INSTAGRAM_APIFY_ACTOR_ID`, and
+  `INSTAGRAM_APIFY_TIMEOUT_SECONDS`.
+- Creator onboarding now accepts exactly one selected social platform:
+  Instagram or YouTube. Bare `@handle` input maps to the selected platform.
+- Instagram onboarding uses Apify first when `APIFY_TOKEN` is configured, then
+  returns a provider-tagged creator analysis with public profile counts, recent
+  post URLs, derived averages, and analysis notes.
+- Replaced two generic public demo brands with user-requested Instagram seed
+  brands: `brand-demo-thehackathonkr` and `brand-demo-bzcf`.
+
+### Verification
+
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py backend/tests/test_demo_persona_seed.py -q`:
+  19 passed.
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/libs/social backend/libs/demo_seed backend/scripts/seed_demo_personas.py backend/libs/settings/config.py backend/tests/test_api_onboarding.py`:
+  passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
+  10 brands, 10 creators, 5 promotions, 96 documents, no validation errors.
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --write --json`:
+  wrote the updated 96-document seed set with `brand-demo-thehackathonkr` and
+  `brand-demo-bzcf` to Firestore without reset.
+
+### Scope Guard
+
+- Local `--refresh-social` did not call Apify because no local `APIFY_TOKEN` is
+  configured.
+- Cloud Run Secret Manager update and deployment are pending explicit operator
+  action with a real Apify token.
