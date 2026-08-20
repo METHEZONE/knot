@@ -88,7 +88,19 @@ def creator_rationale(
             "Do not reveal private thresholds except the public offer amount "
             "and the decision result.",
             "Return one concise Korean sentence.",
+            "Use a practical creator manager tone, not policy jargon.",
         ],
+        "styleExamples": {
+            "COUNTER": (
+                "제안 금액은 조금 낮아서 2 USDC로 조정 요청드립니다. "
+                "산출물과 일정은 그대로 진행 가능합니다."
+            ),
+            "ACCEPT": (
+                "제안 조건과 공개 범위가 맞아서 이 조건으로 진행하겠습니다. "
+                "콘텐츠 일정에 맞춰 준비하겠습니다."
+            ),
+            "REJECT": "이번 조건은 진행 기준과 맞지 않아 정중히 거절하겠습니다.",
+        },
         "creatorAgentId": context.creator_agent_id,
         "fixedDecisionType": decision.type.value,
         "promotion": {

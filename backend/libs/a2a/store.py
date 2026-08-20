@@ -99,7 +99,12 @@ class InMemoryA2ATaskStore:
                 ),
                 "changedFields": decision.changed_fields,
                 "rationale": rationale["text"],
-                "display": _creator_display(context, payload, decision, rationale["text"]),
+                "display": _creator_display(
+                    context,
+                    payload,
+                    decision,
+                    rationale,
+                ),
                 "rationaleProvider": rationale["provider"],
                 "rationaleModel": rationale["model"],
                 "rationaleFallbackReason": rationale["fallbackReason"],
@@ -214,10 +219,12 @@ def _creator_display(
     context: CreatorNegotiationContext,
     payload: NegotiationPayload,
     decision: CreatorNegotiationDecision,
-    rationale: str,
+    rationale: DisplayRationale,
 ) -> dict[str, object]:
     terms = decision.terms or payload.terms
     amount = terms.compensation.base_amount_usdc
+    rationale_text = rationale["text"]
+    use_generated_message = rationale["provider"] != "deterministic"
     deliverables = [
         {
             "format": item.format,
@@ -228,24 +235,39 @@ def _creator_display(
     ]
     if decision.type == NegotiationMessageType.COUNTER:
         headline = f"{amount} USDC"
-        message = (
+        message = rationale_text if use_generated_message else (
             f"{payload.terms.compensation.base_amount_usdc} USDC 제안은 조건에 맞지 않아 "
             f"{amount} USDC와 동일 산출물 기준으로 역제안합니다."
         )
     elif decision.type == NegotiationMessageType.ACCEPT:
         headline = f"{amount} USDC 수락"
-        message = f"{amount} USDC와 공개 조건이 Creator Agent 정책을 통과해 수락합니다."
+        message = (
+            rationale_text
+            if use_generated_message
+            else f"{amount} USDC와 공개 조건이 Creator Agent 정책을 통과해 수락합니다."
+        )
     elif decision.type == NegotiationMessageType.REJECT:
         headline = "거절"
-        message = "공개 조건이 Creator Agent 정책을 통과하지 못해 거절합니다."
+        message = (
+            rationale_text
+            if use_generated_message
+            else "공개 조건이 Creator Agent 정책을 통과하지 못해 거절합니다."
+        )
     else:
         headline = "사람 검토 필요"
-        message = "공개 조건만으로는 Creator Agent가 자동 승인할 수 없어 검토가 필요합니다."
+        message = (
+            rationale_text
+            if use_generated_message
+            else "공개 조건만으로는 Creator Agent가 자동 승인할 수 없어 검토가 필요합니다."
+        )
     return {
         "agentLabel": f"{context.creator_agent_id}",
         "headline": headline,
         "message": message,
-        "rationale": rationale,
+        "rationale": rationale_text,
+        "messageProvider": rationale["provider"],
+        "messageModel": rationale["model"],
+        "messageFallbackReason": rationale["fallbackReason"],
         "termsSummary": {
             "amountUsdc": amount,
             "deliverables": deliverables,
@@ -253,7 +275,7 @@ def _creator_display(
         },
         "policySummary": {
             "allowed": decision.policy_decision.allowed,
-            "publicReason": rationale,
+            "publicReason": rationale_text,
         },
     }
 

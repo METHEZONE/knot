@@ -15,6 +15,8 @@ user-facing negotiation copy while preserving deterministic policy authority.
 - Add prompt style examples for practical OFFER/COUNTER/ACCEPT chat output.
 - Render only the visible chat message in Negotiation Detail instead of appending
   internal rationale to the bubble text.
+- Use Gemini-generated Creator rationale as the visible Creator Agent chat bubble
+  when available, with deterministic fallback unchanged.
 - Preserve deterministic fallback when Gemini is off or unavailable.
 - Add targeted tests for Brand Agent display generation.
 

@@ -232,6 +232,8 @@ def test_creator_agent_can_use_non_authoritative_rationale_provider() -> None:
     data = task["status"]["message"]["parts"][0]["data"]
     assert data["type"] == "ACCEPT"
     assert data["rationale"] == GeneratedRationale.text
+    assert data["display"]["message"] == GeneratedRationale.text
+    assert data["display"]["messageProvider"] == "vertex-gemini"
     assert data["rationaleProvider"] == "vertex-gemini"
     assert data["rationaleModel"] == "gemini-2.5-flash"
     assert data["rationaleFallbackReason"] is None

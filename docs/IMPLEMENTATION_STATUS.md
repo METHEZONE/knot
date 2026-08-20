@@ -43,6 +43,9 @@ Updated: 2026-08-20 KST
   invalid shape.
 - Creator Agent rationale generation already used the existing rationale provider;
   this phase completes the Brand-side visible chat copy path.
+- Creator Agent display bubbles now use generated rationale text as the visible
+  `display.message` when the provider is Gemini, so both sides of the negotiation
+  read like a real chat while deterministic fallback remains available.
 
 ### Verification
 
@@ -53,6 +56,7 @@ Updated: 2026-08-20 KST
 - `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display backend/tests/test_api_promotions.py::test_start_negotiation_uses_saved_initial_offer_for_counter_flow -q`: 2 passed.
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend test`: 21 passed.
+- `./.venv/bin/pytest backend/tests/test_a2a_negotiation.py backend/tests/test_api_a2a_http_integration.py backend/tests/test_api_promotions.py -q`: 49 passed.
 - `git diff --check`: passed.
 
 ### Boundary
