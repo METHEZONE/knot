@@ -864,6 +864,51 @@ def build_api_router(
         users.sort(key=lambda item: str(item.get("createdAt", "")), reverse=True)
         return _ok({"users": [_admin_user_projection(user) for user in users[:50]]})
 
+    @router.get("/dev-admin/demo-personas")
+    def dev_admin_demo_personas(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        _require_dev_admin(repository, settings, token_verifier, authorization)
+        users = repository.list_raw_documents(COLLECTIONS.users)
+        users_by_brand = {
+            str(user["brandId"]): user
+            for user in users
+            if isinstance(user.get("brandId"), str) and _is_demo_document(user)
+        }
+        users_by_creator = {
+            str(user["creatorId"]): user
+            for user in users
+            if isinstance(user.get("creatorId"), str) and _is_demo_document(user)
+        }
+        brands = [
+            _admin_demo_brand_projection(brand, users_by_brand.get(str(brand.get("brandId"))))
+            for brand in repository.list_raw_documents(COLLECTIONS.brands)
+            if brand.get("profileType") == "DEMO_SEED"
+            or _required_mapping_or_empty(brand.get("dataUsage")).get("type") == "DEMO_SEED"
+        ]
+        creators = [
+            _admin_demo_creator_projection(
+                creator,
+                users_by_creator.get(str(creator.get("creatorId"))),
+            )
+            for creator in repository.list_raw_documents(COLLECTIONS.creator_profiles)
+            if creator.get("profileType") == "DEMO_SEED"
+            or _required_mapping_or_empty(creator.get("dataUsage")).get("type") == "DEMO_SEED"
+        ]
+        brands.sort(key=lambda item: str(item.get("displayName") or ""))
+        creators.sort(key=lambda item: str(item.get("displayName") or ""))
+        return _ok(
+            {
+                "personas": {
+                "brandCount": len(brands),
+                "creatorCount": len(creators),
+                "loginPasswordHint": "000000",
+                "brands": brands,
+                "creators": creators,
+                }
+            }
+        )
+
     @router.get("/dev-admin/users/{uid}")
     def dev_admin_user_detail(
         uid: str,
@@ -4974,6 +5019,87 @@ def _admin_user_projection(user: dict[str, object]) -> dict[str, object]:
         "createdAt": user.get("createdAt"),
         "updatedAt": user.get("updatedAt"),
     }
+
+
+def _admin_demo_brand_projection(
+    brand: dict[str, object],
+    user: dict[str, object] | None,
+) -> dict[str, object]:
+    brand_id = str(brand.get("brandId") or "")
+    social_profiles = _required_mapping_or_empty(brand.get("socialProfiles"))
+    demo_auth = _required_mapping_or_empty(brand.get("demoAuth"))
+    return {
+        "kind": "BRAND",
+        "profileId": brand_id,
+        "displayName": brand.get("displayName"),
+        "categories": _string_list(brand.get("categories")),
+        "description": brand.get("description"),
+        "websiteUrl": brand.get("websiteUrl"),
+        "platforms": sorted(social_profiles),
+        "socialProfiles": social_profiles,
+        "demoPermission": bool(
+            _required_mapping_or_empty(brand.get("dataUsage")).get("demoPermission")
+        ),
+        "login": _admin_demo_login_projection(
+            user=user,
+            fallback_uid=str(demo_auth.get("uid") or f"user-{brand_id}"),
+            fallback_email=str(demo_auth.get("email") or f"{brand_id}@knot.demo"),
+        ),
+    }
+
+
+def _admin_demo_creator_projection(
+    creator: dict[str, object],
+    user: dict[str, object] | None,
+) -> dict[str, object]:
+    creator_id = str(creator.get("creatorId") or "")
+    platforms = _required_mapping_or_empty(creator.get("platforms"))
+    public_profile = _required_mapping_or_empty(creator.get("publicProfile"))
+    observed = _required_mapping_or_empty(public_profile.get("observed"))
+    metrics = _required_mapping_or_empty(observed.get("metrics"))
+    demo_auth = _required_mapping_or_empty(creator.get("demoAuth"))
+    return {
+        "kind": "CREATOR",
+        "profileId": creator_id,
+        "displayName": creator.get("displayName"),
+        "profileImageUrl": creator.get("profileImageUrl"),
+        "categories": _string_list(creator.get("categories")),
+        "primaryPlatform": creator.get("primaryPlatform"),
+        "platforms": sorted(platforms),
+        "subscriberOrFollowerCount": metrics.get("subscriberOrFollowerCount"),
+        "averageRecentViews": metrics.get("averageRecentViews"),
+        "medianRecentViews": metrics.get("medianRecentViews"),
+        "contentKeywords": _string_list(
+            _required_mapping_or_empty(creator.get("contentProfile")).get("contentKeywords")
+        ),
+        "formats": _string_list(creator.get("supportedDeliverableFormats")),
+        "login": _admin_demo_login_projection(
+            user=user,
+            fallback_uid=str(demo_auth.get("uid") or f"user-{creator_id}"),
+            fallback_email=str(demo_auth.get("email") or f"{creator_id}@knot.demo"),
+        ),
+    }
+
+
+def _admin_demo_login_projection(
+    *,
+    user: dict[str, object] | None,
+    fallback_uid: str,
+    fallback_email: str,
+) -> dict[str, object]:
+    email = user.get("email") if user is not None else fallback_email
+    uid = user.get("uid") or user.get("userId") if user is not None else fallback_uid
+    return {
+        "uid": uid,
+        "email": email,
+        "passwordHint": "000000",
+        "canLogin": isinstance(email, str) and bool(email) and user is not None,
+        "status": user.get("status") if user is not None else "AUTH_USER_NOT_SEEDED",
+    }
+
+
+def _required_mapping_or_empty(value: object) -> dict[str, object]:
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _admin_inventory(

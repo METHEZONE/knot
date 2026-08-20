@@ -266,6 +266,23 @@ Write to the configured Firestore project:
 ./.venv/bin/python backend/scripts/seed_demo_personas.py --write
 ```
 
+Write Firestore documents and create/update Firebase Auth accounts for every
+demo persona:
+
+```bash
+./.venv/bin/python backend/scripts/seed_demo_personas.py --write --auth-users
+```
+
+Generated demo accounts use deterministic emails:
+
+```text
+brand-demo-{slug}@knot.demo
+creator-demo-{slug}@knot.demo
+```
+
+The default demo password is `000000`; override it with `--auth-password` when
+needed.
+
 Reset and re-seed generated demo documents:
 
 ```bash

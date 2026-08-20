@@ -4,6 +4,7 @@ import json
 from fastapi.testclient import TestClient
 
 from apps.api.main import create_app
+from libs.demo_seed.personas import build_demo_persona_documents
 from libs.repositories.firestore_paths import COLLECTIONS, FirestorePaths
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository
 from libs.settings.config import Settings
@@ -108,6 +109,23 @@ def test_dev_admin_overview_user_list_and_disable_enable_write_audit() -> None:
     }
     assert "DEV_ADMIN_USER_DISABLED" in actions
     assert "DEV_ADMIN_USER_ENABLED" in actions
+
+
+def test_dev_admin_demo_personas_lists_seed_profiles_with_login_state() -> None:
+    client, repository = client_and_repository()
+    document_set = build_demo_persona_documents()
+    for path, document in document_set.documents:
+        repository.save_raw_document(path, document)
+
+    response = client.get("/api/v1/dev-admin/demo-personas", headers=headers())
+
+    assert response.status_code == 200
+    personas = response.json()["data"]["personas"]
+    assert personas["brandCount"] == 10
+    assert personas["creatorCount"] == 10
+    assert personas["loginPasswordHint"] == "000000"
+    assert all(item["login"]["canLogin"] for item in personas["brands"])
+    assert all(item["login"]["canLogin"] for item in personas["creators"])
 
 
 def test_dev_admin_delete_dry_run_and_blocks_real_user_confirm() -> None:

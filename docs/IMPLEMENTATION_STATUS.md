@@ -1727,5 +1727,33 @@ Updated: 2026-08-20 KST
 - No Firestore reset was performed.
 - No wallet funding or Solana escrow transaction was performed during this
   verification pass.
-- The YouTube channel URL fix still needs a new Cloud Run deploy after this
-  local patch.
+- Cloud Run redeploy of commit `3f6e265` completed:
+  - `knot-api-00032-xvd`
+  - `knot-creator-agent-00022-hc7`
+  - `knot-web3-00019-2xz`
+  - `knot-web-00028-nsp`
+
+## 2026-08-21 Demo Persona Admin Login Surface
+
+### Changed
+
+- Demo persona seed now writes `users/{uid}` documents for all 10 brand personas
+  and all 10 creator personas.
+- Added deterministic demo Auth account metadata for persona-linked accounts,
+  using `brand-demo-...@knot.demo` and `creator-demo-...@knot.demo` emails.
+- Added `backend/scripts/seed_demo_personas.py --auth-users` to create or update
+  Firebase Auth accounts for every demo persona.
+- Added admin-only `/api/v1/dev-admin/demo-personas`, guarded by the existing
+  dev admin allowlist/admin claim check.
+- Extended `/dev/admin` to show all demo brand/creator profiles in one screen
+  and provide login buttons for seeded demo accounts.
+
+### Verification
+
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
+  10 brands, 10 creators, 5 promotions, 116 documents, no validation errors.
+- `./.venv/bin/pytest backend/tests/test_api_onboarding.py backend/tests/test_demo_persona_seed.py backend/tests/test_api_dev_admin.py -q`:
+  27 passed.
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/libs/demo_seed/personas.py backend/scripts/seed_demo_personas.py backend/tests/test_api_onboarding.py backend/tests/test_api_dev_admin.py`:
+  passed.
+- `npm --prefix frontend run typecheck`: passed.

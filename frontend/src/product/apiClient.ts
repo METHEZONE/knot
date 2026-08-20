@@ -524,6 +524,51 @@ export type ApiDevAdminOverview = {
   latestFailures: Array<Record<string, unknown>>;
 };
 
+export type ApiDemoPersonaLogin = {
+  uid: string;
+  email: string;
+  passwordHint: string;
+  canLogin: boolean;
+  status: string;
+};
+
+export type ApiDemoBrandPersona = {
+  kind: "BRAND";
+  profileId: string;
+  displayName: string;
+  categories: string[];
+  description?: string | null;
+  websiteUrl?: string | null;
+  platforms: string[];
+  socialProfiles: Record<string, unknown>;
+  demoPermission: boolean;
+  login: ApiDemoPersonaLogin;
+};
+
+export type ApiDemoCreatorPersona = {
+  kind: "CREATOR";
+  profileId: string;
+  displayName: string;
+  profileImageUrl?: string | null;
+  categories: string[];
+  primaryPlatform?: string | null;
+  platforms: string[];
+  subscriberOrFollowerCount?: number | null;
+  averageRecentViews?: number | null;
+  medianRecentViews?: number | null;
+  contentKeywords: string[];
+  formats: string[];
+  login: ApiDemoPersonaLogin;
+};
+
+export type ApiDevDemoPersonas = {
+  brandCount: number;
+  creatorCount: number;
+  loginPasswordHint: string;
+  brands: ApiDemoBrandPersona[];
+  creators: ApiDemoCreatorPersona[];
+};
+
 export type ApiSettlementBundle = ApiNegotiationBundle & {
   agreement: ApiAgreement;
   evidence: ApiEvidence;
@@ -1096,6 +1141,13 @@ export class ProductApiClient {
       "/api/v1/dev-admin/overview",
     );
     return response.overview;
+  }
+
+  async getDevAdminDemoPersonas() {
+    const response = await this.request<{ personas: ApiDevDemoPersonas }>(
+      "/api/v1/dev-admin/demo-personas",
+    );
+    return response.personas;
   }
 
   private async raw<T>(path: string, init?: RequestInit): Promise<T> {

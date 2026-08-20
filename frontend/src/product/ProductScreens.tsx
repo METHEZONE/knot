@@ -21,6 +21,9 @@ import {
   ProductApiError,
   type ApiAgreement,
   type ApiCandidate,
+  type ApiDemoBrandPersona,
+  type ApiDemoCreatorPersona,
+  type ApiDevDemoPersonas,
   type ApiNegotiation,
   type ApiNegotiationMessage,
   type ApiDevAdminOverview,
@@ -2206,15 +2209,24 @@ export function DevAdminScreen({ overview }: { overview: DevOverview }) {
 
 export function DevAdminLiveScreen() {
   const [overview, setOverview] = useState<ApiDevAdminOverview | null>(null);
+  const [personas, setPersonas] = useState<ApiDevDemoPersonas | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [switchingEmail, setSwitchingEmail] = useState<string | null>(null);
+  const { refresh } = useAuth();
+  const router = useRouter();
 
   async function load() {
     setStatus("loading");
     setError(null);
     try {
       const client = new ProductApiClient();
-      setOverview(await client.getDevAdminOverview());
+      const [nextOverview, nextPersonas] = await Promise.all([
+        client.getDevAdminOverview(),
+        client.getDevAdminDemoPersonas(),
+      ]);
+      setOverview(nextOverview);
+      setPersonas(nextPersonas);
       setStatus("ready");
     } catch (caught) {
       setError(errorMessage(caught));
@@ -2227,9 +2239,13 @@ export function DevAdminLiveScreen() {
     async function loadInitial() {
       try {
         const client = new ProductApiClient();
-        const nextOverview = await client.getDevAdminOverview();
+        const [nextOverview, nextPersonas] = await Promise.all([
+          client.getDevAdminOverview(),
+          client.getDevAdminDemoPersonas(),
+        ]);
         if (!active) return;
         setOverview(nextOverview);
+        setPersonas(nextPersonas);
         setStatus("ready");
       } catch (caught) {
         if (!active) return;
@@ -2242,6 +2258,23 @@ export function DevAdminLiveScreen() {
       active = false;
     };
   }, []);
+
+  async function loginAsPersona(
+    persona: ApiDemoBrandPersona | ApiDemoCreatorPersona,
+  ) {
+    if (!persona.login.canLogin) return;
+    setSwitchingEmail(persona.login.email);
+    setError(null);
+    try {
+      await signInWithEmail(persona.login.email, persona.login.passwordHint);
+      await refresh();
+      router.push(persona.kind === "BRAND" ? "/brand" : "/creator");
+    } catch (caught) {
+      setError(firebaseAuthErrorMessage(caught));
+    } finally {
+      setSwitchingEmail(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-7 py-8">
@@ -2279,6 +2312,32 @@ export function DevAdminLiveScreen() {
               ))}
             </div>
           </Panel>
+          {personas && (
+            <Panel>
+              <SectionTitle
+                eyebrow="Demo personas"
+                title="프로필 목록"
+              />
+              <p className="mt-2 text-sm text-muted">
+                {personas.brandCount}개 브랜드, {personas.creatorCount}개 크리에이터를 한 번에
+                확인합니다.
+              </p>
+              <div className="mt-5 grid gap-5 xl:grid-cols-2">
+                <DemoPersonaColumn
+                  title="브랜드"
+                  items={personas.brands}
+                  switchingEmail={switchingEmail}
+                  onLogin={loginAsPersona}
+                />
+                <DemoPersonaColumn
+                  title="크리에이터"
+                  items={personas.creators}
+                  switchingEmail={switchingEmail}
+                  onLogin={loginAsPersona}
+                />
+              </div>
+            </Panel>
+          )}
           <Panel>
             <SectionTitle eyebrow="Tabs" title="Admin surface" />
             <div className="mt-4 grid gap-2 md:grid-cols-3">
@@ -2293,6 +2352,110 @@ export function DevAdminLiveScreen() {
       )}
     </div>
   );
+}
+
+function DemoPersonaColumn({
+  title,
+  items,
+  switchingEmail,
+  onLogin,
+}: {
+  title: string;
+  items: Array<ApiDemoBrandPersona | ApiDemoCreatorPersona>;
+  switchingEmail: string | null;
+  onLogin: (persona: ApiDemoBrandPersona | ApiDemoCreatorPersona) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-semibold">{title}</h3>
+        <span className="font-mono text-xs text-muted">{items.length}</span>
+      </div>
+      <div className="grid gap-3">
+        {items.map((item) => (
+          <DemoPersonaRow
+            key={`${item.kind}-${item.profileId}`}
+            item={item}
+            switchingEmail={switchingEmail}
+            onLogin={onLogin}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DemoPersonaRow({
+  item,
+  switchingEmail,
+  onLogin,
+}: {
+  item: ApiDemoBrandPersona | ApiDemoCreatorPersona;
+  switchingEmail: string | null;
+  onLogin: (persona: ApiDemoBrandPersona | ApiDemoCreatorPersona) => void;
+}) {
+  const metrics =
+    item.kind === "CREATOR"
+      ? [
+          compactMetric("구독/팔로워", item.subscriberOrFollowerCount),
+          compactMetric("평균 조회", item.averageRecentViews),
+          compactMetric("중앙값", item.medianRecentViews),
+        ].filter((metric): metric is string => Boolean(metric))
+      : item.demoPermission
+        ? ["허락 브랜드"]
+        : ["공개 데이터"];
+  const disabled = !item.login.canLogin || switchingEmail === item.login.email;
+  return (
+    <div className="rounded border border-border-subtle bg-background p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <strong className="text-lg">{item.displayName}</strong>
+            <span className="rounded-full border border-border-subtle px-2 py-0.5 text-xs text-muted">
+              {item.kind === "BRAND" ? "Brand" : item.primaryPlatform ?? "Creator"}
+            </span>
+          </div>
+          <p className="mt-1 break-all font-mono text-xs text-muted">{item.profileId}</p>
+        </div>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onLogin(item)}
+          className="rounded-full border border-border-subtle px-3 py-1.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {switchingEmail === item.login.email ? "로그인 중" : "로그인"}
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+        {item.categories.map((category) => (
+          <span key={category} className="rounded-full bg-surface px-2 py-1">
+            {category}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+        {item.platforms.map((platform) => (
+          <span key={platform} className="rounded-full border border-border-subtle px-2 py-1">
+            {platform}
+          </span>
+        ))}
+        {metrics.map((metric) => (
+          <span key={metric} className="rounded-full border border-border-subtle px-2 py-1">
+            {metric}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 break-all font-mono text-xs text-muted">{item.login.email}</p>
+      {!item.login.canLogin && (
+        <p className="mt-2 text-xs text-red-600">Auth 계정 seed가 아직 필요합니다.</p>
+      )}
+    </div>
+  );
+}
+
+function compactMetric(label: string, value: number | null | undefined) {
+  if (typeof value !== "number") return null;
+  return `${label} ${Intl.NumberFormat("ko-KR", { notation: "compact" }).format(value)}`;
 }
 
 function AuthFrame({ eyebrow, title, body, children }: { eyebrow: string; title: string; body: string; children: ReactNode }) {

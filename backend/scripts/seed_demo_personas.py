@@ -11,7 +11,9 @@ sys.path.insert(0, str(backend_root))
 from apps.api.repository_factory import _firestore_client  # noqa: E402
 from libs.demo_seed.personas import (  # noqa: E402
     CREATOR_SEEDS,
+    DEMO_AUTH_PASSWORD,
     build_demo_persona_documents,
+    demo_auth_users,
     document_paths_for_reset,
     validate_demo_persona_documents,
 )
@@ -46,12 +48,24 @@ def main() -> int:
         action="store_true",
         help="Print a JSON summary instead of a human-readable report.",
     )
+    parser.add_argument(
+        "--auth-users",
+        action="store_true",
+        help="Create or update Firebase Auth users for every demo persona.",
+    )
+    parser.add_argument(
+        "--auth-password",
+        default=DEMO_AUTH_PASSWORD,
+        help="Password for generated demo Auth users.",
+    )
     args = parser.parse_args()
 
     if args.only_brands and args.only_creators:
         parser.error("--only-brands and --only-creators are mutually exclusive")
     if args.reset and not args.write:
         parser.error("--reset requires --write")
+    if args.auth_users and not args.write:
+        parser.error("--auth-users requires --write")
     if not args.write:
         args.dry_run = True
 
@@ -85,6 +99,12 @@ def main() -> int:
                 firestore_client.document(path).delete()
         for path, document in documents:
             repository.save_raw_document(path, document)
+        if args.auth_users:
+            auth_written = create_or_update_auth_users(
+                project_id=get_settings().firestore_project_id,
+                password=args.auth_password,
+            )
+            summary["authUsersWritten"] = auth_written
         summary["written"] = len(documents)
     else:
         repository = KnotRepository(InMemoryDocumentStore())
@@ -109,7 +129,12 @@ def filter_documents(
             "agents/agent-demo-brand-",
             "agentPolicies/agent-demo-brand-",
         )
-        return [(path, doc) for path, doc in documents if path.startswith(prefixes)]
+        return [
+            (path, doc)
+            for path, doc in documents
+            if path.startswith(prefixes)
+            or (path.startswith("users/") and doc.get("role") == "BRAND")
+        ]
     if only_creators:
         prefixes = (
             "creatorProfiles/",
@@ -120,7 +145,12 @@ def filter_documents(
             "agentRegistry/agent-demo-creator-",
             "analysisJobs/",
         )
-        return [(path, doc) for path, doc in documents if path.startswith(prefixes)]
+        return [
+            (path, doc)
+            for path, doc in documents
+            if path.startswith(prefixes)
+            or (path.startswith("users/") and doc.get("role") == "CREATOR")
+        ]
     return documents
 
 
@@ -158,6 +188,55 @@ def firestore_repository() -> tuple[KnotRepository, Any]:
     return KnotRepository(FirestoreDocumentStore(client)), client
 
 
+def create_or_update_auth_users(*, project_id: str | None, password: str) -> int:
+    if len(password) < 6:
+        raise SystemExit("Firebase Auth demo password must be at least 6 characters.")
+    try:
+        import firebase_admin
+        from firebase_admin import auth, credentials
+    except ImportError as exc:
+        raise SystemExit("firebase-admin is required to seed demo Auth users.") from exc
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.ApplicationDefault(), {"projectId": project_id})
+
+    written = 0
+    for user in demo_auth_users():
+        uid = str(user["uid"])
+        email = str(user["email"])
+        display_name = str(user["displayName"])
+        try:
+            auth.update_user(
+                uid,
+                email=email,
+                password=password,
+                display_name=display_name,
+                email_verified=True,
+                disabled=False,
+            )
+        except auth.UserNotFoundError:
+            try:
+                auth.create_user(
+                    uid=uid,
+                    email=email,
+                    password=password,
+                    display_name=display_name,
+                    email_verified=True,
+                    disabled=False,
+                )
+            except auth.EmailAlreadyExistsError:
+                existing = auth.get_user_by_email(email)
+                auth.update_user(
+                    existing.uid,
+                    password=password,
+                    display_name=display_name,
+                    email_verified=True,
+                    disabled=False,
+                )
+        written += 1
+    return written
+
+
 def print_report(summary: dict[str, object], *, json_output: bool) -> None:
     if json_output:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -170,6 +249,8 @@ def print_report(summary: dict[str, object], *, json_output: bool) -> None:
     print(f"- creators: {summary['creatorCount']}")
     print(f"- promotions: {summary['promotionCount']}")
     print(f"- documents: {summary['documentCount']}")
+    if "authUsersWritten" in summary:
+        print(f"- auth users: {summary['authUsersWritten']}")
     errors = summary.get("validationErrors")
     if errors:
         print("- validation errors:")

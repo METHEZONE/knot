@@ -14,6 +14,7 @@ DEMO_NAMESPACE = "knot-demo-persona-v1"
 DEMO_SOURCE = "PUBLIC_DATA"
 SYNTHETIC_PROVENANCE = "SYNTHETIC_DEMO"
 AI_PROVENANCE = "AI_DERIVED"
+DEMO_AUTH_PASSWORD = "000000"
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,12 @@ def build_demo_persona_documents(
         brand_id = str(brand["brandId"])
         brand_agent_id = str(brand["brandAgentId"])
         brand_ids.append(brand_id)
+        docs.append(
+            (
+                FirestorePaths.user(_brand_demo_uid(brand)),
+                _brand_demo_user_document(brand, collected_at),
+            )
+        )
         docs.append((FirestorePaths.brand(brand_id), _brand_document(brand, collected_at)))
         docs.append(
             (FirestorePaths.agent(brand_agent_id), _brand_agent_document(brand, collected_at))
@@ -60,6 +67,12 @@ def build_demo_persona_documents(
         creator_id = str(creator["creatorId"])
         creator_agent_id = str(creator["creatorAgentId"])
         creator_ids.append(creator_id)
+        docs.append(
+            (
+                FirestorePaths.user(_creator_demo_uid(creator)),
+                _creator_demo_user_document(creator, collected_at),
+            )
+        )
         snapshot = dict(snapshots.get(creator_id) or _fallback_snapshot(creator, collected_at))
         snapshot_id = str(snapshot["snapshotId"])
         docs.append((FirestorePaths.social_snapshot(snapshot_id), snapshot))
@@ -161,6 +174,11 @@ def _brand_document(seed: Mapping[str, object], collected_at: str) -> dict[str, 
         "dataUsage": _data_usage(demo_permission=bool(seed.get("demoPermission"))),
         "demoNamespace": DEMO_NAMESPACE,
         "profileType": "DEMO_SEED",
+        "demoAuth": {
+            "uid": _brand_demo_uid(seed),
+            "email": _brand_demo_email(seed),
+            "passwordHint": DEMO_AUTH_PASSWORD,
+        },
         "active": True,
         "createdAt": collected_at,
         "updatedAt": collected_at,
@@ -259,6 +277,28 @@ def _promotion_document(
     }
 
 
+def _brand_demo_user_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
+    uid = _brand_demo_uid(seed)
+    return {
+        "uid": uid,
+        "userId": uid,
+        "email": _brand_demo_email(seed),
+        "displayName": seed["displayName"],
+        "role": "BRAND",
+        "onboardingStatus": "COMPLETED",
+        "status": "ACTIVE",
+        "brandId": seed["brandId"],
+        "agentId": seed["brandAgentId"],
+        "brandAgentId": seed["brandAgentId"],
+        "environment": "demo",
+        "profileType": "DEMO_SEED",
+        "demoNamespace": DEMO_NAMESPACE,
+        "dataUsage": _data_usage(demo_permission=bool(seed.get("demoPermission"))),
+        "createdAt": collected_at,
+        "updatedAt": collected_at,
+    }
+
+
 def _creator_profile_document(
     seed: Mapping[str, object],
     snapshot: Mapping[str, object],
@@ -291,6 +331,11 @@ def _creator_profile_document(
             "profileImageUrl": _snapshot_thumbnail(snapshot),
             "profileType": "DEMO_SEED",
             "primaryPlatform": seed["primaryPlatform"],
+            "demoAuth": {
+                "uid": _creator_demo_uid(seed),
+                "email": _creator_demo_email(seed),
+                "passwordHint": DEMO_AUTH_PASSWORD,
+            },
             "platforms": snapshot.get("normalizedPlatforms", {}),
             "publicProfile": {
                 "source": snapshot.get("source"),
@@ -326,6 +371,28 @@ def _creator_profile_document(
         }
     )
     return document
+
+
+def _creator_demo_user_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
+    uid = _creator_demo_uid(seed)
+    return {
+        "uid": uid,
+        "userId": uid,
+        "email": _creator_demo_email(seed),
+        "displayName": seed["displayName"],
+        "role": "CREATOR",
+        "onboardingStatus": "COMPLETED",
+        "status": "ACTIVE",
+        "creatorId": seed["creatorId"],
+        "agentId": seed["creatorAgentId"],
+        "creatorAgentId": seed["creatorAgentId"],
+        "environment": "demo",
+        "profileType": "DEMO_SEED",
+        "demoNamespace": DEMO_NAMESPACE,
+        "dataUsage": _data_usage(demo_permission=False),
+        "createdAt": collected_at,
+        "updatedAt": collected_at,
+    }
 
 
 def _creator_agent_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
@@ -420,6 +487,47 @@ def _creator_discovery_document(
         }
     )
     return projection
+
+
+def demo_auth_users() -> list[dict[str, object]]:
+    users: list[dict[str, object]] = []
+    for brand in BRAND_SEEDS:
+        users.append(
+            {
+                "uid": _brand_demo_uid(brand),
+                "email": _brand_demo_email(brand),
+                "displayName": str(brand["displayName"]),
+                "role": "BRAND",
+                "profileId": str(brand["brandId"]),
+            }
+        )
+    for creator in CREATOR_SEEDS:
+        users.append(
+            {
+                "uid": _creator_demo_uid(creator),
+                "email": _creator_demo_email(creator),
+                "displayName": str(creator["displayName"]),
+                "role": "CREATOR",
+                "profileId": str(creator["creatorId"]),
+            }
+        )
+    return users
+
+
+def _brand_demo_uid(seed: Mapping[str, object]) -> str:
+    return f"user-{seed['brandId']}"
+
+
+def _brand_demo_email(seed: Mapping[str, object]) -> str:
+    return f"{seed['brandId']}@knot.demo"
+
+
+def _creator_demo_uid(seed: Mapping[str, object]) -> str:
+    return f"user-{seed['creatorId']}"
+
+
+def _creator_demo_email(seed: Mapping[str, object]) -> str:
+    return f"{seed['creatorId']}@knot.demo"
 
 
 def _fallback_snapshot(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
