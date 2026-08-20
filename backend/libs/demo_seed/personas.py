@@ -15,6 +15,20 @@ DEMO_SOURCE = "PUBLIC_DATA"
 SYNTHETIC_PROVENANCE = "SYNTHETIC_DEMO"
 AI_PROVENANCE = "AI_DERIVED"
 DEMO_AUTH_PASSWORD = "000000"
+DEMO_AUTH_ALIASES = (
+    {
+        "uid": "user-brand-1",
+        "email": "t1@knot.com",
+        "targetType": "BRAND",
+        "targetId": "brand-demo-cheriexx",
+    },
+    {
+        "uid": "user-creator-1",
+        "email": "c1@knot.com",
+        "targetType": "CREATOR",
+        "targetId": "creator-demo-ssin",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -97,6 +111,8 @@ def build_demo_persona_documents(
                 creator_agent_registry_entry(agent, updated_at=collected_at),
             )
         )
+
+    docs.extend(_demo_auth_alias_documents(collected_at))
 
     docs.append((FirestorePaths.analysis_job("demo-persona-unresolved-candidates"), {
         "analysisId": "demo-persona-unresolved-candidates",
@@ -277,12 +293,18 @@ def _promotion_document(
     }
 
 
-def _brand_demo_user_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
-    uid = _brand_demo_uid(seed)
+def _brand_demo_user_document(
+    seed: Mapping[str, object],
+    collected_at: str,
+    *,
+    uid: str | None = None,
+    email: str | None = None,
+) -> dict[str, object]:
+    uid = uid or _brand_demo_uid(seed)
     return {
         "uid": uid,
         "userId": uid,
-        "email": _brand_demo_email(seed),
+        "email": email or _brand_demo_email(seed),
         "displayName": seed["displayName"],
         "role": "BRAND",
         "onboardingStatus": "COMPLETED",
@@ -373,12 +395,18 @@ def _creator_profile_document(
     return document
 
 
-def _creator_demo_user_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
-    uid = _creator_demo_uid(seed)
+def _creator_demo_user_document(
+    seed: Mapping[str, object],
+    collected_at: str,
+    *,
+    uid: str | None = None,
+    email: str | None = None,
+) -> dict[str, object]:
+    uid = uid or _creator_demo_uid(seed)
     return {
         "uid": uid,
         "userId": uid,
-        "email": _creator_demo_email(seed),
+        "email": email or _creator_demo_email(seed),
         "displayName": seed["displayName"],
         "role": "CREATOR",
         "onboardingStatus": "COMPLETED",
@@ -511,7 +539,54 @@ def demo_auth_users() -> list[dict[str, object]]:
                 "profileId": str(creator["creatorId"]),
             }
         )
+    by_brand = {str(brand["brandId"]): brand for brand in BRAND_SEEDS}
+    by_creator = {str(creator["creatorId"]): creator for creator in CREATOR_SEEDS}
+    for alias in DEMO_AUTH_ALIASES:
+        target_type = str(alias["targetType"])
+        target_id = str(alias["targetId"])
+        if target_type == "BRAND":
+            display_name = str(by_brand[target_id]["displayName"])
+        else:
+            display_name = str(by_creator[target_id]["displayName"])
+        users.append(
+            {
+                "uid": str(alias["uid"]),
+                "email": str(alias["email"]),
+                "displayName": display_name,
+                "role": target_type,
+                "profileId": target_id,
+            }
+        )
     return users
+
+
+def _demo_auth_alias_documents(collected_at: str) -> list[tuple[str, dict[str, object]]]:
+    by_brand = {str(brand["brandId"]): brand for brand in BRAND_SEEDS}
+    by_creator = {str(creator["creatorId"]): creator for creator in CREATOR_SEEDS}
+    documents: list[tuple[str, dict[str, object]]] = []
+    for alias in DEMO_AUTH_ALIASES:
+        uid = str(alias["uid"])
+        email = str(alias["email"])
+        target_type = str(alias["targetType"])
+        target_id = str(alias["targetId"])
+        if target_type == "BRAND":
+            document = _brand_demo_user_document(
+                by_brand[target_id],
+                collected_at,
+                uid=uid,
+                email=email,
+            )
+        else:
+            document = _creator_demo_user_document(
+                by_creator[target_id],
+                collected_at,
+                uid=uid,
+                email=email,
+            )
+        document["demoAlias"] = True
+        document["aliasTargetId"] = target_id
+        documents.append((FirestorePaths.user(uid), document))
+    return documents
 
 
 def _brand_demo_uid(seed: Mapping[str, object]) -> str:

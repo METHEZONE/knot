@@ -23,6 +23,7 @@ from libs.demo_seed.social_providers import (  # noqa: E402
     YouTubeProfileProvider,
 )
 from libs.repositories.firestore_adapter import FirestoreDocumentStore  # noqa: E402
+from libs.repositories.firestore_paths import FirestorePaths  # noqa: E402
 from libs.repositories.store import InMemoryDocumentStore, KnotRepository  # noqa: E402
 from libs.settings.config import get_settings  # noqa: E402
 
@@ -100,11 +101,13 @@ def main() -> int:
         for path, document in documents:
             repository.save_raw_document(path, document)
         if args.auth_users:
-            auth_written = create_or_update_auth_users(
+            auth_results = create_or_update_auth_users(
                 project_id=get_settings().firestore_project_id,
                 password=args.auth_password,
             )
-            summary["authUsersWritten"] = auth_written
+            auth_alias_writes = write_resolved_auth_user_documents(repository, auth_results)
+            summary["authUsersWritten"] = len(auth_results)
+            summary["authResolvedUserDocumentsWritten"] = auth_alias_writes
         summary["written"] = len(documents)
     else:
         repository = KnotRepository(InMemoryDocumentStore())
@@ -188,7 +191,11 @@ def firestore_repository() -> tuple[KnotRepository, Any]:
     return KnotRepository(FirestoreDocumentStore(client)), client
 
 
-def create_or_update_auth_users(*, project_id: str | None, password: str) -> int:
+def create_or_update_auth_users(
+    *,
+    project_id: str | None,
+    password: str,
+) -> list[dict[str, object]]:
     if len(password) < 6:
         raise SystemExit("Firebase Auth demo password must be at least 6 characters.")
     try:
@@ -200,13 +207,14 @@ def create_or_update_auth_users(*, project_id: str | None, password: str) -> int
     if not firebase_admin._apps:
         firebase_admin.initialize_app(credentials.ApplicationDefault(), {"projectId": project_id})
 
-    written = 0
+    results: list[dict[str, object]] = []
     for user in demo_auth_users():
         uid = str(user["uid"])
         email = str(user["email"])
         display_name = str(user["displayName"])
+        resolved_uid = uid
         try:
-            auth.update_user(
+            record = auth.update_user(
                 uid,
                 email=email,
                 password=password,
@@ -214,9 +222,10 @@ def create_or_update_auth_users(*, project_id: str | None, password: str) -> int
                 email_verified=True,
                 disabled=False,
             )
+            resolved_uid = str(record.uid)
         except auth.UserNotFoundError:
             try:
-                auth.create_user(
+                record = auth.create_user(
                     uid=uid,
                     email=email,
                     password=password,
@@ -224,15 +233,44 @@ def create_or_update_auth_users(*, project_id: str | None, password: str) -> int
                     email_verified=True,
                     disabled=False,
                 )
+                resolved_uid = str(record.uid)
             except auth.EmailAlreadyExistsError:
                 existing = auth.get_user_by_email(email)
-                auth.update_user(
+                record = auth.update_user(
                     existing.uid,
                     password=password,
                     display_name=display_name,
                     email_verified=True,
                     disabled=False,
                 )
+                resolved_uid = str(record.uid)
+        results.append({**user, "resolvedUid": resolved_uid})
+    return results
+
+
+def write_resolved_auth_user_documents(
+    repository: KnotRepository,
+    auth_results: list[dict[str, object]],
+) -> int:
+    written = 0
+    for result in auth_results:
+        planned_uid = str(result["uid"])
+        resolved_uid = str(result.get("resolvedUid") or planned_uid)
+        if resolved_uid == planned_uid:
+            continue
+        source = repository.get_raw_document(FirestorePaths.user(planned_uid))
+        if source is None:
+            continue
+        repository.save_raw_document(
+            FirestorePaths.user(resolved_uid),
+            {
+                **source,
+                "uid": resolved_uid,
+                "userId": resolved_uid,
+                "linkedSourceUserId": planned_uid,
+                "updatedAt": source.get("updatedAt") or source.get("createdAt"),
+            },
+        )
         written += 1
     return written
 
@@ -251,6 +289,8 @@ def print_report(summary: dict[str, object], *, json_output: bool) -> None:
     print(f"- documents: {summary['documentCount']}")
     if "authUsersWritten" in summary:
         print(f"- auth users: {summary['authUsersWritten']}")
+    if "authResolvedUserDocumentsWritten" in summary:
+        print(f"- resolved auth user documents: {summary['authResolvedUserDocumentsWritten']}")
     errors = summary.get("validationErrors")
     if errors:
         print("- validation errors:")
