@@ -223,6 +223,16 @@ def create_or_update_auth_users(
                 disabled=False,
             )
             resolved_uid = str(record.uid)
+        except auth.EmailAlreadyExistsError:
+            existing = auth.get_user_by_email(email)
+            record = auth.update_user(
+                existing.uid,
+                password=password,
+                display_name=display_name,
+                email_verified=True,
+                disabled=False,
+            )
+            resolved_uid = str(record.uid)
         except auth.UserNotFoundError:
             try:
                 record = auth.create_user(
