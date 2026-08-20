@@ -1568,9 +1568,12 @@ Updated: 2026-08-20 KST
 - Added early runtime route wrappers for
   `/api/v1/match-runs/{match_run_id}:start-negotiation` and
   `/api/v1/match-runs/{match_run_id}:cancel`.
-- This prevents the generic `/api/v1/match-runs/{match_run_id}` detail route
-  from capturing colon action paths first in the deployed FastAPI/Starlette
-  router.
+- Added Cloud Run-safe slash action aliases:
+  `/api/v1/match-runs/{match_run_id}/start-negotiation` and
+  `/api/v1/match-runs/{match_run_id}/cancel`.
+- Updated the frontend API client to use the slash action start-negotiation
+  route because the deployed environment still returned 405 for the colon
+  action path.
 
 ### Verification
 
@@ -1581,10 +1584,12 @@ Updated: 2026-08-20 KST
   completed with pay.sh sandbox/x402 receipt, `0.02 USDC`, `status=SETTLED`,
   and selected `agent-creator-devnet-phantom`.
 - The subsequent deployed start-negotiation request exposed a runtime 405 on
-  the colon action route; this phase fixes that route ordering risk.
-- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_persists_messages_events_and_agreement backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display -q`:
-  2 passed.
-- `./.venv/bin/python -m ruff check backend/apps/api/routes.py`: passed.
+  the colon action route; this phase moves the frontend onto the slash action
+  route and keeps the colon route as a compatibility alias.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_path_action_alias backend/tests/test_api_promotions.py::test_start_negotiation_persists_messages_events_and_agreement backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display -q`:
+  3 passed.
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/tests/test_api_promotions.py`: passed.
+- `npm --prefix frontend run typecheck`: passed.
 
 ### Scope Guard
 

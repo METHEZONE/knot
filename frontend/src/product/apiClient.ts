@@ -901,7 +901,7 @@ export class ProductApiClient {
 
   async startNegotiation(matchRunId: string) {
     return this.request<{ negotiation: ApiNegotiation; agreement: ApiAgreement | null }>(
-      `/api/v1/match-runs/${matchRunId}:start-negotiation`,
+      `/api/v1/match-runs/${matchRunId}/start-negotiation`,
       { method: "POST" },
     );
   }

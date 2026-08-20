@@ -101,6 +101,18 @@ def accepted_agreement(client: TestClient) -> dict[str, object]:
     ]["agreement"]
 
 
+def test_start_negotiation_path_action_alias() -> None:
+    client = client_with_seed()
+    match_run = client.post("/api/v1/promotions/promotion-001/matches:run").json()["data"][
+        "matchRun"
+    ]
+
+    response = client.post(f"/api/v1/match-runs/{match_run['matchRunId']}/start-negotiation")
+
+    assert response.status_code == 201
+    assert response.json()["data"]["negotiation"]["status"] == "AGREED"
+
+
 def fund_agreement_for_evidence(
     repository: KnotRepository,
     agreement: dict[str, object],
