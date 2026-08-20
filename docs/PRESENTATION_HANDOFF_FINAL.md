@@ -246,11 +246,16 @@ Current deployed state:
 
 > Agent가 직접 유료 검증 API를 구매하는 결제 레일
 
+한 줄 정의:
+
+> pay.sh는 크리에이터에게 돈을 주는 레일이 아니라, AI Agent가 업무 수행 중 필요한 외부 유료 도구를 즉시 구매하는 machine-to-machine 결제 레일입니다.
+
 왜 필요한가:
 
 - Agent가 자율적으로 일하려면 무료 데이터만으로는 부족합니다.
 - 후보 진위, 콘텐츠 품질, 브랜드 언급 여부 같은 검증은 외부 유료 API가 필요합니다.
 - 사람이 API 키를 발급하고 결제하는 구조는 Agentic Commerce와 맞지 않습니다.
+- Agent가 도구를 고르고 실행한다면, 그 도구 사용 비용도 Agent workflow 안에서 통제되고 기록되어야 합니다.
 
 KNOT에서의 역할:
 
@@ -258,6 +263,37 @@ KNOT에서의 역할:
 - 결제액, 목적, receipt, result digest를 MatchRun/Negotiation timeline에 기록.
 - UI에는 `검증 영수증`으로 표시.
 - 검증 결과는 후보 ranking signal이지만, 최종 선택은 deterministic policy가 다시 검증.
+
+사용 가능한 paid verification 예시:
+
+| 단계 | pay.sh로 살 수 있는 도구 | 제품 가치 |
+|---|---|---|
+| 후보 탐색 | creator quality score, fake follower risk, audience fit | 브랜드가 후보를 빠르게 줄임 |
+| 후보 검증 | 공개 지표 cross-check, 콘텐츠 적합도 검증 | AI 추천의 신뢰도 보강 |
+| 협상 전 | 예상 단가 벤치마크, 유사 캠페인 성과 데이터 | 제안가가 설명 가능해짐 |
+| 계약 후 | 게시물 존재 확인, 브랜드 언급 확인, 금지 표현 감지 | 정산 조건 판단에 사용 |
+| 리포트 | 캠페인 proof report, receipt bundle | 브랜드 내부 정산/감사용 자료 |
+
+실행 흐름:
+
+```text
+Agent decides verification is needed
+→ tool quote received
+→ spend cap / allowlist / policy check
+→ pay.sh/x402 payment
+→ API result received
+→ receipt + result digest stored
+→ ranking or settlement policy consumes the verified signal
+```
+
+권한 통제:
+
+- 브랜드가 Agent budget cap을 설정합니다.
+- LLM은 결제를 승인하지 않습니다.
+- deterministic policy가 허용 도구, 금액 한도, 목적, 중복 호출 여부를 검사합니다.
+- 동일 후보/동일 검증 요청은 idempotency key로 중복 결제를 막습니다.
+- 실패한 결제나 불완전한 검증은 성공처럼 표시하지 않고 `확인 필요`로 남깁니다.
+- receipt와 result digest는 UI timeline과 내부 cost ledger에 남깁니다.
 
 말해야 하는 분리:
 
@@ -268,14 +304,103 @@ Solana escrow = Creator compensation
 
 BM 연결:
 
-- 검증 API 호출당 usage fee.
-- 브랜드가 Agent budget cap을 설정.
-- KNOT은 검증 API marketplace/router가 될 수 있음.
-- SaaS + transaction operation fee + compliance proof report로 확장 가능.
+- pay.sh 비용은 브랜드의 Agent 운영 예산에서 차감됩니다.
+- KNOT은 paid verification을 묶어서 `검증 크레딧`, `도구 사용 수수료`, `리포트 패키지`로 과금할 수 있습니다.
+- 장기적으로 KNOT은 여러 검증 API를 연결하는 Agent tool marketplace/router가 될 수 있습니다.
+- Solana escrow 수수료와 pay.sh 검증 수수료는 성격이 다릅니다.
+  - pay.sh: 거래 전후의 검증/분석 도구 비용.
+  - Solana escrow fee: 합의된 크리에이터 보상금의 예치/정산 운영 수수료.
+
+누가 돈을 내는가:
+
+| 비용 | 부담 주체 | 이유 |
+|---|---|---|
+| 후보 검증 API | 브랜드 또는 대행사 | 더 좋은 후보를 고르는 비용 |
+| 콘텐츠/증빙 검증 API | 브랜드 또는 캠페인 예산 | 정산 조건 확인 비용 |
+| Solana escrow funding | 브랜드 | 크리에이터 보상금 예치 |
+| 정산 수수료 | 브랜드 또는 양측 계약 조건 | 플랫폼 운영/결제 처리 비용 |
+| Creator Pro 기능 | 선택적으로 크리에이터 | 포트폴리오, 자동 견적, 정산 관리 등 |
 
 데모 문장:
 
 > 이 장면에서 Brand Agent는 후보를 고르기 전에 0.02 USDC짜리 검증 API를 pay.sh/x402로 호출합니다. 중요한 점은 이 결제가 크리에이터 보상이 아니라 Agent의 운영비라는 점입니다. 보상금은 별도의 Solana 에스크로로 관리됩니다.
+
+심사위원에게 강조할 점:
+
+- "Agentic Commerce에서 Agent가 진짜 일을 하려면 외부 도구를 구매할 수 있어야 합니다."
+- "pay.sh는 그 도구 구매를 결제 영수증과 함께 workflow에 남기는 장치입니다."
+- "KNOT은 AI 추천, 결제 영수증, 정책 승인, 온체인 정산을 한 거래 흐름으로 연결합니다."
+
+말하면 안 되는 표현:
+
+- "pay.sh가 크리에이터에게 정산합니다."
+- "AI가 자유롭게 돈을 씁니다."
+- "검증 API가 모든 리스크를 완전히 제거합니다."
+- "Instagram/YouTube의 비공개 데이터를 구매합니다."
+
+더 정확한 표현:
+
+- "pay.sh는 Agent가 허용된 유료 검증 도구를 쓰기 위한 결제 레일입니다."
+- "결제 전에는 정책 코드가 예산과 도구 권한을 확인합니다."
+- "검증 결과는 의사결정 신호이고, 최종 승인과 정산은 별도 정책과 에스크로 흐름을 거칩니다."
+
+## Business Model 상세
+
+핵심 BM:
+
+> 브랜드와 대행사가 협찬 거래를 더 빠르고 안전하게 운영하도록 Agent workflow 사용료, 검증 도구 사용료, 에스크로/정산 운영 수수료를 받습니다.
+
+수익원:
+
+| 수익원 | 과금 방식 | 대상 고객 | 설명 |
+|---|---|---|---|
+| SaaS 구독 | 월 구독료 | 브랜드, 대행사 | 프로젝트 수, 팀원 수, Agent run 수 기준 |
+| Agent run fee | 실행당 과금 | 브랜드, 대행사 | 후보 탐색/협상 run 단위 |
+| Verification markup | API 호출당 과금 | 브랜드, 대행사 | pay.sh로 구매한 검증 API에 플랫폼 수수료 부과 |
+| Escrow operation fee | 거래금액의 일정 비율 또는 고정 수수료 | 브랜드 중심 | 계약 생성, 예치, 증빙, 정산 운영 |
+| Compliance report | 리포트당 과금 | 브랜드, 대행사 | 영수증, 검증 결과, Agreement hash, settlement proof 묶음 |
+| Creator Pro | 선택 구독 | 크리에이터 | 자동 견적, 포트폴리오, 정산 관리, 우선 노출 |
+| Tool marketplace | revenue share | API provider | 검증 API provider와 사용량 기반 정산 |
+
+초기 가격 가설:
+
+| 플랜 | 대상 | 구성 | 가격 가설 |
+|---|---|---|---|
+| Starter | 소형 브랜드 | 월 3개 프로젝트, 기본 후보 추천, 제한된 Agent run | 월 9만~19만원 |
+| Growth | D2C/커머스 브랜드 | 월 10~30개 프로젝트, paid verification credit, 협상 자동화 | 월 29만~79만원 |
+| Agency | 마케팅 대행사 | 다중 브랜드, 팀 권한, 리포트 export, 대량 후보 검증 | 월 100만원 이상 |
+| Enterprise | 대형 브랜드 | 커스텀 정책, 감사 로그, 전용 검증 API, SLA | 별도 계약 |
+
+거래당 과금 예시:
+
+```text
+브랜드가 1개 협찬 프로젝트 생성
+→ SaaS 구독에 포함된 Agent run 사용
+→ 후보 검증 API 5회 사용: pay.sh 결제 + KNOT markup
+→ 협상 성사
+→ 브랜드가 크리에이터 보상금 에스크로 예치
+→ 정산 완료 시 escrow operation fee 또는 report fee 과금
+```
+
+단위 경제성 가설:
+
+- 검증 API 원가는 작고 반복 호출됩니다.
+- 브랜드는 후보 1명을 잘못 고르는 비용이 검증 API 비용보다 큽니다.
+- Agent run과 검증 비용을 캠페인 예산 안에 포함시키면 구매 저항이 낮습니다.
+- 거래가 커질수록 에스크로/리포트의 가치가 커집니다.
+- 대행사는 여러 브랜드를 반복 운영하므로 SaaS와 usage fee 모두 적합합니다.
+
+왜 pay.sh가 BM에 중요한가:
+
+- KNOT이 직접 모든 검증 데이터를 만들 필요가 없습니다.
+- 외부 검증 API를 Agent tool로 붙일수록 제품 가치가 커집니다.
+- 사용량 기반 수수료를 만들 수 있습니다.
+- Agent가 구매한 도구와 결과가 receipt로 남기 때문에 브랜드에 비용 설명이 쉽습니다.
+- 장기적으로 "AI Agent가 업무 중 유료 도구를 구매하는 commerce layer"로 확장할 수 있습니다.
+
+발표용 BM 문장:
+
+> KNOT의 BM은 단순 매칭 수수료가 아닙니다. 브랜드는 Agent workflow 사용료를 내고, Agent가 필요한 검증 API를 pay.sh로 구매하며, 성사된 협찬은 에스크로와 증빙 리포트로 운영됩니다. 즉 SaaS, usage fee, settlement operation fee가 함께 쌓이는 구조입니다.
 
 ## GCP 사용 방안
 
@@ -453,14 +578,15 @@ Show:
 
 ### Slide 10. Business Model
 
-Title: Agentic commerce needs payment rails
+Title: SaaS + Usage + Settlement
 
 Bullets:
 
-- SaaS for brands/agencies.
-- Verification API usage fee.
-- Escrow/payment operation fee.
-- Premium compliance and reporting.
+- Brands and agencies pay for Agent workflow automation.
+- pay.sh enables usage-based paid verification.
+- Solana escrow enables settlement operation fees.
+- Compliance reports turn receipts, agreement hashes, and settlement proofs into paid deliverables.
+- Long-term: KNOT becomes an Agent tool marketplace for creator commerce.
 
 ### Slide 11. Why Now
 
@@ -601,6 +727,14 @@ A. Gemini는 결제 권한이 없습니다. Gemini는 분석과 제안을 하고
 ### Q. pay.sh는 정확히 어디에 쓰나요?
 
 A. Creator 보상금이 아니라 Agent 운영비입니다. 후보 검증이나 콘텐츠 검증 같은 유료 API를 Agent가 구매할 때 pay.sh/x402를 쓰고, 영수증을 timeline에 남깁니다.
+
+### Q. pay.sh 비용은 누가 내나요?
+
+A. 기본적으로 브랜드나 대행사가 설정한 Agent 운영 예산에서 나갑니다. 후보를 더 정확히 고르고 정산 조건을 검증하기 위한 비용이기 때문입니다. KNOT은 이 비용을 검증 크레딧, API usage fee, 리포트 패키지로 과금할 수 있습니다.
+
+### Q. KNOT은 어디서 돈을 버나요?
+
+A. 초기에는 브랜드/대행사 SaaS 구독료와 Agent run 사용료가 기본입니다. 이후 pay.sh 기반 paid verification markup, Solana escrow operation fee, compliance report fee, API provider revenue share로 확장할 수 있습니다.
 
 ### Q. 왜 Solana가 필요한가요?
 

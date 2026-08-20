@@ -2,6 +2,31 @@
 
 Updated: 2026-08-20 KST
 
+## pay.sh and BM Presentation Expansion (2026-08-20 KST)
+
+### Changed
+
+- Expanded `docs/PRESENTATION_HANDOFF_FINAL.md` with a detailed pay.sh/x402
+  usage narrative.
+- Clarified that pay.sh is Agent-paid verification infrastructure, separate from
+  Creator compensation and Solana escrow.
+- Added paid verification use cases, execution flow, spend controls, cost
+  ownership, and safer presentation language.
+- Added a detailed business model section covering SaaS, Agent run fees,
+  verification markup, escrow operation fees, compliance reports, Creator Pro,
+  and tool marketplace revenue share.
+- Updated the Business Model slide outline and Judge Q&A.
+
+### Verification
+
+- `git diff --check`: passed.
+- Manual review of the expanded pay.sh and Business Model sections: completed.
+
+### Boundary
+
+- No code, deployment, Firestore, Secret Manager, wallet, pay.sh, or Solana
+  changes were made in this phase.
+
 ## Final Presentation Handoff Cleanup (2026-08-20 KST)
 
 ### Changed
