@@ -2019,6 +2019,18 @@ def build_api_router(
     ) -> dict[str, object]:
         return run_matches(promotion_id, idempotency_key)
 
+    @router.post(
+        "/match-runs/{match_run_id}:start-negotiation",
+        status_code=status.HTTP_201_CREATED,
+        include_in_schema=False,
+    )
+    def start_negotiation_action(match_run_id: str) -> dict[str, object]:
+        return start_negotiation(match_run_id)
+
+    @router.post("/match-runs/{match_run_id}:cancel", include_in_schema=False)
+    def cancel_match_run_action(match_run_id: str) -> dict[str, object]:
+        return cancel_match_run(match_run_id)
+
     @router.get("/match-runs/{match_run_id}")
     def get_match_run(match_run_id: str) -> dict[str, object]:
         match_run = repository.get_raw_document(FirestorePaths.match_run(match_run_id))

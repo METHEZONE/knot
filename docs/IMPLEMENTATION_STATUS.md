@@ -1560,3 +1560,35 @@ Updated: 2026-08-20 KST
 - No Firestore reset, wallet funding, Secret Manager change, Solana program
   change, or on-chain transaction was performed.
 - API/Web deployment is pending explicit approval.
+
+## 2026-08-21 Deployed Negotiation Route Verification
+
+### Changed
+
+- Added early runtime route wrappers for
+  `/api/v1/match-runs/{match_run_id}:start-negotiation` and
+  `/api/v1/match-runs/{match_run_id}:cancel`.
+- This prevents the generic `/api/v1/match-runs/{match_run_id}` detail route
+  from capturing colon action paths first in the deployed FastAPI/Starlette
+  router.
+
+### Verification
+
+- Deployed commit `c2cf5e1` passed service readiness checks:
+  `knot-api`, `knot-creator-agent`, and `knot-web3` returned `ready`; web
+  `/login` returned HTTP 200.
+- Real deployed candidate verification for `promotion-xexymix-devnet`
+  completed with pay.sh sandbox/x402 receipt, `0.02 USDC`, `status=SETTLED`,
+  and selected `agent-creator-devnet-phantom`.
+- The subsequent deployed start-negotiation request exposed a runtime 405 on
+  the colon action route; this phase fixes that route ordering risk.
+- `./.venv/bin/pytest backend/tests/test_api_promotions.py::test_start_negotiation_persists_messages_events_and_agreement backend/tests/test_api_promotions.py::test_start_negotiation_uses_gemini_for_brand_chat_display -q`:
+  2 passed.
+- `./.venv/bin/python -m ruff check backend/apps/api/routes.py`: passed.
+
+### Scope Guard
+
+- No wallet funding, Solana program change, or on-chain transaction was
+  performed in this phase.
+- A Secret Manager IAM binding for `knot-youtube-api-key` was added after
+  explicit approval so Cloud Run can read the YouTube API key secret.
