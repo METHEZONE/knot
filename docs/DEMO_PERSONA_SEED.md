@@ -65,7 +65,8 @@ Additional public-data demo brands, not represented as KNOT customers:
 
 ## Creator List
 
-The demo keeps 10 creator profiles across five matching categories. The product
+The demo keeps the original 10 category-coverage creators and adds 4
+Instagram-first creator personas for the cold-DM/live-demo story. The product
 currently uses canonical category key `fitness`; in demo copy this maps to
 Wellness.
 
@@ -82,18 +83,20 @@ Wellness.
 | Gaming | 도티 TV | `creator-demo-dotti` | YouTube |
 | Gaming | 김성회의 G식백과 | `creator-demo-g-sik` | YouTube |
 
-The originally requested Instagram candidates are recorded as unresolved unless
-an official account is verified by a provider:
+Additional Instagram-first personas:
 
-| Candidate | Status |
-|---|---|
-| `@candofr` | `UNRESOLVED` |
-| 유빈이TMI | `UNRESOLVED` |
-| 아미쇼 | `UNRESOLVED` |
-| 크리투스 | `UNRESOLVED` |
+| Creator | ID | Instagram |
+|---|---|---|
+| 이차녕 @candofr | `creator-demo-candofr` | `https://www.instagram.com/candofr/` |
+| 유빈이TMI | `creator-demo-yubintmi` | `https://www.instagram.com/tmi_07070707/` |
+| 아미쇼 | `creator-demo-amisho` | `https://www.instagram.com/amirsho_kh/` |
+| 크리투스 | `creator-demo-creatus` | `https://www.instagram.com/crea__tus/` |
 
 The unresolved list is stored in
-`analysisJobs/demo-persona-unresolved-candidates`.
+`analysisJobs/demo-persona-unresolved-candidates`; it is currently empty for
+the requested Instagram additions. Some public metrics remain marked
+`FIXTURE_PENDING_PROVIDER_REFRESH` or `PUBLIC_THIRD_PARTY_OR_PROVIDER` until a
+successful provider refresh writes a current `socialSnapshots/*` document.
 
 ## Social Collection
 

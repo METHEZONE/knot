@@ -136,8 +136,8 @@ def validate_demo_persona_documents(document_set: PersonaDocumentSet) -> list[st
     by_path = {path: document for path, document in document_set.documents}
     if len(document_set.brand_ids) != 10:
         errors.append(f"expected 10 brands, got {len(document_set.brand_ids)}")
-    if len(document_set.creator_ids) != 10:
-        errors.append(f"expected 10 creators, got {len(document_set.creator_ids)}")
+    if len(document_set.creator_ids) < 10:
+        errors.append(f"expected at least 10 creators, got {len(document_set.creator_ids)}")
 
     category_counts: Counter[str] = Counter()
     for creator_id in document_set.creator_ids:
@@ -1048,6 +1048,195 @@ CREATOR_SEEDS: list[dict[str, Any]] = [
         },
     },
     {
+        "creatorId": "creator-demo-candofr",
+        "creatorAgentId": "agent-demo-creator-candofr",
+        "displayName": "이차녕 @candofr",
+        "primaryPlatform": "instagram",
+        "categories": ["lifestyle", "tech", "community"],
+        "formats": ["reel", "post", "short"],
+        "persona": "brand_fit_first",
+        "personaDescription": "커뮤니티/창업 행사 맥락과 브랜드 핏을 우선하는 demo policy",
+        "completedDealCount": 8,
+        "platforms": {"instagram": {"url": "https://www.instagram.com/candofr/"}},
+        "observed": {
+            "displayName": "이차녕 @candofr",
+            "thumbnailUrl": "",
+            "metrics": {
+                "subscriberOrFollowerCount": None,
+                "averageRecentViews": None,
+                "medianRecentViews": None,
+                "metricProvenance": "PUBLIC_HANDLE_CONFIRMED_PENDING_PROVIDER_REFRESH",
+            },
+            "sourceNotes": [
+                "User-provided Instagram handle @candofr.",
+                "Event-us public page references Creator Founder Seoul with @candofr (이차녕).",
+            ],
+        },
+        "contentProfile": {
+            "primaryCategory": "lifestyle",
+            "secondaryCategories": ["tech", "community"],
+            "contentKeywords": ["creator founder", "startup", "community", "lifestyle"],
+            "contentFormats": ["INSTAGRAM_REELS", "INSTAGRAM_FEED"],
+            "contentStyle": ["COMMUNITY", "EVENT", "LIFESTYLE"],
+        },
+        "demoPolicy": {
+            "minBaseUsdc": 2,
+            "maxBaseUsdc": 5,
+            "blockedIndustries": ["gambling", "tobacco"],
+            "maxDeliverablesPerMonth": 4,
+            "minDaysToPost": 5,
+            "allowedUsageRights": [
+                UsageRights.ORGANIC_ONLY.value,
+                UsageRights.PAID_BOOST_30D.value,
+            ],
+            "maxRevisionRounds": 1,
+            "maxExclusivityDays": 0,
+        },
+    },
+    {
+        "creatorId": "creator-demo-yubintmi",
+        "creatorAgentId": "agent-demo-creator-yubintmi",
+        "displayName": "유빈이TMI",
+        "primaryPlatform": "instagram",
+        "categories": ["lifestyle", "travel", "entertainment"],
+        "formats": ["reel", "post", "short"],
+        "persona": "schedule_sensitive",
+        "personaDescription": "일상형 콘텐츠 일정과 촬영 부담을 중시하는 demo policy",
+        "completedDealCount": 6,
+        "platforms": {
+            "instagram": {"url": "https://www.instagram.com/tmi_07070707/"},
+            "youtube": {"url": "https://www.youtube.com/@yubintmi"},
+        },
+        "observed": {
+            "displayName": "유빈이TMI",
+            "thumbnailUrl": "",
+            "metrics": {
+                "subscriberOrFollowerCount": 67700,
+                "averageRecentViews": 7060,
+                "medianRecentViews": None,
+                "metricProvenance": "PUBLIC_THIRD_PARTY_OR_PROVIDER",
+            },
+            "sourceNotes": [
+                "Public articles identify Instagram @tmi_07070707 for 유빈이TMI.",
+                "Public channel analytics pages report YouTube channel size "
+                "around 67.7K subscribers.",
+            ],
+        },
+        "contentProfile": {
+            "primaryCategory": "lifestyle",
+            "secondaryCategories": ["travel", "entertainment"],
+            "contentKeywords": ["daily", "vlog", "travel", "challenge"],
+            "contentFormats": ["INSTAGRAM_REELS", "YOUTUBE_SHORTS", "YOUTUBE_LONGFORM"],
+            "contentStyle": ["VLOG", "STORYTELLING", "CHALLENGE"],
+        },
+        "demoPolicy": {
+            "minBaseUsdc": 2,
+            "maxBaseUsdc": 4,
+            "blockedIndustries": ["gambling", "tobacco", "alcohol"],
+            "maxDeliverablesPerMonth": 3,
+            "minDaysToPost": 8,
+            "allowedUsageRights": [UsageRights.ORGANIC_ONLY.value],
+            "maxRevisionRounds": 1,
+            "maxExclusivityDays": 0,
+        },
+    },
+    {
+        "creatorId": "creator-demo-amisho",
+        "creatorAgentId": "agent-demo-creator-amisho",
+        "displayName": "아미쇼",
+        "primaryPlatform": "instagram",
+        "categories": ["entertainment", "lifestyle"],
+        "formats": ["reel", "short", "post"],
+        "persona": "fast_accept_if_price_ok",
+        "personaDescription": "숏폼 조건과 금액이 맞으면 빠르게 수락하는 demo policy",
+        "completedDealCount": 10,
+        "platforms": {
+            "instagram": {"url": "https://www.instagram.com/amirsho_kh/"},
+            "youtube": {"url": "https://www.youtube.com/@amishokh"},
+        },
+        "observed": {
+            "displayName": "아미쇼",
+            "thumbnailUrl": "",
+            "metrics": {
+                "subscriberOrFollowerCount": 101800,
+                "averageRecentViews": None,
+                "medianRecentViews": None,
+                "metricProvenance": "PUBLIC_THIRD_PARTY_OR_PROVIDER",
+            },
+            "sourceNotes": [
+                "Public profile pages identify 아미쇼 as an Instagram/YouTube/TikTok creator.",
+                "Public influencer database lists Instagram @amirsho_kh around 101.8K followers.",
+            ],
+        },
+        "contentProfile": {
+            "primaryCategory": "entertainment",
+            "secondaryCategories": ["lifestyle"],
+            "contentKeywords": ["shortform", "humor", "culture", "daily"],
+            "contentFormats": ["INSTAGRAM_REELS", "YOUTUBE_SHORTS"],
+            "contentStyle": ["HUMOR", "SKIT", "CULTURE"],
+        },
+        "demoPolicy": {
+            "minBaseUsdc": 2,
+            "maxBaseUsdc": 5,
+            "blockedIndustries": ["gambling", "tobacco"],
+            "maxDeliverablesPerMonth": 5,
+            "minDaysToPost": 4,
+            "allowedUsageRights": [
+                UsageRights.ORGANIC_ONLY.value,
+                UsageRights.PAID_BOOST_30D.value,
+            ],
+            "maxRevisionRounds": 1,
+            "maxExclusivityDays": 0,
+        },
+    },
+    {
+        "creatorId": "creator-demo-creatus",
+        "creatorAgentId": "agent-demo-creator-creatus",
+        "displayName": "크리투스",
+        "primaryPlatform": "instagram",
+        "categories": ["education", "tech", "lifestyle"],
+        "formats": ["reel", "post", "short"],
+        "persona": "detail_sensitive",
+        "personaDescription": "브리프와 사용권 범위를 명확히 요구하는 demo policy",
+        "completedDealCount": 12,
+        "platforms": {"instagram": {"url": "https://www.instagram.com/crea__tus/"}},
+        "observed": {
+            "displayName": "크리투스",
+            "thumbnailUrl": "",
+            "metrics": {
+                "subscriberOrFollowerCount": 195670,
+                "averageRecentViews": 8469,
+                "medianRecentViews": None,
+                "metricProvenance": "PUBLIC_THIRD_PARTY_OR_PROVIDER",
+            },
+            "sourceNotes": [
+                "Official Creatus Lounge page describes a creator growth platform.",
+                "Public Instagram analytics page lists @crea__tus with follower "
+                "and engagement metrics.",
+            ],
+        },
+        "contentProfile": {
+            "primaryCategory": "education",
+            "secondaryCategories": ["tech", "lifestyle"],
+            "contentKeywords": ["creator education", "reels", "growth", "community"],
+            "contentFormats": ["INSTAGRAM_REELS", "INSTAGRAM_FEED"],
+            "contentStyle": ["EDUCATIONAL", "HOW_TO", "COMMUNITY"],
+        },
+        "demoPolicy": {
+            "minBaseUsdc": 3,
+            "maxBaseUsdc": 6,
+            "blockedIndustries": ["gambling", "tobacco"],
+            "maxDeliverablesPerMonth": 4,
+            "minDaysToPost": 6,
+            "allowedUsageRights": [
+                UsageRights.ORGANIC_ONLY.value,
+                UsageRights.PAID_BOOST_30D.value,
+            ],
+            "maxRevisionRounds": 1,
+            "maxExclusivityDays": 0,
+        },
+    },
+    {
         "creatorId": "creator-demo-geekble",
         "creatorAgentId": "agent-demo-creator-geekble",
         "displayName": "긱블 Geekble",
@@ -1377,29 +1566,4 @@ CREATOR_SEEDS: list[dict[str, Any]] = [
 ]
 
 
-UNRESOLVED_SOCIAL_CANDIDATES = [
-    {
-        "name": "@candofr",
-        "platform": "instagram",
-        "status": "UNRESOLVED",
-        "reason": "Official account was not confirmed from the provided handle alone.",
-    },
-    {
-        "name": "유빈이TMI",
-        "platform": "instagram",
-        "status": "UNRESOLVED",
-        "reason": "Name-only Instagram account identification is ambiguous.",
-    },
-    {
-        "name": "아미쇼",
-        "platform": "instagram",
-        "status": "UNRESOLVED",
-        "reason": "Name-only Instagram account identification is ambiguous.",
-    },
-    {
-        "name": "크리투스",
-        "platform": "instagram",
-        "status": "UNRESOLVED",
-        "reason": "Name-only Instagram account identification is ambiguous.",
-    },
-]
+UNRESOLVED_SOCIAL_CANDIDATES: list[dict[str, object]] = []

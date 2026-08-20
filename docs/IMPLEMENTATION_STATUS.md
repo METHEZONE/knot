@@ -1757,3 +1757,25 @@ Updated: 2026-08-20 KST
 - `./.venv/bin/python -m ruff check backend/apps/api/routes.py backend/libs/demo_seed/personas.py backend/scripts/seed_demo_personas.py backend/tests/test_api_onboarding.py backend/tests/test_api_dev_admin.py`:
   passed.
 - `npm --prefix frontend run typecheck`: passed.
+
+## 2026-08-21 Instagram Creator Persona Expansion
+
+### Changed
+
+- Expanded demo creator personas from 10 to 14 by adding Instagram-first
+  creators:
+  - `creator-demo-candofr` (`https://www.instagram.com/candofr/`)
+  - `creator-demo-yubintmi` (`https://www.instagram.com/tmi_07070707/`)
+  - `creator-demo-amisho` (`https://www.instagram.com/amirsho_kh/`)
+  - `creator-demo-creatus` (`https://www.instagram.com/crea__tus/`)
+- Kept the original 10 creators so the Beauty / Tech / Wellness / Crypto /
+  Gaming category coverage remains stable.
+- Relaxed seed validation from exactly 10 creators to at least 10 creators with
+  required category coverage.
+- Cleared the unresolved Instagram candidate list because the requested
+  candidates now have seed persona documents.
+
+### Verification
+
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
+  10 brands, 14 creators, 5 promotions, 146 documents, no validation errors.
