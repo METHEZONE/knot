@@ -1,0 +1,149 @@
+/**
+ * /b·/c 라이브 데모 전용 스킨 — 화이트/블랙, shadcn 감성의 클린 톤.
+ * 기존 앱(손글씨 종이 세계관)과 충돌하지 않도록 [data-knot-demo] 스코프.
+ */
+
+html:has([data-knot-demo]) {
+  font-size: 16px;
+  background: #fafafa;
+}
+
+/* 종이 노이즈 오버레이(구 세계관)는 데모에서 끈다 */
+html:has([data-knot-demo]) body::before {
+  content: none;
+}
+
+/* 구 세계관의 손글씨 헤드라인·squiggle 필터를 데모 스코프에서 원복 */
+[data-knot-demo] h1,
+[data-knot-demo] h2,
+[data-knot-demo] h3,
+[data-knot-demo] .display {
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  filter: none;
+}
+
+[data-knot-demo] {
+  /* 토큰 */
+  --k-bg: #fafafa;
+  --k-surface: #ffffff;
+  --k-ink: #18181b;
+  --k-ink-soft: #3f3f46;
+  --k-muted: #8e8e96;
+  --k-line: #e8e8ec;
+  --k-line-strong: #d9d9de;
+  --k-money: #0d8a5f;
+  --k-warn: #b45309;
+  --k-danger: #dc2626;
+
+  font-family: var(--font-pretendard), "Apple SD Gothic Neo", system-ui, sans-serif;
+  color: var(--k-ink);
+  background: var(--k-bg);
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+  font-feature-settings: "ss05";
+}
+
+[data-knot-demo] ::selection {
+  background: #18181b;
+  color: #fff;
+}
+
+/* 얇은 스크롤바 — 대시보드 톤 유지 */
+[data-knot-demo] *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-knot-demo] *::-webkit-scrollbar-thumb {
+  background: #d9d9de;
+  border-radius: 999px;
+}
+[data-knot-demo] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 숫자·해시·금액은 항상 모노 */
+[data-knot-demo] .k-mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+
+/* 카드 기본형 */
+[data-knot-demo] .k-card {
+  background: var(--k-surface);
+  border: 1px solid var(--k-line);
+  border-radius: 14px;
+}
+
+/* 라이브 점멸 점 */
+@keyframes k-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+[data-knot-demo] .k-live-dot {
+  animation: k-pulse 1.6s ease-in-out infinite;
+}
+
+/* 스캔 중 shimmer */
+@keyframes k-shimmer {
+  0% {
+    background-position: -320px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+[data-knot-demo] .k-shimmer {
+  background: linear-gradient(90deg, #f1f1f3 25%, #e6e6ea 50%, #f1f1f3 75%);
+  background-size: 640px 100%;
+  animation: k-shimmer 1.3s linear infinite;
+}
+
+/* 별 게이지 채움 광택 */
+@keyframes k-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(240%);
+  }
+}
+[data-knot-demo] .k-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: k-sheen 2.2s ease-in-out infinite;
+}
+
+/* 타이핑 인디케이터 */
+@keyframes k-typing {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+[data-knot-demo] .k-typing-dot {
+  animation: k-typing 1.1s ease-in-out infinite;
+}
+[data-knot-demo] .k-typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+[data-knot-demo] .k-typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}

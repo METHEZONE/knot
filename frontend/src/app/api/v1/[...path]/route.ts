@@ -17,11 +17,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
   return proxy(request, context);
 }
 
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  return proxy(request, context);
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  return proxy(request, context);
+}
+
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
   const url = new URL(request.url);
   const target = new URL(`/api/v1/${path.join("/")}${url.search}`, API_BASE_URL);
-  const body = request.method === "GET" ? undefined : await request.text();
+  const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.text();
   const response = await fetch(target, {
     method: request.method,
     body,

@@ -1785,3 +1785,53 @@ Updated: 2026-08-20 KST
 
 - `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
   10 brands, 14 creators, 5 promotions, 146 documents, no validation errors.
+
+## 2026-08-21 GCP Demo Workspace UI Bridge
+
+### Changed
+
+- Added the `origin/minsung/live-product` demo workspace shell on this branch:
+  `/b`, `/c`, `/b/graph`, and `/auth`.
+- Changed `/` to enter the brand demo workspace through `/b`.
+- Hid the legacy top navigation on demo workspace routes so the demo shell owns
+  the screen composition.
+- Kept the existing Product API proxy and added `PATCH` / `DELETE` forwarding.
+- Connected the demo "탐험 보내기" action to real Product API paths:
+  - `POST /api/v1/promotions/{promotionId}/matches:run`
+  - `GET /api/v1/match-runs/{matchRunId}/candidates`
+  - `POST /api/v1/match-runs/{matchRunId}/start-negotiation`
+  - `GET /api/v1/negotiations/{negotiationId}/messages`
+- In API mode, the post-agreement CTA now stops at wallet funding when the
+  Agreement status is `FUNDING_REQUIRED`; the UI no longer fabricates escrow
+  transaction hashes for that state.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- Local production server with
+  `KNOT_API_BASE_URL=https://knot-api-7k3walthgq-uc.a.run.app`:
+  - `/` returns `307` to `/b`.
+  - `/b` returns `200`.
+  - `/b/graph` returns `200`.
+  - `/auth` returns `200`.
+  - `/demo/ssin.jpg` and `/demo/moodbeam.svg` return `200`.
+  - `/api/v1/promotions/promotion-demo-cheriexx` returns `200` through the
+    frontend proxy.
+- Real GCP API verification through the local web proxy:
+  - Match run `match-adfdd549-5f67-4e9c-bef6-a0c4ef4887ca` completed with 5
+    candidates and selected `creator-demo-ssin`.
+  - pay.sh/x402 candidate verification recorded sandbox status `SETTLED` with
+    0.02 USDC.
+  - A2A negotiation `negotiation-d21ed516-bfbc-46b6-84c0-34f11490999b`
+    completed as `AGREED` after a counter round.
+  - Agreement `agreement-df342c24-62a4-41e8-b12b-af70141ede8b` was created with
+    status `FUNDING_REQUIRED`.
+  - Escrow read for that Agreement returned `escrow: null`, `settlements: []`.
+
+### Scope Guard
+
+- No Cloud Run redeploy has been performed for this UI branch yet.
+- No wallet funding or Solana devnet escrow transaction was performed in this
+  pass.
