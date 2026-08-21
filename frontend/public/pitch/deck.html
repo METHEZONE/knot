@@ -440,6 +440,31 @@
   .slide.is-active .payout.base{animation:basePop 5.4s ease-out .4s infinite}
   .slide.is-active .payout.bonus{animation:bonusPop 5.4s ease-out .4s infinite}
 
+  /* ═══ 정산 비교 그래프 (업계 평균 vs KNOT) ═══ */
+  .cmp-chart { width:100%; max-width:1100px; }
+  .cmp-row { display:flex; align-items:center; gap:1.2rem; margin-bottom:2rem; }
+  .cmp-label { flex:0 0 clamp(120px,15vw,190px); text-align:right;
+    font-family:'Pretendard Variable',Pretendard,sans-serif; font-weight:600;
+    font-size:clamp(1.02rem,1.55vw,1.28rem); color:#555; line-height:1.35; }
+  .cmp-track { position:relative; flex:1; display:flex; align-items:center;
+    height:clamp(58px,7.6vh,82px); border:3px solid #0a0a0a; border-radius:16px;
+    background:#fffdf8; overflow:hidden; }
+  .cmp-fill { height:100%; display:flex; align-items:center; flex-shrink:0; }
+  .cmp-fill.bad { width:100%; background:#f6dbd6; justify-content:flex-end; padding-right:1.1rem; }
+  .cmp-fill.good { width:clamp(10px,2.4%,26px); background:#0a7d38; }
+  .cmp-num { font-family:'LeeSeoyun',cursive; font-size:clamp(1.28rem,2.05vw,1.75rem); white-space:nowrap; }
+  .cmp-fill.bad .cmp-num { color:#b00; }
+  .cmp-break { flex-shrink:0; width:22px; height:68%; margin:0 .35rem; }
+  .cmp-num-out { font-family:'LeeSeoyun',cursive; font-size:clamp(1.5rem,2.6vw,2.15rem); color:#0a7d38; white-space:nowrap; }
+  .cmp-ratio { text-align:center; margin-top:1.8rem; font-family:'LeeSeoyun',cursive;
+    font-size:clamp(1.45rem,2.5vw,2.05rem); color:#0a0a0a; }
+  .cmp-ratio b { color:#0a7d38; }
+  .slide.is-active .cmp-fill.bad { animation: cmpBad .9s cubic-bezier(.2,.7,.3,1) both; animation-delay:.25s; }
+  .slide.is-active .cmp-fill.good { animation: cmpGood .5s cubic-bezier(.2,.7,.3,1) both; animation-delay:.95s; }
+  .slide.is-active .cmp-ratio { animation: riseIn .6s cubic-bezier(.2,.7,.3,1) both; animation-delay:1.25s; }
+  @keyframes cmpBad { from{width:0%} to{width:100%} }
+  @keyframes cmpGood { from{width:0} }
+
   /* ═══ 왜 블록체인 / 왜 솔라나 ═══ */
   .why-split { display:grid; grid-template-columns:1fr 1fr; gap:3.2vw; width:100%; align-items:start; }
   .why-lab { font-family:'LeeSeoyun',cursive; font-size:clamp(1.4rem,2.3vw,2rem); color:#999;
@@ -956,42 +981,6 @@
   <div class="slide-number"></div>
 </section>
 
-<!-- ══════ 7.5. 업계 평균 vs KNOT ══════ -->
-<section class="slide" id="s7b">
-  <h2 class="slide-title">업계 평균 vs KNOT — 정산, 얼마나 다른가</h2>
-  <div class="slide-content">
-    <div class="two-col" style="align-items:center;">
-      <div style="text-align:center;">
-        <p style="font-size:clamp(1.3rem,2vw,1.7rem); color:#999; margin-bottom:0.5rem;">업계 평균 · 정산 지연</p>
-        <div class="metric hot" style="margin:0 auto;">
-          <span class="num" style="color:#b00;">38.5%</span>
-          <span class="lbl">지연 경험자 중<br/>1개월 이상 대기</span>
-        </div>
-        <p class="footnote" style="margin-top:0.8rem; max-width:420px; margin-left:auto; margin-right:auto;">
-          크리에이터 <b>48%</b>가 정산 지연을 경험 · <b>61%는 1주 이상</b>, 그중 38.5%는 1개월 이상 대기<br/>
-          <span style="color:#999;">Lumanu · 크리에이터 500+명 서베이 (2026)</span>
-        </p>
-      </div>
-      <div style="text-align:center;">
-        <p style="font-size:clamp(1.3rem,2vw,1.7rem); color:#0a7d38; margin-bottom:0.5rem;">KNOT · 정산</p>
-        <div class="metric hot" style="margin:0 auto;">
-          <span class="num" style="color:#0a7d38;">71초</span>
-          <span class="lbl">조건 충족 →<br/>온체인 자동 지급</span>
-        </div>
-        <p class="footnote" style="margin-top:0.8rem; max-width:420px; margin-left:auto; margin-right:auto;">
-          오늘 실제 devnet 트랜잭션 실측 (펀딩→마일스톤 릴리즈) · 수수료 0.000085 SOL<br/>
-          <span style="color:#999;">Explorer에서 서명 직접 검증 가능</span>
-        </p>
-      </div>
-    </div>
-    <div class="sketchbox" style="margin-top:2rem; text-align:center; max-width:1020px;">
-      소싱·협상도 마찬가지입니다 — 브랜드 인터뷰 기준 <b>답장을 기다리며 며칠</b>이 걸리던 지점이,
-      A2A에서는 <b>HTTP 요청-응답</b>이라 <b>기다리는 단계 자체가 없습니다</b>
-    </div>
-  </div>
-  <div class="slide-number"></div>
-</section>
-
 <!-- ══════ 8. Before / After + A2A 월드 ══════ -->
 <section class="slide" id="s8">
   <h2 class="slide-title">n 대화 → 1 대화</h2>
@@ -1246,6 +1235,39 @@
       <div class="metric"><span class="num">10</span><span class="lbl">크리에이터 등록</span></div>
       <div class="metric"><span class="num">40+</span><span class="lbl">웨이트리스트<br/>(마케팅 담당자 등)</span></div>
     </div>
+  </div>
+  <div class="slide-number"></div>
+</section>
+
+<!-- ══════ 15.5. 업계 평균 vs KNOT (그래프) ══════ -->
+<section class="slide" id="s15b">
+  <h2 class="slide-title">업계 평균 vs KNOT — 정산, 얼마나 다른가</h2>
+  <div class="slide-content">
+    <div class="cmp-chart">
+      <div class="cmp-row">
+        <span class="cmp-label">업계 평균<br/><span style="font-weight:400;color:#999;">정산 지연 시</span></span>
+        <div class="cmp-track">
+          <div class="cmp-fill bad" style="width:100%;">
+            <span class="cmp-num">최소 30일+</span>
+          </div>
+        </div>
+      </div>
+      <div class="cmp-row">
+        <span class="cmp-label" style="color:#0a7d38;">KNOT</span>
+        <div class="cmp-track">
+          <div class="cmp-fill good"></div>
+          <svg class="cmp-break" viewBox="0 0 24 60" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M6 0 L18 20 L2 40 L22 60" stroke="#0a0a0a" stroke-width="3" fill="none"/>
+          </svg>
+          <span class="cmp-num-out">71초</span>
+        </div>
+      </div>
+    </div>
+    <p class="cmp-ratio">같은 정산 과정이, 약 <b>36,000배</b> 빨라집니다</p>
+    <p class="footnote" style="margin-top:1rem; max-width:940px; text-align:center;">
+      업계: 크리에이터 48%가 정산 지연 경험, 그중 38.5%는 1개월 이상 대기 — Lumanu, 크리에이터 500+명 서베이(2026) ·
+      KNOT: 오늘 실제 devnet 트랜잭션 실측(펀딩→마일스톤 릴리즈), 수수료 0.000085 SOL, Explorer에서 서명 검증 가능
+    </p>
   </div>
   <div class="slide-number"></div>
 </section>
