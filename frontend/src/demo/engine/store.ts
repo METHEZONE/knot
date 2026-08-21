@@ -7,6 +7,7 @@
 
 import { useSyncExternalStore } from "react";
 import { openReport } from "@/demo/reportClient";
+import { withBase } from "@/demo/ui/asset";
 import {
   createRealPromotionAndAgreement,
   fundRealEscrow,
@@ -203,7 +204,7 @@ export function startScan(url: string) {
  * 추출 카드를 400ms 간격으로 공개한 뒤 부화로 넘어간다.
  */
 async function fetchBrandProfile(url: string, fallback: ReturnType<typeof buildBrandProfile>) {
-  const res = await fetch("/api/knot/scan", {
+  const res = await fetch(withBase("/api/knot/scan"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ url }),
@@ -477,7 +478,7 @@ async function answerFreeTextInner() {
     .slice(-14)
     .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.text }));
   try {
-    const res = await fetch("/api/knot/chat", {
+    const res = await fetch(withBase("/api/knot/chat"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ turns, context: chatContextSummary() }),
