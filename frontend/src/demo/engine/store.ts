@@ -756,8 +756,23 @@ async function answerFreeTextInner() {
 }
 
 function readableError(caught: unknown) {
-  if (caught instanceof Error && caught.message) return caught.message;
-  return String(caught);
+  const message = caught instanceof Error && caught.message ? caught.message : String(caught);
+  if (message.includes("Brand USDC token account not found")) {
+    return "연결한 지갑에 devnet USDC 토큰 계정이 없습니다. Phantom에서 devnet 지갑을 선택하고, 해당 USDC mint를 받은 뒤 다시 예치해 주세요.";
+  }
+  if (message.includes("Brand USDC balance is below")) {
+    return "연결한 지갑의 devnet USDC 잔액이 부족합니다. 협상 금액과 플랫폼 수수료를 합친 금액 이상이 필요합니다.";
+  }
+  if (message.includes("brandAuthority") || message.includes("예치 지갑과 다릅니다")) {
+    return `${message} Phantom에서 이 사이트 연결을 해제한 뒤 사용할 지갑으로 다시 연결해 주세요.`;
+  }
+  if (message.includes("User rejected") || message.includes("사용자가 요청을 취소")) {
+    return "Phantom에서 서명 요청이 취소되었습니다. 지갑 연결, 소유 확인 서명, 거래 서명을 순서대로 승인해 주세요.";
+  }
+  if (message.includes("insufficient funds") || message.includes("Attempt to debit")) {
+    return "연결한 지갑의 devnet SOL 또는 USDC가 부족합니다. SOL은 수수료용, USDC는 에스크로 예치용으로 필요합니다.";
+  }
+  return message;
 }
 
 function composeStatusReply(): string {

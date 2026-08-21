@@ -59,3 +59,14 @@ escrow or settlement state.
    - negotiation/agreement read
    - escrow read state
 10. [x] Update `docs/IMPLEMENTATION_STATUS.md` with implementation result.
+
+## 2026-08-21 UI Polish Follow-Up
+
+1. [x] Restore the live demo Pretendard font variable used by the
+   `origin/minsung/live-product` `/b` screen.
+2. [x] Prevent long Solana signatures, terms hashes, and URLs from overflowing
+   demo cards.
+3. [x] Fix transaction rows in Brand and Creator settlement panels so the label
+   and hash wrap inside the card instead of pushing the template width.
+4. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
+5. [ ] Deploy the UI polish build after explicit approval.

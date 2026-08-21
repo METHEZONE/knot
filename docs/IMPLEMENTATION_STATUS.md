@@ -1917,3 +1917,26 @@ Updated: 2026-08-20 KST
   Phantom on devnet to sign the funding transaction from the Brand wallet and
   then submit a valid content URL. The UI is now wired to call the real prepare,
   confirm, evidence, verify, and settlement paths for that signed flow.
+
+## 2026-08-21 Demo UI Font And Overflow Fix
+
+### Changed
+
+- Restored the `PretendardVariable.woff2` local font from the live product UI
+  source branch and registered `--font-pretendard` in the app layout.
+- Added demo-scoped wrapping rules for monospaced tokens so long Solana
+  signatures, terms hashes, IDs, and URLs stay inside cards.
+- Updated the shared `TxRow` component used by Brand and Creator settlement
+  panels. Transaction rows now use responsive grid layout and wrap the hash
+  within the card instead of forcing horizontal overflow.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `git diff --check`: passed.
+
+### Scope Guard
+
+- No deployed environment or on-chain state was changed by this UI polish pass.
