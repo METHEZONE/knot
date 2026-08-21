@@ -15,6 +15,7 @@ import { Yarn, KnotTie, StarBurst, YarnMeter } from "@/demo/character/Yarn";
 import { Badge, SectionLabel, LiveDot, usdc } from "@/demo/ui/primitives";
 import { IdentityBlock } from "@/demo/auth/IdentityBlock";
 import { RealChainCard } from "@/demo/real/RealChainCard";
+import { explorerUrl } from "@/demo/real/apiFlow";
 import { A2ALog, Face, TxRow } from "@/demo/ui/bits";
 import { useUsdcBalance, formatUsdc } from "@/demo/wallet/balance";
 import { useKnotSession } from "@/demo/auth/session";
@@ -452,6 +453,16 @@ export function CreatorApp() {
                   <div className="mt-1 text-[12px] text-emerald-700">
                     씬님이 한 일: 릴스 1개. 루프가 한 일: 나머지 전부.
                   </div>
+                  {s.real?.releaseSignature && (
+                    <a
+                      href={explorerUrl(s.real.releaseSignature)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="k-mono mt-2 inline-block text-[11.5px] font-bold text-emerald-800 underline underline-offset-2"
+                    >
+                      Solana Explorer에서 정산 트랜잭션 확인 ↗
+                    </a>
+                  )}
                 </motion.div>
               )}
             </>

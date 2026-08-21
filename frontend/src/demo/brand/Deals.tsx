@@ -3,14 +3,16 @@
 /** 딜 테이블 — 유일하게 CRM스러운 화면. 여기서 'Attio보다 이쁘다'를 증명한다. */
 
 import { useDemo } from "@/demo/engine/store";
-import { AUTOPILOT_CREATOR, creatorById } from "@/demo/engine/script";
+import { AUTOPILOT_CREATOR, HERO_ID, creatorById } from "@/demo/engine/script";
 import { RealChainCard } from "@/demo/real/RealChainCard";
+import { explorerUrl } from "@/demo/real/apiFlow";
 import { Face } from "@/demo/ui/bits";
 import { Badge, SectionLabel } from "@/demo/ui/primitives";
 
 export function Deals() {
   const s = useDemo();
   const deals = s.campaign?.deals ?? [];
+  const releaseSignature = s.real?.releaseSignature ?? null;
 
   const rows = deals.map((d) => {
     const cr = creatorById(d.creatorId);
@@ -28,6 +30,7 @@ export function Deals() {
         ) : (
           <Badge tone="warn">진행 중</Badge>
         ),
+      explorerHref: d.creatorId === HERO_ID ? releaseSignature : null,
       amount: d.amountUsdc + (d.bonusUsdc ?? 0),
       bonus: d.bonusUsdc,
       releasedPct,
@@ -44,6 +47,7 @@ export function Deals() {
       handle: ap.handle,
       niche: ap.niche,
       status: <Badge tone="ink">🚀 자동 진행</Badge>,
+      explorerHref: null,
       amount: ap.amountUsdc,
       bonus: null,
       releasedPct: 30,
@@ -93,7 +97,21 @@ export function Deals() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3">{r.status}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-1.5">
+                      {r.status}
+                      {r.explorerHref ? (
+                        <a
+                          href={explorerUrl(r.explorerHref)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="k-mono text-[10.5px] font-bold text-[var(--k-money)] underline underline-offset-2"
+                        >
+                          explorer ↗
+                        </a>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="k-mono px-3 py-3 text-right text-[13px] font-bold">
                     {r.amount.toLocaleString()}
                     {r.bonus ? <span className="text-[10.5px] text-[var(--k-money)]"> +{r.bonus}</span> : null}
