@@ -51,3 +51,7 @@ test-ledger/
 
 # Optional local-only sensitive notes
 docs/private/
+
+# OMC operational artifacts
+.omc/
+frontend/.omc/

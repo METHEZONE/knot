@@ -17,6 +17,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
   return proxy(request, context);
 }
 
+// apiClient가 PATCH /onboarding, DELETE /brand/promotions/{id}를 쓴다 —
+// 프록시에 메서드가 없으면 브라우저에서 405로 죽는다.
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  return proxy(request, context);
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  return proxy(request, context);
+}
+
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
   const url = new URL(request.url);

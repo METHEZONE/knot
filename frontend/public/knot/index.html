@@ -518,12 +518,12 @@
   <p class="lead reveal">첫 딜은 이미 진행 중이에요. 다음 매듭의 주인공은 당신.</p>
 
   <div class="demo-row reveal squig-2">
-    <a class="demo-btn" href="/signup/brand">
+    <a class="demo-btn" href="/auth?role=brand" target="_top">
       <span class="demo-kicker">데모 둘러보기</span>
       <span class="demo-main">브랜드로 들어가기 🏪</span>
       <span class="demo-sub">내 에이전트가 크리에이터 찾는 걸 지켜보기</span>
     </a>
-    <a class="demo-btn" href="/signup/creator">
+    <a class="demo-btn" href="/auth?role=creator" target="_top">
       <span class="demo-kicker">데모 둘러보기</span>
       <span class="demo-main">크리에이터로 들어가기 ⭐</span>
       <span class="demo-sub">내 에이전트가 받아온 딜 확인하기</span>
@@ -703,6 +703,18 @@
   if (prefersReduced) {
     document.querySelectorAll('animate').forEach(function (a) { a.remove(); });
   }
+})();
+</script>
+<script>
+/* basePath 대응 — thezonebio.com/knot처럼 서브패스로 서빙되면 이 파일은
+   /knot/knot/index.html에서 열린다. 절대경로 링크(/auth 등)에 접두사를 붙인다. */
+(function () {
+  var m = location.pathname.match(/^(.+)\/knot\/index\.html$/);
+  var base = m ? m[1] : '';
+  if (!base) return;
+  document.querySelectorAll('a[href^="/"]').forEach(function (a) {
+    a.setAttribute('href', base + a.getAttribute('href'));
+  });
 })();
 </script>
 </body>

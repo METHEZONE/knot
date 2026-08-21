@@ -11,6 +11,8 @@ const basePath = process.env.KNOT_BASE_PATH ?? "";
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
   output: "standalone",
+  // 라이브 데모 화면 녹화 시 좌하단 dev 인디케이터가 잡히지 않도록.
+  devIndicators: false,
   async headers() {
     return [
       {

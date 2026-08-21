@@ -16,6 +16,13 @@ const hand = localFont({
   display: "swap",
 });
 
+/** Pretendard — /b·/c 라이브 데모 셸 전용의 클린 산세리프 (로컬 파일, 네트워크 무관). */
+const pretendard = localFont({
+  src: "./fonts/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  display: "swap",
+});
+
 /**
  * Money, hashes, ids and policy JSON stay in mono. In a hand-drawn UI the
  * numbers are the one thing that must never look approximate.
@@ -39,7 +46,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${hand.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${hand.variable} ${pretendard.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <SquiggleFilters />
