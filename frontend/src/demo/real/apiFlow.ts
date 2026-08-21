@@ -58,7 +58,10 @@ async function ensureBrandOnboarded(brand: BrandProfile) {
     {
       brandName: brand.name || "브랜드",
       websiteUrl: /^https?:\/\//.test(brand.url) ? brand.url : `https://${brand.url || "example.com"}`,
-      categories: (brand.tone.length ? brand.tone : ["lifestyle"]).slice(0, 3),
+      // brand.tone is style adjectives (따뜻한/미니멀 등), not a business category —
+      // keep this aligned with ensureCreatorOnboarded's categories so demo discovery
+      // reliably finds a match regardless of what a real site scan returns.
+      categories: ["lifestyle", "beauty", "food"],
       targetAudience: brand.audience || "20-34 관심 고객",
       description: brand.intro || brand.tagline || "",
       restrictedClaims: [],
@@ -97,7 +100,10 @@ export async function createRealPromotionAndAgreement(brand: BrandProfile, spec:
       productName: brand.name || "협찬 제품",
       title: `${brand.name || "브랜드"} × 크리에이터 협찬`,
       objective: spec.goal || "제품 인지도 확대",
-      categories: (brand.tone.length ? brand.tone : ["lifestyle"]).slice(0, 3),
+      // brand.tone is style adjectives (따뜻한/미니멀 등), not a business category —
+      // keep this aligned with ensureCreatorOnboarded's categories so demo discovery
+      // reliably finds a match regardless of what a real site scan returns.
+      categories: ["lifestyle", "beauty", "food"],
       targetAudience: brand.audience || "20-34 관심 고객",
       totalBudget: Math.max(spec.budgetUsdc, spec.maxPerDealUsdc),
       initialOffer: Math.max(1, Math.round(spec.maxPerDealUsdc * 0.7)),
@@ -105,8 +111,9 @@ export async function createRealPromotionAndAgreement(brand: BrandProfile, spec:
       autoAcceptCeiling: spec.maxPerDealUsdc,
       maximumRounds: 5,
       deliverables: [{ format: "reel", count: 1 }],
-      usageRights: "3_MONTHS",
-      deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+      usageRights: "paidBoost30d",
+      // Backend expects a plain date (pydantic `date`), not a full ISO datetime.
+      deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString().slice(0, 10),
       prohibitedClaims: [],
     },
     `demo-promo-${Date.now()}`,
