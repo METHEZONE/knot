@@ -13,6 +13,7 @@ import {
   startRealChain,
   useDemo,
 } from "@/demo/engine/store";
+import { useKnotSession } from "@/demo/auth/session";
 import { explorerUrl } from "@/demo/real/apiFlow";
 import { Badge, Button, SectionLabel } from "@/demo/ui/primitives";
 
@@ -37,7 +38,24 @@ function TxLink({ signature, label }: { signature: string; label: string }) {
 export function RealChainCard({ role }: { role: "brand" | "creator" }) {
   const s = useDemo();
   const real = s.real;
+  const session = useKnotSession();
   const [busy, setBusy] = useState(false);
+
+  // "지갑으로 로그인"은 Firebase 토큰이 없어서 실제 백엔드 호출이 전부 401난다 —
+  // 이메일/구글/페르소나 로그인일 때만 이 카드의 버튼들을 보여준다.
+  if (session?.method === "wallet") {
+    return (
+      <div className="k-card px-4 py-3.5">
+        <div className="flex items-center justify-between">
+          <SectionLabel>실시간 devnet 증빙</SectionLabel>
+          <Badge tone="neutral">로그인 필요</Badge>
+        </div>
+        <p className="mt-3 text-[12.5px] text-[var(--k-muted)]">
+          지갑 로그인에서는 이 기능을 쓸 수 없어요 — 이메일·구글·데모 페르소나 로그인에서 사용 가능합니다.
+        </p>
+      </div>
+    );
+  }
 
   async function withBusy(fn: () => Promise<void>) {
     if (busy) return;
