@@ -36,7 +36,10 @@ async function proxyUpstream(req: Request, path: string): Promise<Response | nul
 }
 
 export async function POST(req: Request) {
-  const proxied = await proxyUpstream(req, "/api/knot/chat");
+  // 이 배포에 로컬 LLM 키가 있으면(Cloud Run의 Vertex, 또는 Anthropic 키가 심어진 배포)
+  // 프록시 왕복 없이 바로 로컬에서 처리한다 — Vercel 서버리스 함수의 실행시간 제한이
+  // 업스트림 프록시(사이트 fetch+LLM 왕복 ~10초+)를 끊어버리는 문제를 피한다.
+  const proxied = llmConfigured() ? null : await proxyUpstream(req, "/api/knot/chat");
   if (proxied) return proxied;
   const body = (await req.json().catch(() => ({}))) as {
     turns?: ChatTurn[];
