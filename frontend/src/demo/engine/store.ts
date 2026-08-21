@@ -32,7 +32,7 @@ import {
   scanSequence,
 } from "./script";
 
-const LS_KEY = "knot-demo-state-v1";
+const LS_KEY = "knot-demo-state-v2"; // v1: 무드빔 목업 시절 상태 — 키 승격으로 전면 초기화
 const CHANNEL = "knot-demo-v1";
 
 function initialState(): DemoState {

@@ -80,13 +80,13 @@ function BudgetManualInput() {
   const totalN = Number(total);
   const capN = Number(cap);
   const withinBalance = realUsdc === null || totalN <= realUsdc;
-  const valid = total !== "" && cap !== "" && totalN > 0 && capN >= 10 && capN <= totalN && withinBalance;
+  const valid = total !== "" && cap !== "" && totalN > 0 && capN >= 5 && capN <= totalN && withinBalance;
   const error =
     total !== "" && cap !== "" && !valid
       ? !withinBalance
         ? `지갑 잔액(${formatUsdc(realUsdc ?? 0)} USDC)을 넘는 예산이에요`
-        : capN < 10
-          ? "딜당 한도는 최소 10 USDC예요"
+        : capN < 5
+          ? "딜당 한도는 최소 5 USDC예요"
           : "딜당 한도는 총예산보다 클 수 없어요"
       : null;
 

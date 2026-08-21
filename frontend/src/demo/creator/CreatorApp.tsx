@@ -135,17 +135,21 @@ export function CreatorApp() {
             <>
               <span className="text-[11px] font-bold text-[var(--k-muted)]">지갑 · devnet</span>
               <span className="k-mono text-[14px] font-bold">
-                {realUsdc !== null ? `${formatUsdc(realUsdc)} USDC` : balanceFailed ? "— (조회 실패)" : "조회 중…"}
+                {realUsdc !== null
+                  ? `${formatUsdc(realUsdc + Math.max(0, s.creatorWalletUsdc - 1240))} USDC`
+                  : balanceFailed
+                    ? "— (조회 실패)"
+                    : "조회 중…"}
               </span>
               <AnimatePresence>
-                {realDelta && (
+                {(realDelta || walletDelta) && (
                   <motion.span
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: -14 }}
                     exit={{ opacity: 0 }}
                     className="k-mono absolute -top-1 right-2 text-[12px] font-bold text-[var(--k-money)]"
                   >
-                    +{formatUsdc(realDelta)}
+                    +{formatUsdc((realDelta ?? 0) + (realDelta ? 0 : (walletDelta ?? 0)))}
                   </motion.span>
                 )}
               </AnimatePresence>

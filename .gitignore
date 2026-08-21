@@ -55,3 +55,4 @@ docs/private/
 # OMC operational artifacts
 .omc/
 frontend/.omc/
+.vercel
