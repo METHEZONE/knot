@@ -1,4 +1,18 @@
 import type { A2AMessage, CampaignSpec, CreatorCard, Deal, MilestoneState } from "./types";
+import {
+  ProductApiClient,
+  ProductApiError,
+  type ApiAgreementEscrowBundle,
+  type ApiAutoSettlement,
+  type ApiEscrow,
+  type ApiEvidence,
+  type ApiSettlement,
+} from "@/product/apiClient";
+import {
+  connectPhantomWallet,
+  sendPreparedSolanaTransaction,
+  signPhantomMessage,
+} from "@/features/wallet/phantom";
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -71,6 +85,7 @@ type ApiAgreement = {
   status?: string;
   termsHash?: string;
   terms?: ApiTerms;
+  creatorAgentId?: string;
   productName?: string;
   promotionTitle?: string;
 };
@@ -86,6 +101,19 @@ export type LiveApiResult = {
   messages: A2AMessage[];
   deal: Deal | null;
   spec: CampaignSpec;
+};
+
+export type LiveFundingResult = {
+  escrow: ApiEscrow;
+  signature: string | null;
+};
+
+export type LiveEvidenceSettlementResult = {
+  evidence: ApiEvidence;
+  escrowBundle: ApiAgreementEscrowBundle;
+  autoSettlement?: ApiAutoSettlement;
+  outcome?: string;
+  reasonCodes?: string[];
 };
 
 const PROMOTION_ID =
@@ -162,6 +190,101 @@ function isAgreementReady(negotiation: ApiNegotiation, deal: Deal | null) {
   return negotiation.status === "AGREED" && Boolean(deal);
 }
 
+export async function fundLiveAgreementEscrow(agreementId: string): Promise<LiveFundingResult> {
+  const client = new ProductApiClient();
+  const wallet = await connectPhantomWallet();
+  await proveAndSaveWallet(client, wallet.address);
+  const prepared = await client.prepareEscrowFunding(
+    agreementId,
+    uniqueRequestKey(`demo-funding-prepare-${agreementId}-${wallet.address}`),
+  );
+  if (!prepared.funding) {
+    return {
+      escrow: prepared.escrow,
+      signature: prepared.escrow.fundingTransactionSignature ?? prepared.escrow.lockSignature ?? null,
+    };
+  }
+  if (prepared.funding.brandAuthority !== wallet.address) {
+    throw new Error(
+      `연결된 브랜드 지갑이 이 계약의 예치 지갑과 다릅니다. 연결됨 ${shortAddress(
+        wallet.address,
+      )}, 필요 ${shortAddress(prepared.funding.brandAuthority)}`,
+    );
+  }
+  const signature = await sendPreparedSolanaTransaction(prepared.funding);
+  const confirmed = await client.confirmEscrowFunding(
+    agreementId,
+    signature,
+    uniqueRequestKey(`demo-funding-confirm-${agreementId}-${signature}`),
+  );
+  return { escrow: confirmed.escrow, signature };
+}
+
+export async function submitAndSettleLiveEvidence(input: {
+  agreementId: string;
+  creatorAgentId: string;
+  milestoneId: string;
+  url: string;
+}): Promise<LiveEvidenceSettlementResult> {
+  const client = new ProductApiClient();
+  let evidence: ApiEvidence | null = null;
+  try {
+    evidence = await client.submitEvidence(
+      { agreementId: input.agreementId, creatorAgentId: input.creatorAgentId },
+      input.milestoneId,
+      input.url,
+    );
+  } catch (caught) {
+    if (caught instanceof ProductApiError && caught.code === "EVIDENCE_ALREADY_SUBMITTED") {
+      evidence = evidenceFromApiError(caught);
+    } else {
+      throw caught;
+    }
+  }
+  if (!evidence) {
+    throw new Error("정산 증빙을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+  }
+  const verified = await client.verifyEvidence(evidence.evidenceId);
+  const escrowBundle = await client.getAgreementEscrow(input.agreementId);
+  return {
+    evidence: verified.evidence,
+    escrowBundle,
+    autoSettlement: verified.autoSettlement,
+    outcome: verified.outcome,
+    reasonCodes: verified.reasonCodes,
+  };
+}
+
+export function settlementSummaryFromBundle(bundle: ApiAgreementEscrowBundle) {
+  const escrow = bundle.escrow;
+  const settlements = bundle.settlements ?? [];
+  const settlement = settlements[settlements.length - 1] ?? null;
+  return {
+    escrowId: escrow?.escrowId ?? null,
+    escrowStatus: escrow?.status ?? null,
+    fundingSignature: escrow?.fundingTransactionSignature ?? escrow?.lockSignature ?? null,
+    settlementStatus: settlement?.status ?? null,
+    settlementSignature: settlement?.signature ?? null,
+    releasedAmountUsdc: baseUnitsToUsdc(escrow?.releasedAmountBaseUnits),
+    settlements,
+  };
+}
+
+export function applySettlementsToDeal(deal: Deal, settlements: ApiSettlement[]) {
+  const released = new Set(
+    settlements
+      .filter((settlement) => settlement.status === "CONFIRMED" || Boolean(settlement.signature))
+      .map((settlement) => settlement.milestoneId),
+  );
+  for (const milestone of deal.milestones) {
+    milestone.status = released.has(milestone.id) ? "released" : "active";
+  }
+  const releasedPct = deal.milestones
+    .filter((milestone) => milestone.status === "released")
+    .reduce((sum, milestone) => sum + milestone.pct, 0);
+  deal.starPct = Math.min(100, releasedPct || deal.starPct);
+}
+
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
@@ -176,6 +299,23 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(errorMessage(body.detail) ?? `API 요청 실패 (${response.status})`);
   }
   return body.data;
+}
+
+async function proveAndSaveWallet(client: ProductApiClient, address: string) {
+  const { challenge } = await client.createWalletChallenge(address);
+  const signature = await signPhantomMessage(challenge.message);
+  await client.saveWalletAddress(address, {
+    challengeId: challenge.challengeId,
+    signature,
+  });
+}
+
+function evidenceFromApiError(error: ProductApiError): ApiEvidence | null {
+  const detail = error.detail;
+  if (!detail || typeof detail !== "object" || !("evidence" in detail)) return null;
+  const evidence = (detail as { evidence?: unknown }).evidence;
+  if (!evidence || typeof evidence !== "object" || !("evidenceId" in evidence)) return null;
+  return evidence as ApiEvidence;
 }
 
 function cardFromCandidate(candidate: ApiCandidate): CreatorCard {
@@ -382,4 +522,20 @@ function randomId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : Math.random().toString(16).slice(2);
+}
+
+function uniqueRequestKey(prefix: string) {
+  return `${prefix}-${randomId()}`;
+}
+
+function shortAddress(value: string) {
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function baseUnitsToUsdc(value: string | undefined) {
+  if (!value) return "0";
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return "0";
+  return (raw / 1_000_000).toLocaleString();
 }

@@ -38,18 +38,24 @@ escrow or settlement state.
 
 ## Plan
 
-1. Bring the demo workspace routes/components into this branch.
-2. Keep the existing `/api/v1` proxy and connect the demo run action to real
+1. [x] Bring the demo workspace routes/components into this branch.
+2. [x] Keep the existing `/api/v1` proxy and connect the demo run action to real
    Product API endpoints.
-3. Make `/` enter the demo workspace and keep `/b`, `/c`, `/b/graph`, `/auth`
+3. [x] Make `/` enter the demo workspace and keep `/b`, `/c`, `/b/graph`, `/auth`
    available.
-4. Verify local typecheck, tests, and production build.
-5. Deploy only `knot-web` after explicit approval, with API mode and existing
+4. [x] Connect demo approval/post-submission actions to the real escrow funding,
+   evidence verification, and settlement APIs. The UI must still require
+   Phantom signatures and must not fabricate successful Solana transactions.
+5. [x] Add demo creator settlement wallet fields to the persona seed output so
+   refreshed dev/prod demo data can pass escrow prepare.
+6. [x] Verify local typecheck, tests, and production build.
+7. [ ] Refresh deployed Firestore demo seed after explicit approval.
+8. [ ] Deploy only `knot-web` after explicit approval, with API mode and existing
    Cloud Run API URL.
-6. QA the deployed Cloud Run web URL:
+9. [ ] QA the deployed Cloud Run web URL:
    - page routes
    - `/api/v1` proxy
    - demo promotion read
    - negotiation/agreement read
    - escrow read state
-7. Update `docs/IMPLEMENTATION_STATUS.md` with final result.
+10. [x] Update `docs/IMPLEMENTATION_STATUS.md` with implementation result.

@@ -1835,3 +1835,44 @@ Updated: 2026-08-20 KST
 - No Cloud Run redeploy has been performed for this UI branch yet.
 - No wallet funding or Solana devnet escrow transaction was performed in this
   pass.
+
+## 2026-08-21 Demo Workspace Escrow And Settlement Bridge
+
+### Changed
+
+- Connected the demo workspace approval CTA to the real wallet-backed escrow
+  funding path:
+  - Phantom connect
+  - wallet ownership challenge/signature
+  - `POST /api/v1/agreements/{agreementId}/escrow/prepare`
+  - Phantom Solana transaction signature
+  - `POST /api/v1/agreements/{agreementId}/escrow/confirm`
+- Connected creator post URL submission in the demo workspace to the real
+  evidence and settlement path:
+  - `POST /api/v1/agreements/{agreementId}/evidence`
+  - `POST /api/v1/evidence/{evidenceId}:verify`
+  - refresh `GET /api/v1/agreements/{agreementId}/escrow`
+  - reflect confirmed settlement signatures in the deal timeline.
+- Added demo creator settlement wallet fields to persona seed documents. These
+  are synthetic devnet demo destinations, not public creator data.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `./.venv/bin/python -m ruff check backend/libs/demo_seed/personas.py`:
+  passed.
+- `./.venv/bin/python backend/scripts/seed_demo_personas.py --dry-run --json`:
+  10 brands, 14 creators, 5 promotions, 146 documents, no validation errors.
+- `git diff --check`: passed.
+- `./.venv/bin/pytest backend/tests/test_demo_persona_seed.py backend/tests/test_api_escrow.py backend/tests/test_api_promotions.py -q`:
+  61 passed, 2 warnings.
+
+### Scope Guard
+
+- No actual Phantom signing, escrow funding, or milestone release was executed
+  by this code change.
+- The deployed Firestore seed must be refreshed before live funding, otherwise
+  existing creator personas may still lack `walletAddress` and escrow prepare
+  will return `CREATOR_WALLET_REQUIRED`.

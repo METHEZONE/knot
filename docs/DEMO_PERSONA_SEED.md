@@ -248,6 +248,11 @@ Creator policies intentionally differ so negotiation outcomes are not identical:
 All policy values are synthetic and use low USDC values for devnet/faucet-safe
 demo runs.
 
+Demo creator profiles also include a devnet settlement destination so the live
+escrow demo can be funded without presenting a real creator's private wallet as
+public data. The wallet fields are marked in `syntheticFields` and use
+`walletCustody = DEMO_SEEDED_DESTINATION`.
+
 ## Commands
 
 Dry-run planned documents:

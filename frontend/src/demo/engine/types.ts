@@ -170,6 +170,13 @@ export type CampaignState = {
     negotiationId: string | null;
     agreementId: string | null;
     agreementStatus: string | null;
+    creatorAgentId?: string | null;
+    escrowId?: string | null;
+    escrowStatus?: string | null;
+    fundingSignature?: string | null;
+    evidenceId?: string | null;
+    settlementStatus?: string | null;
+    settlementSignature?: string | null;
   };
 };
 

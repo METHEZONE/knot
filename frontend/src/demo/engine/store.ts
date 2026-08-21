@@ -7,7 +7,14 @@
 
 import { useSyncExternalStore } from "react";
 import { openReport } from "@/demo/reportClient";
-import { liveApiEnabled, runLiveDemoNegotiation } from "./liveApi";
+import {
+  applySettlementsToDeal,
+  fundLiveAgreementEscrow,
+  liveApiEnabled,
+  runLiveDemoNegotiation,
+  settlementSummaryFromBundle,
+  submitAndSettleLiveEvidence,
+} from "./liveApi";
 import type { ChatChip, DemoAction, DemoState, FeedTone, SequenceStep } from "./types";
 import {
   autopilotSequence,
@@ -75,6 +82,8 @@ let channel: BroadcastChannel | null = null;
 let role: "host" | "mirror" = "mirror";
 const listeners = new Set<() => void>();
 const timers = new Set<ReturnType<typeof setTimeout>>();
+let liveFundingBusy = false;
+let liveSettlementBusy = false;
 
 function notify() {
   listeners.forEach((l) => l());
@@ -359,21 +368,59 @@ export function clickChip(chip: ChatChip) {
 
 export function approveDeals() {
   if (state.campaign?.live?.agreementStatus === "FUNDING_REQUIRED") {
-    mutate((d) => {
-      feed(
-        d,
-        "🔐",
-        "실제 Agreement 생성 완료 — 에스크로 예치는 브랜드 지갑 서명 후 진행",
-        "warn",
-      );
-      agentSays(
-        d,
-        `Agreement ${state.campaign?.live?.agreementId ?? ""}까지 생성됐어요. 이 화면은 실제 API 협상 결과를 보여주고 있고, 온체인 에스크로 예치는 브랜드 지갑 서명이 필요한 단계라 fake tx를 만들지 않았습니다.`,
-      );
-    });
+    void fundLiveEscrowFromDemo();
     return;
   }
   playSequence(knotSequence(state.brand));
+}
+
+async function fundLiveEscrowFromDemo() {
+  const agreementId = state.campaign?.live?.agreementId;
+  if (!agreementId || liveFundingBusy) return;
+  liveFundingBusy = true;
+  mutate((d) => {
+    feed(d, "🔐", "브랜드 지갑 연결과 소유 확인 서명을 시작합니다", "info");
+    agentSays(
+      d,
+      "이제 실제 Solana devnet 에스크로 예치 단계예요. Phantom에서 지갑 연결, 소유 확인 서명, 거래 서명을 차례로 승인해 주세요.",
+    );
+  });
+  try {
+    const result = await fundLiveAgreementEscrow(agreementId);
+    mutate((d) => {
+      const c = d.campaign;
+      const deal = c?.deals[0];
+      if (!c || !deal || !c.live) return;
+      c.status = "active";
+      c.brief = taskBriefFor(d.brand);
+      c.live.agreementStatus = "FUNDED";
+      c.live.escrowId = result.escrow.escrowId;
+      c.live.escrowStatus = result.escrow.status;
+      c.live.fundingSignature =
+        result.signature ?? result.escrow.fundingTransactionSignature ?? result.escrow.lockSignature ?? null;
+      deal.awaitingPost = true;
+      deal.starPct = Math.max(deal.starPct, 30);
+      for (const milestone of deal.milestones) milestone.status = "active";
+      if (c.live.fundingSignature && !deal.txs.some((tx) => tx.hash === c.live?.fundingSignature)) {
+        deal.txs.push({ label: `에스크로 예치 ${deal.amountUsdc} USDC`, hash: c.live.fundingSignature });
+      }
+      feed(d, "🔒", `Solana devnet 에스크로 예치 완료 — ${deal.amountUsdc} USDC`, "money");
+      agentSays(
+        d,
+        "예치가 확인됐어요. 이제 크리에이터가 게시물 URL을 제출하면 Agent가 증빙을 검토하고, 통과 시 마일스톤 정산을 실행합니다.",
+      );
+    });
+  } catch (error) {
+    mutate((d) => {
+      feed(d, "🛑", `에스크로 예치 실패 — ${readableError(error)}`, "warn");
+      agentSays(
+        d,
+        `에스크로 예치가 완료되지 않았습니다. ${readableError(error)} 성공한 것처럼 tx를 만들지는 않았어요.`,
+      );
+    });
+  } finally {
+    liveFundingBusy = false;
+  }
 }
 
 async function startLiveExpedition() {
@@ -395,6 +442,7 @@ async function startLiveExpedition() {
         negotiationId: null,
         agreementId: null,
         agreementStatus: null,
+        creatorAgentId: null,
       },
     };
     feed(d, "🧭", "GCP API로 Creator Discovery 실행 중", "info");
@@ -413,6 +461,7 @@ async function startLiveExpedition() {
         negotiationId: result.negotiation.negotiationId,
         agreementId: result.agreement?.agreementId ?? null,
         agreementStatus: result.agreement?.status ?? null,
+        creatorAgentId: result.agreement?.creatorAgentId ?? result.negotiation.creatorAgentId ?? null,
       };
       feed(
         d,
@@ -504,7 +553,89 @@ async function startLiveExpedition() {
 function handleSubmitPost(url: string) {
   const hero = state.campaign?.deals[0];
   if (!hero?.awaitingPost) return;
+  if (state.campaign?.live?.mode === "api") {
+    void submitLivePostAndSettle(url);
+    return;
+  }
   playSequence(postSubmittedSequence(url, state.brand));
+}
+
+async function submitLivePostAndSettle(url: string) {
+  const campaign = state.campaign;
+  const deal = campaign?.deals[0];
+  const agreementId = campaign?.live?.agreementId;
+  const creatorAgentId = campaign?.live?.creatorAgentId;
+  const milestoneId = deal?.milestones.find((milestone) => milestone.id !== "deposit")?.id;
+  if (!deal || !agreementId || !creatorAgentId || !milestoneId || liveSettlementBusy) return;
+  if (campaign?.status === "completed") return;
+  liveSettlementBusy = true;
+  mutate((d) => {
+    const current = d.campaign?.deals[0];
+    if (!current) return;
+    current.postUrl = url.trim();
+    current.awaitingPost = false;
+    current.verify = null;
+    current.starPct = Math.max(current.starPct, 65);
+    feed(d, "📤", "게시물 URL 제출 — 실제 증빙 검증 API 호출", "info");
+  });
+  try {
+    const result = await submitAndSettleLiveEvidence({
+      agreementId,
+      creatorAgentId,
+      milestoneId,
+      url,
+    });
+    const summary = settlementSummaryFromBundle(result.escrowBundle);
+    mutate((d) => {
+      const c = d.campaign;
+      const current = c?.deals[0];
+      if (!c || !current || !c.live) return;
+      c.live.evidenceId = result.evidence.evidenceId;
+      c.live.escrowId = summary.escrowId;
+      c.live.escrowStatus = summary.escrowStatus;
+      c.live.fundingSignature = summary.fundingSignature;
+      c.live.settlementStatus = summary.settlementStatus;
+      c.live.settlementSignature = summary.settlementSignature;
+      current.verify = [
+        { label: "URL 접근 가능", ok: result.evidence.status === "PASSED" },
+        { label: "브랜드/광고 조건 검토", ok: result.outcome === "VERIFIED" },
+        { label: "자동 정산 실행", ok: Boolean(result.autoSettlement?.released || summary.settlementSignature) },
+      ];
+      applySettlementsToDeal(current, summary.settlements);
+      if (summary.settlementSignature && !current.txs.some((tx) => tx.hash === summary.settlementSignature)) {
+        current.txs.push({ label: `마일스톤 정산 ${summary.releasedAmountUsdc} USDC`, hash: summary.settlementSignature });
+      }
+      if (result.outcome === "VERIFIED" && (result.autoSettlement?.released || summary.settlementSignature)) {
+        current.metrics = { views: "검증 완료", saves: "검증 완료", ctr: "정산 완료", cpmDelta: "devnet" };
+        c.status = "completed";
+        c.reportReady = true;
+        d.creatorWalletUsdc += current.amountUsdc;
+        d.burstSeq += 1;
+        feed(d, "💸", `증빙 통과 — Creator 지갑으로 ${summary.releasedAmountUsdc} USDC 정산`, "money");
+        agentSays(
+          d,
+          `정산까지 완료됐어요. Evidence ${result.evidence.evidenceId}, Escrow ${summary.escrowId}, 정산 tx ${summary.settlementSignature ?? "확인 대기"}가 기록됐습니다.`,
+          [{ id: "open-report", label: "📊 리포트 열기" }],
+        );
+      } else {
+        current.awaitingPost = true;
+        feed(d, "🛑", `증빙 검토 보류 — ${result.reasonCodes?.join(", ") || result.outcome || "확인 필요"}`, "warn");
+        agentSays(d, "증빙 검토가 바로 정산으로 이어지지 않았어요. URL 조건을 확인하고 다시 제출해 주세요.");
+      }
+    });
+  } catch (error) {
+    mutate((d) => {
+      const current = d.campaign?.deals[0];
+      if (current) {
+        current.awaitingPost = true;
+        current.starPct = Math.min(current.starPct, 70);
+      }
+      feed(d, "🛑", `정산 실패 — ${readableError(error)}`, "warn");
+      agentSays(d, `정산이 완료되지 않았습니다. ${readableError(error)}`);
+    });
+  } finally {
+    liveSettlementBusy = false;
+  }
 }
 
 /** 크리에이터 창에서 호출 — 게시물 URL 제출. 미러면 호스트로 보낸다. */
@@ -622,6 +753,11 @@ async function answerFreeTextInner() {
     d.agentTyping = false;
     d.chat.push({ id: nextId(), role: "agent", text: reply, at: Date.now() });
   });
+}
+
+function readableError(caught: unknown) {
+  if (caught instanceof Error && caught.message) return caught.message;
+  return String(caught);
 }
 
 function composeStatusReply(): string {

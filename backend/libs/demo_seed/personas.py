@@ -16,6 +16,7 @@ DEMO_SOURCE = "PUBLIC_DATA"
 SYNTHETIC_PROVENANCE = "SYNTHETIC_DEMO"
 AI_PROVENANCE = "AI_DERIVED"
 DEMO_AUTH_PASSWORD = "000000"
+DEMO_CREATOR_SETTLEMENT_WALLET = "BTsMioiaKhxQzPBJV2hNYp6xHovY85dnE73v6CSqRQsX"
 DEMO_AUTH_ALIASES = (
     {
         "uid": "user-brand-1",
@@ -389,6 +390,13 @@ def _creator_profile_document(
                 "derivedMetricFields": seed.get("derivedMetricFields", []),
             },
             "dataUsage": _data_usage(demo_permission=False),
+            "walletAddress": str(seed.get("demoSettlementWallet", DEMO_CREATOR_SETTLEMENT_WALLET)),
+            "walletNetwork": "devnet",
+            "walletCustody": "DEMO_SEEDED_DESTINATION",
+            "walletSource": {
+                "provenance": SYNTHETIC_PROVENANCE,
+                "purpose": "Solana devnet escrow settlement demo destination",
+            },
             "syntheticFields": [
                 "rateCard",
                 "minDaysToPost",
@@ -398,6 +406,10 @@ def _creator_profile_document(
                 "availableFrom",
                 "completedDealCount",
                 "demoNegotiationPersona",
+                "walletAddress",
+                "walletNetwork",
+                "walletCustody",
+                "walletSource",
             ],
             "demoNegotiationPersona": {
                 "label": seed["persona"],
