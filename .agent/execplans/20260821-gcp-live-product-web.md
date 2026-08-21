@@ -69,7 +69,7 @@ escrow or settlement state.
 3. [x] Fix transaction rows in Brand and Creator settlement panels so the label
    and hash wrap inside the card instead of pushing the template width.
 4. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
-5. [ ] Deploy the UI polish build after explicit approval.
+5. [x] Deploy the UI polish build after explicit approval.
 
 ## 2026-08-21 Real Onboarding API Follow-Up
 
@@ -95,4 +95,41 @@ escrow or settlement state.
    backend wallet challenge/signature verification before updating the local
    session display.
 8. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
-9. [ ] Deploy the real onboarding build after explicit approval.
+9. [x] Deploy the real onboarding build after explicit approval.
+
+### Deployment Result
+
+- Built web image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:e989fd7`
+  with Cloud Build `d213eed7-db94-41af-bea3-562cca34a878`.
+- Deployed Cloud Run service `knot-web` revision `knot-web-00031-x7w` with
+  100% traffic.
+- Live URL: `https://knot-web-7k3walthgq-uc.a.run.app`.
+
+### Live QA
+
+- `GET /b`: 200.
+- `GET /c`: 200.
+- `GET /auth`: 200.
+- `GET /b/graph`: 200.
+- `GET /api/v1/promotions/promotion-demo-cheriexx`: 200.
+- Authenticated demo brand `GET /api/v1/me`: returned role `BRAND`, status
+  `COMPLETED`, brand `brand-demo-cheriexx`, agent
+  `agent-demo-brand-cheriexx`.
+- Deployed brand onboarding path:
+  - `POST /api/v1/analyses/product`: `READY_FOR_CONFIRMATION`,
+    provider `vertex-gemini`, no fallback.
+  - `POST /api/v1/analyses/{analysisId}:confirm`: `CONFIRMED`.
+  - `POST /api/v1/me/brand-profile`: returned existing completed brand profile
+    and agent for the demo account.
+- Authenticated demo creator `GET /api/v1/me`: returned role `CREATOR`, status
+  `COMPLETED`, creator `creator-demo-ssin`, agent
+  `agent-demo-creator-ssin`.
+- Deployed creator onboarding analysis path:
+  - YouTube analysis endpoint returned `READY_FOR_CONFIRMATION`; the tested
+    `@geekble` URL used deterministic limited analysis because oEmbed returned
+    `youtube_oembed_http_404`.
+  - Instagram analysis endpoint returned `READY_FOR_CONFIRMATION`, provider
+    `apify-instagram-profile-scraper`, no fallback.
+- Escrow read path returned `escrow=null`, `settlements=[]` for a
+  `FUNDING_REQUIRED` Agreement, which is expected before Phantom signs funding.

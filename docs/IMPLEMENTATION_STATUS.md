@@ -1974,3 +1974,38 @@ Updated: 2026-08-20 KST
 - Creator onboarding was already wired to `POST /api/v1/analyses/creator-profile`
   and `POST /api/v1/me/creator-profile`; this pass focused on the demo `/auth`,
   `/b`, and `/c` paths that could previously succeed with local state alone.
+
+### Deploy And Live QA
+
+- Built web image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:e989fd7`
+  with Cloud Build `d213eed7-db94-41af-bea3-562cca34a878`.
+- Deployed Cloud Run service `knot-web` revision `knot-web-00031-x7w`, serving
+  100% traffic.
+- Live Cloud Run web URL:
+  `https://knot-web-7k3walthgq-uc.a.run.app`
+- Live route/API smoke:
+  - `/b`: 200
+  - `/c`: 200
+  - `/auth`: 200
+  - `/b/graph`: 200
+  - `/api/v1/promotions/promotion-demo-cheriexx`: 200
+- Authenticated brand onboarding smoke through the deployed web proxy:
+  - `GET /api/v1/me`: role `BRAND`, status `COMPLETED`,
+    brand `brand-demo-cheriexx`, agent `agent-demo-brand-cheriexx`.
+  - `POST /api/v1/analyses/product`: `READY_FOR_CONFIRMATION`, provider
+    `vertex-gemini`, no fallback.
+  - `POST /api/v1/analyses/{analysisId}:confirm`: `CONFIRMED`.
+  - `POST /api/v1/me/brand-profile`: returned existing completed brand profile
+    and agent.
+- Authenticated creator onboarding smoke through the deployed web proxy:
+  - `GET /api/v1/me`: role `CREATOR`, status `COMPLETED`,
+    creator `creator-demo-ssin`, agent `agent-demo-creator-ssin`.
+  - YouTube profile analysis endpoint returned `READY_FOR_CONFIRMATION`; the
+    tested `@geekble` URL used deterministic limited analysis because oEmbed
+    returned `youtube_oembed_http_404`.
+  - Instagram profile analysis endpoint returned `READY_FOR_CONFIRMATION`,
+    provider `apify-instagram-profile-scraper`, no fallback.
+- Escrow read smoke returned `escrow=null`, `settlements=[]` for a
+  `FUNDING_REQUIRED` Agreement. No Phantom signature, escrow funding, or
+  settlement release was executed.
