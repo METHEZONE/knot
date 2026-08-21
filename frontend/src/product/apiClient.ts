@@ -536,6 +536,7 @@ export type ApiDemoBrandPersona = {
   kind: "BRAND";
   profileId: string;
   displayName: string;
+  logoUrl?: string | null;
   categories: string[];
   description?: string | null;
   websiteUrl?: string | null;

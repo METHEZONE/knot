@@ -1774,6 +1774,12 @@ Updated: 2026-08-20 KST
   required category coverage.
 - Cleared the unresolved Instagram candidate list because the requested
   candidates now have seed persona documents.
+- Added demo-safe profile images:
+  - Brand profiles write `logoUrl` / `logoImageUrl`.
+  - Creator profiles write `profileImageUrl`.
+  - Generated fallback images are marked with `imageSource.provenance =
+    SYNTHETIC_DEMO`.
+- Extended the dev admin demo persona API and card UI to display profile images.
 
 ### Verification
 

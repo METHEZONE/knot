@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 from libs.a2a.registry import creator_agent_registry_entry
 from libs.domain.discovery import build_creator_discovery_projection
@@ -178,9 +179,16 @@ def document_paths_for_reset(document_set: PersonaDocumentSet) -> list[str]:
 
 
 def _brand_document(seed: Mapping[str, object], collected_at: str) -> dict[str, object]:
+    logo_url = str(seed.get("logoUrl") or _demo_avatar_url(str(seed["displayName"]), "brand"))
     return {
         "brandId": seed["brandId"],
         "displayName": seed["displayName"],
+        "logoUrl": logo_url,
+        "logoImageUrl": logo_url,
+        "imageSource": {
+            "type": "GENERATED_DEMO_INITIALS",
+            "provenance": SYNTHETIC_PROVENANCE,
+        },
         "websiteUrl": seed.get("websiteUrl"),
         "categories": seed["categories"],
         "targetAudience": seed["targetAudience"],
@@ -348,9 +356,18 @@ def _creator_profile_document(
         active=True,
     )
     document = model_to_document(creator)
+    snapshot_image_url = _snapshot_thumbnail(snapshot)
+    profile_image_url = snapshot_image_url or _demo_avatar_url(
+        str(seed["displayName"]),
+        "creator",
+    )
     document.update(
         {
-            "profileImageUrl": _snapshot_thumbnail(snapshot),
+            "profileImageUrl": profile_image_url,
+            "imageSource": {
+                "type": "PUBLIC_PROFILE_IMAGE" if snapshot_image_url else "GENERATED_DEMO_INITIALS",
+                "provenance": DEMO_SOURCE if snapshot_image_url else SYNTHETIC_PROVENANCE,
+            },
             "profileType": "DEMO_SEED",
             "primaryPlatform": seed["primaryPlatform"],
             "demoAuth": {
@@ -668,6 +685,18 @@ def _platform_url(platforms: Mapping[str, object], platform: str) -> str | None:
         return None
     url = value.get("url")
     return url if isinstance(url, str) else None
+
+
+def _demo_avatar_url(label: str, kind: str) -> str:
+    palette = "f4b183,92c5de,86c5a8,f6d365,e8a5c9" if kind == "brand" else (
+        "9cc9ff,b8e1dd,ffcf8b,dda0dd,b7d78b"
+    )
+    return (
+        "https://api.dicebear.com/9.x/initials/svg"
+        f"?seed={quote(label)}"
+        f"&backgroundColor={palette}"
+        "&fontWeight=700"
+    )
 
 
 def _required_mapping(document: Mapping[str, object], field_name: str) -> Mapping[str, object]:

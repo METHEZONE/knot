@@ -182,6 +182,12 @@ The seed writes these canonical collections:
 | `promotions/{promotionId}` | Five demo promotions, one per core industry |
 | `analysisJobs/{id}` | Unresolved public-account verification notes |
 
+Brand profiles include `logoUrl` / `logoImageUrl`. Creator profiles include
+`profileImageUrl`. If a provider returns a public SNS profile image, the seed
+uses it. Otherwise the field points to a generated demo initials image and
+stores `imageSource.provenance = SYNTHETIC_DEMO`, so it is not presented as an
+official brand logo or verified creator photo.
+
 ## Matching Connection
 
 The generated creator discovery profiles satisfy the current hard filters:
