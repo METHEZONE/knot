@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDemo, clickChip, sendFreeText } from "@/demo/engine/store";
+import { useDemo, clickChip, sendFreeText, submitBudget } from "@/demo/engine/store";
 import { creatorById } from "@/demo/engine/script";
 import { Yarn } from "@/demo/character/Yarn";
 import { A2ALog, FaceWithAgent, negotiationBadge } from "@/demo/ui/bits";
@@ -61,6 +61,76 @@ function WindowFrame({
       {children}
       {footer}
     </motion.div>
+  );
+}
+
+/** 예산 프리셋 칩 아래 "직접 입력" 폼 — 총예산·딜당한도를 숫자로 직접 넣는다. */
+function BudgetManualInput() {
+  const [open, setOpen] = useState(false);
+  const [total, setTotal] = useState("");
+  const [cap, setCap] = useState("");
+  const totalN = Number(total);
+  const capN = Number(cap);
+  const valid = total !== "" && cap !== "" && totalN > 0 && capN > 0 && capN <= totalN;
+  const error = total !== "" && cap !== "" && !valid ? "딜당 한도는 총예산보다 클 수 없어요" : null;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-2 text-[12px] font-semibold text-[var(--k-muted)] underline-offset-2 hover:text-[var(--k-ink)] hover:underline"
+      >
+        ✏️ 직접 입력할래요
+      </button>
+    );
+  }
+  const submit = () => {
+    if (!valid) return;
+    submitBudget(totalN, capN);
+  };
+  return (
+    <div className="mt-2 rounded-xl border border-[var(--k-line)] bg-white p-2.5">
+      <div className="flex items-center gap-1.5">
+        <div className="flex-1">
+          <div className="mb-0.5 text-[10.5px] font-semibold text-[var(--k-muted)]">총예산 (USDC)</div>
+          <input
+            type="number"
+            min={1}
+            value={total}
+            onChange={(e) => setTotal(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter") submit();
+            }}
+            placeholder="1000"
+            className="k-mono h-8 w-full rounded-lg border border-[var(--k-line-strong)] px-2 text-[13px] outline-none focus:border-[var(--k-ink)]"
+          />
+        </div>
+        <div className="flex-1">
+          <div className="mb-0.5 text-[10.5px] font-semibold text-[var(--k-muted)]">딜당 한도</div>
+          <input
+            type="number"
+            min={1}
+            value={cap}
+            onChange={(e) => setCap(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter") submit();
+            }}
+            placeholder="450"
+            className="k-mono h-8 w-full rounded-lg border border-[var(--k-line-strong)] px-2 text-[13px] outline-none focus:border-[var(--k-ink)]"
+          />
+        </div>
+        <button
+          onClick={submit}
+          disabled={!valid}
+          className="mt-[15px] h-8 rounded-lg bg-[var(--k-ink)] px-3 text-[12px] font-bold text-white disabled:opacity-30"
+        >
+          확인
+        </button>
+      </div>
+      {error && <div className="mt-1.5 text-[11px] font-semibold text-red-500">{error}</div>}
+    </div>
   );
 }
 
@@ -150,6 +220,9 @@ function AgentChatWindow({ onClose }: { onClose: () => void }) {
                     </button>
                   ))}
                 </div>
+              )}
+              {m.chips && m.chips.length > 0 && m.chips[0].id.startsWith("budget-") && s.composeStep === "budget" && (
+                <BudgetManualInput />
               )}
             </div>
           </motion.div>

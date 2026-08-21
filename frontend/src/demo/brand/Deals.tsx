@@ -4,6 +4,7 @@
 
 import { useDemo } from "@/demo/engine/store";
 import { AUTOPILOT_CREATOR, creatorById } from "@/demo/engine/script";
+import { RealChainCard } from "@/demo/real/RealChainCard";
 import { Face } from "@/demo/ui/bits";
 import { Badge, SectionLabel } from "@/demo/ui/primitives";
 
@@ -59,6 +60,7 @@ export function Deals() {
           에이전트가 체결한 계약 전체 — 금액·해시·릴리즈는 온체인 에스크로 기준
         </div>
       </div>
+      <RealChainCard role="brand" />
       <div className="k-card overflow-hidden">
         {rows.length === 0 ? (
           <div className="px-5 py-10 text-center text-[13px] text-[var(--k-muted)]">

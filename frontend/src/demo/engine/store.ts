@@ -7,13 +7,23 @@
 
 import { useSyncExternalStore } from "react";
 import { openReport } from "@/demo/reportClient";
-import type { ChatChip, DemoAction, DemoState, SequenceStep } from "./types";
+import {
+  createRealPromotionAndAgreement,
+  fundRealEscrow,
+  pickEvidenceMilestoneId,
+  registerCreatorWallet,
+  submitRealEvidence,
+} from "@/demo/real/apiFlow";
+import type { ChatChip, DemoAction, DemoState, RealChainState, SequenceStep } from "./types";
 import {
   autopilotSequence,
+  BUDGET_PRESETS,
   buildBrandProfile,
   composeFlowFor,
+  DEFAULT_BUDGET,
   enterWorkspaceSequence,
   expeditionSequence,
+  HERO_ID,
   knotSequence,
   nextId,
   postSubmittedSequence,
@@ -33,6 +43,7 @@ function initialState(): DemoState {
     chat: [],
     agentTyping: false,
     composeStep: "idle",
+    pendingBudget: null,
     campaign: null,
     feed: [],
     autopilot: false,
@@ -62,6 +73,7 @@ function initialState(): DemoState {
     ],
     creatorWalletUsdc: 1240,
     burstSeq: 0,
+    real: null,
   };
 }
 
@@ -326,15 +338,38 @@ export function clickChip(chip: ChatChip) {
   mutate((d) => {
     for (const m of d.chat) if (m.chips) delete m.chips;
     d.chat.push({ id: nextId(), role: "user", text: chip.label, at: Date.now() });
+    if (chip.id.startsWith("budget-")) d.pendingBudget = BUDGET_PRESETS[chip.id] ?? d.pendingBudget;
   });
   const flow = composeFlowFor(state.brand);
   if (chip.id === "start-campaign") askNext(flow.goal, "goal");
   else if (chip.id.startsWith("goal-")) askNext(flow.budget, "budget");
   else if (chip.id.startsWith("budget-")) askNext(flow.content, "content");
-  else if (chip.id.startsWith("content-")) askNext(flow.confirm, "confirm");
-  else if (chip.id === "launch-expedition") playSequence(expeditionSequence(state.brand));
-  else if (chip.id === "toggle-autopilot") playSequence(autopilotSequence(state.brand));
+  else if (chip.id.startsWith("content-")) {
+    const spec = state.pendingBudget ?? DEFAULT_BUDGET;
+    askNext(composeFlowFor(state.brand, spec).confirm, "confirm");
+  } else if (chip.id === "launch-expedition") {
+    playSequence(expeditionSequence(state.brand, state.pendingBudget ?? DEFAULT_BUDGET));
+    void startRealChain();
+  } else if (chip.id === "toggle-autopilot") playSequence(autopilotSequence(state.brand));
   else if (chip.id === "open-report") openReport(state); // 새 탭은 클릭 시점에 — 팝업 차단 회피
+}
+
+/**
+ * 예산 직접 입력 — 프리셋 칩과 동일한 경로. ChatDock의 "직접 입력" 폼이 호출한다.
+ * 딜당 한도가 총예산을 넘는 건 검증(캡 ≤ 총예산)에서 이미 막혔다고 가정한다.
+ */
+export function submitBudget(budgetUsdc: number, maxPerDealUsdc: number) {
+  mutate((d) => {
+    for (const m of d.chat) if (m.chips) delete m.chips;
+    d.chat.push({
+      id: nextId(),
+      role: "user",
+      text: `총 ${budgetUsdc.toLocaleString()} · 딜당 ${maxPerDealUsdc.toLocaleString()}`,
+      at: Date.now(),
+    });
+    d.pendingBudget = { budgetUsdc, maxPerDealUsdc };
+  });
+  askNext(composeFlowFor(state.brand).content, "content");
 }
 
 export function approveDeals() {
@@ -343,9 +378,10 @@ export function approveDeals() {
 
 /** 호스트에서 실행 — 게시물 검증 시퀀스 시작 (중복 제출 가드). */
 function handleSubmitPost(url: string) {
-  const hero = state.campaign?.deals[0];
+  const hero = state.campaign?.deals.find((d) => d.creatorId === HERO_ID);
   if (!hero?.awaitingPost) return;
   playSequence(postSubmittedSequence(url, state.brand));
+  void submitRealEvidenceForChain(url);
 }
 
 /** 크리에이터 창에서 호출 — 게시물 URL 제출. 미러면 호스트로 보낸다. */
@@ -475,19 +511,168 @@ function composeStatusReply(): string {
       return `지금 크리에이터 네트워크 스캔 중이에요 — ${c.discovered.length}명 발견했어요. 적합도 계산이 끝나면 바로 협상 들어갑니다.`;
     case "negotiating": {
       const agreed = Object.values(c.negotiations).filter((n) => n.status === "agreed").length;
-      return `협상 진행 중이에요. 지금까지 ${agreed}건 체결했고, 나머지도 한도 450 안에서 조율하고 있어요. 협상 로그는 캠페인 화면에서 실시간으로 보실 수 있어요.`;
+      return `협상 진행 중이에요. 지금까지 ${agreed}건 체결했고, 나머지도 한도 ${c.spec.maxPerDealUsdc} 안에서 조율하고 있어요. 협상 로그는 캠페인 화면에서 실시간으로 보실 수 있어요.`;
     }
-    case "pending_approval":
-      return "딜 2건 물어와서 승인 기다리는 중이에요. 캠페인 화면에서 조건 확인하고 승인해 주세요.";
+    case "pending_approval": {
+      const agreed = Object.values(c.negotiations).filter((n) => n.status === "agreed").length;
+      return `딜 ${agreed}건 물어와서 승인 기다리는 중이에요. 캠페인 화면에서 조건 확인하고 승인해 주세요.`;
+    }
     case "knotting":
       return "지금 매듭 묶는 중이에요 — 에스크로 예치까지 몇 초면 끝나요.";
     case "active": {
-      const hero = c.deals[0];
+      const hero = c.deals.find((d) => d.creatorId === HERO_ID);
       return `진행 중이에요. 씬님 별 게이지 ${hero?.starPct ?? 0}%, 에스크로에서 마일스톤 따라 자동 릴리즈되고 있어요. 저는 검증만 잘 지켜보면 됩니다.`;
     }
     case "completed":
       return "캠페인 끝났어요! 리포트 요약은 위에 드렸고, 자세한 건 캠페인 화면 리포트 탭에 있어요.";
     default:
       return "확인해볼게요.";
+  }
+}
+
+/* ------------------------------ 실시간 devnet 증빙 ------------------------------ */
+
+function initialRealChain(): RealChainState {
+  return {
+    status: "idle",
+    promotionId: null,
+    agreementId: null,
+    creatorAgentId: null,
+    escrowId: null,
+    amountUsdc: null,
+    network: "devnet",
+    brandWallet: null,
+    creatorWallet: null,
+    fundingSignature: null,
+    releaseSignature: null,
+    milestoneId: null,
+    error: null,
+  };
+}
+
+function readableRealError(caught: unknown): string {
+  if (caught instanceof Error) return caught.message;
+  return String(caught);
+}
+
+/**
+ * 대본(feed/txHash)과 별개로 진짜 백엔드에 프로모션을 만들고 agent-run(진짜
+ * discovery+pay.sh 검증+협상)까지 돌린다. 실패해도 대본 연출은 그대로 진행된다 —
+ * 여기서 던지는 에러는 RealChainCard에만 노출된다.
+ */
+export async function startRealChain(): Promise<void> {
+  if (!state.brand) return;
+  if (state.real && state.real.status !== "idle" && state.real.status !== "error") return;
+  const budget = state.pendingBudget ?? DEFAULT_BUDGET;
+  const brand = state.brand;
+  mutate((d) => {
+    d.real = { ...initialRealChain(), status: "creating" };
+  });
+  try {
+    const { promotionId, run } = await createRealPromotionAndAgreement(brand, {
+      goal: "브랜드 제품 협찬 캠페인",
+      contentType: "reel",
+      budgetUsdc: budget.budgetUsdc,
+      maxPerDealUsdc: budget.maxPerDealUsdc,
+      deadlineLabel: "2주",
+    });
+    mutate((d) => {
+      if (!d.real) return;
+      d.real.promotionId = promotionId;
+      if (run.agreement) {
+        d.real.status = "agreed";
+        d.real.agreementId = run.agreement.agreementId;
+        d.real.creatorAgentId = run.agreement.creatorAgentId;
+        d.real.amountUsdc = run.agreement.terms.compensation.baseAmountUsdc;
+        d.real.milestoneId = pickEvidenceMilestoneId(run.agreement);
+      } else {
+        d.real.status = "waiting_creator";
+      }
+    });
+  } catch (caught) {
+    mutate((d) => {
+      if (!d.real) return;
+      d.real.status = "error";
+      d.real.error = readableRealError(caught);
+    });
+  }
+}
+
+/** 브랜드 창에서 호출 — Phantom 지갑 연결 후 실제 devnet 예치 트랜잭션에 서명. */
+export async function fundRealChainEscrow(): Promise<void> {
+  const agreementId = state.real?.agreementId;
+  if (!agreementId) return;
+  mutate((d) => {
+    if (d.real) d.real.status = "funding";
+  });
+  try {
+    const { signature, brandWallet } = await fundRealEscrow(agreementId);
+    mutate((d) => {
+      if (!d.real) return;
+      d.real.status = "funded";
+      d.real.fundingSignature = signature;
+      d.real.brandWallet = brandWallet;
+    });
+  } catch (caught) {
+    mutate((d) => {
+      if (!d.real) return;
+      d.real.status = "agreed";
+      d.real.error = readableRealError(caught);
+    });
+  }
+}
+
+/** 크리에이터 창에서 호출 — 정산 받을 Phantom 지갑을 소유 증명과 함께 등록. */
+export async function connectRealCreatorWallet(): Promise<void> {
+  try {
+    const address = await registerCreatorWallet();
+    mutate((d) => {
+      if (d.real) d.real.creatorWallet = address;
+    });
+  } catch (caught) {
+    mutate((d) => {
+      if (d.real) d.real.error = readableRealError(caught);
+    });
+  }
+}
+
+/**
+ * 크리에이터가 게시물 URL을 제출하면(대본과 별개로) 실제 evidence 제출+검증을 시도한다.
+ * 통과하면 서버(KNOT_SETTLEMENT_AUTHORITY)가 자동으로 devnet에 릴리즈 트랜잭션을 서명·전송한다.
+ */
+async function submitRealEvidenceForChain(url: string) {
+  const real = state.real;
+  if (!real?.agreementId || !real.creatorAgentId || !real.milestoneId) return;
+  if (real.status !== "funded") return; // 예치 전엔 증빙을 붙일 온체인 대상이 없다
+  mutate((d) => {
+    if (d.real) d.real.status = "submitting_evidence";
+  });
+  try {
+    const verified = await submitRealEvidence(
+      { agreementId: real.agreementId, creatorAgentId: real.creatorAgentId },
+      real.milestoneId,
+      url,
+    );
+    const signature = verified.autoSettlement?.released
+      ? verified.autoSettlement.settlement?.signature ?? null
+      : null;
+    mutate((d) => {
+      if (!d.real) return;
+      if (signature) {
+        d.real.status = "released";
+        d.real.releaseSignature = signature;
+      } else {
+        d.real.status = "funded";
+        d.real.error = verified.outcome
+          ? `증빙 판정: ${verified.outcome} — 자동 정산 대기`
+          : "증빙 검증은 됐지만 자동 정산이 아직 안 됐어요.";
+      }
+    });
+  } catch (caught) {
+    mutate((d) => {
+      if (!d.real) return;
+      d.real.status = "funded";
+      d.real.error = readableRealError(caught);
+    });
   }
 }

@@ -155,6 +155,39 @@ export const CAMPAIGN_SPEC: CampaignSpec = {
   deadlineLabel: "2주 안에",
 };
 
+/** 예산 칩 → 실제 스펙 값. id는 composeFlowFor().budget.chips와 1:1. */
+export const BUDGET_PRESETS: Record<string, { budgetUsdc: number; maxPerDealUsdc: number }> = {
+  "budget-500": { budgetUsdc: 500, maxPerDealUsdc: 300 },
+  "budget-1000": { budgetUsdc: 1000, maxPerDealUsdc: 450 },
+  "budget-2000": { budgetUsdc: 2000, maxPerDealUsdc: 600 },
+};
+
+export const DEFAULT_BUDGET = BUDGET_PRESETS["budget-1000"];
+
+/**
+ * 크리에이터별 협상 성향 — floor(양보 못 하는 최소 단가)와 브랜드의 시작 제안 비율.
+ * 딜당 한도(cap)가 floor보다 낮으면 정책이 차단한다: 이게 "자율성의 경계" 그 자체라
+ * 사람이 한도를 바꾸면 결과(체결/차단)가 실제로 바뀌어야 한다.
+ */
+const NEGOTIATION_TRAITS: Record<string, { floor: number; openRatio: number }> = {
+  geekble: { floor: 250, openRatio: 0.58 },
+  ssin: { floor: 400, openRatio: 0.71 },
+  risabae: { floor: 800, openRatio: 0.76 },
+};
+
+const round10 = (n: number) => Math.max(10, Math.round(n / 10) * 10);
+const pct = (ratio: number) => `${Math.round(ratio * 100)}%`;
+
+type NegotiationOutcome = { cap: number; floor: number; opening: number; agreed: boolean; amount: number };
+
+function negotiate(creatorId: string, cap: number): NegotiationOutcome {
+  const trait = NEGOTIATION_TRAITS[creatorId];
+  const opening = round10(cap * trait.openRatio);
+  const agreed = trait.floor <= cap;
+  const amount = agreed ? Math.min(cap, Math.max(opening, trait.floor)) : 0;
+  return { cap, floor: trait.floor, opening, agreed, amount };
+}
+
 export function taskBriefFor(brand: BrandProfile | null): TaskBrief {
   return {
     criteria: [
@@ -274,7 +307,10 @@ export function enterWorkspaceSequence(): SequenceStep[] {
 
 /* --------------------------- 2. 캠페인 생성 (칩 대화) --------------------------- */
 
-export function composeFlowFor(brand: BrandProfile | null) {
+export function composeFlowFor(
+  brand: BrandProfile | null,
+  spec: { budgetUsdc: number; maxPerDealUsdc: number } = DEFAULT_BUDGET,
+) {
   const product = productName(brand);
   return {
     goal: {
@@ -286,7 +322,7 @@ export function composeFlowFor(brand: BrandProfile | null) {
       ],
     },
     budget: {
-      question: `${product} 캠페인이군요. 예산은 어떻게 잡을까요? 딜당 한도는 제가 넘을 수 없는 선이에요 — 그 안에선 승인 없이 제가 알아서 체결해요.`,
+      question: `${product} 캠페인이군요. 예산은 어떻게 잡을까요? 딜당 한도는 제가 넘을 수 없는 선이에요 — 그 안에선 승인 없이 제가 알아서 체결해요. 직접 숫자를 입력하셔도 돼요.`,
       chips: [
         { id: "budget-500", label: "총 500 · 딜당 300" },
         { id: "budget-1000", label: "총 1,000 · 딜당 450" },
@@ -302,7 +338,7 @@ export function composeFlowFor(brand: BrandProfile | null) {
       ],
     },
     confirm: {
-      question: `정리하면 — ${product} 런칭 · 총 1,000 USDC (딜당 450) · 릴스 1개 · 2주 안에. 이 조건으로 크리에이터 탐험 다녀올게요. 물어오는 딜은 승인만 해주시면 돼요.`,
+      question: `정리하면 — ${product} 런칭 · 총 ${spec.budgetUsdc.toLocaleString()} USDC (딜당 ${spec.maxPerDealUsdc.toLocaleString()}) · 릴스 1개 · 2주 안에. 이 조건으로 크리에이터 탐험 다녀올게요. 물어오는 딜은 승인만 해주시면 돼요.`,
       chips: [{ id: "launch-expedition", label: "🧭 탐험 보내기" }],
     },
   } as const;
@@ -310,17 +346,25 @@ export function composeFlowFor(brand: BrandProfile | null) {
 
 /* ------------------------------- 3. 탐험 대본 ------------------------------- */
 
-export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
+export function expeditionSequence(
+  brand: BrandProfile | null,
+  budget: { budgetUsdc: number; maxPerDealUsdc: number } = DEFAULT_BUDGET,
+): SequenceStep[] {
   const S: SequenceStep[] = [];
   const step = (d: number, run: SequenceStep["run"]) => S.push({ d, run });
   const bName = brandName(brand);
   const product = productName(brand);
+  const cap = budget.maxPerDealUsdc;
+  const geekble = negotiate("geekble", cap);
+  const ssin = negotiate("ssin", cap);
+  const risabae = negotiate("risabae", cap);
+  const bonus = round10(ssin.floor * 0.1);
 
   // -- 출발 + 스카우팅 --
   step(0, (draft) => {
     draft.composeStep = "done";
     draft.campaign = {
-      spec: { ...CAMPAIGN_SPEC, goal: `${product} 런칭 붐업` },
+      spec: { ...CAMPAIGN_SPEC, ...budget, goal: `${product} 런칭 붐업` },
       status: "scouting",
       discovered: [],
       negotiations: {},
@@ -348,7 +392,7 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
     feed(draft, "🤝", "적합도 상위 3명과 A2A 협상 개시");
   });
 
-  // -- 긱블: 스피드런 체결 (가격 맞으면 바로) --
+  // -- 긱블: 스피드런 체결 (가격 맞으면 바로, 아니면 즉시 철수) --
   step(900, (draft) => {
     draft.campaign!.negotiations.geekble.status = "contacting";
   });
@@ -357,36 +401,65 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
       draft,
       "geekble",
       "brand",
-      `안녕하세요 긱블 에이전트님! ${bName} ${product} 런칭 릴스 1건, 260 USDC로 제안드려요.`,
-      "긱블 평균 조회수 28.6만 — CPM 효율 최상 구간. 딜당 한도 450의 58%에서 시작.",
-      260,
+      `안녕하세요 긱블 에이전트님! ${bName} ${product} 런칭 릴스 1건, ${geekble.opening} USDC로 제안드려요.`,
+      `긱블 평균 조회수 28.6만 — CPM 효율 최상 구간. 딜당 한도 ${cap}의 ${pct(NEGOTIATION_TRAITS.geekble.openRatio)}에서 시작.`,
+      geekble.opening,
     ),
   );
-  step(1700, (draft) =>
-    a2a(
-      draft,
-      "geekble",
-      "creator",
-      `${product}, 직접 만져보고 보여줄 수 있는 아이템이라 긱블 결이랑 맞네요. 기준선 250 넘었고 제작 슬롯도 비어 있어요 — 가격 맞으면 바로 갑니다. 콜.`,
-      "최소 단가 250 충족 + 카테고리 적합 → 즉시 수락.",
-      260,
-    ),
-  );
-  step(1400, (draft) => {
-    a2a(draft, "geekble", "brand", "딜! 계약 아티팩트 만들게요 🧶", "260 ≤ 한도 450 → 사람 승인 없이 자율 체결.");
-    draft.campaign!.negotiations.geekble.status = "agreed";
-    draft.campaign!.negotiations.geekble.agreedUsdc = 260;
-    feed(draft, "🪢", "@geekble_kr 체결 — 260 USDC (2라운드)", "ok");
-  });
+  if (geekble.agreed) {
+    step(1700, (draft) =>
+      a2a(
+        draft,
+        "geekble",
+        "creator",
+        `${product}, 직접 만져보고 보여줄 수 있는 아이템이라 긱블 결이랑 맞네요. 기준선 ${geekble.floor} 넘었고 제작 슬롯도 비어 있어요 — 가격 맞으면 바로 갑니다. ${geekble.amount}으로 콜.`,
+        `최소 단가 ${geekble.floor} 충족 + 카테고리 적합 → 즉시 수락.`,
+        geekble.amount,
+      ),
+    );
+    step(1400, (draft) => {
+      a2a(draft, "geekble", "brand", "딜! 계약 아티팩트 만들게요 🧶", `${geekble.amount} ≤ 한도 ${cap} → 사람 승인 없이 자율 체결.`);
+      draft.campaign!.negotiations.geekble.status = "agreed";
+      draft.campaign!.negotiations.geekble.agreedUsdc = geekble.amount;
+      feed(draft, "🪢", `@geekble_kr 체결 — ${geekble.amount} USDC (2라운드)`, "ok");
+    });
+  } else {
+    step(1700, (draft) =>
+      a2a(
+        draft,
+        "geekble",
+        "creator",
+        `긱블 제작 최소 단가는 ${geekble.floor}이에요. 이 아래는 논의하지 않아요.`,
+        `채널 정책: ${geekble.floor} 미만 제안 자동 거절.`,
+        geekble.floor,
+      ),
+    );
+    step(1300, (draft) =>
+      a2a(
+        draft,
+        "geekble",
+        "policy",
+        `정책 차단 — 요구액 ${geekble.floor} USDC가 딜당 한도 ${cap}을 초과`,
+        "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
+        geekble.floor,
+      ),
+    );
+    step(1400, (draft) => {
+      a2a(draft, "geekble", "brand", `${geekble.floor}은 제 권한 밖이라 이번 건은 접을게요.`, "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.");
+      draft.campaign!.negotiations.geekble.status = "blocked";
+      draft.campaign!.negotiations.geekble.blockedReason = `딜당 한도 ${cap} 초과 (요구 ${geekble.floor})`;
+      feed(draft, "🛡️", "@geekble_kr 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
+    });
+  }
 
-  // -- 씬님(주인공): 밀당 끝에 체결 --
+  // -- 씬님(주인공): 밀당 끝에 체결, 아니면 정책 차단 --
   step(1100, (draft) => {
     draft.campaign!.negotiations.ssin.status = "contacting";
     draft.inboundOffers.unshift({
       id: "offer-moodbeam",
       brandName: draft.brand?.name ?? "무드빔",
       brandLogo: draft.brand?.logo ?? "/demo/moodbeam.svg",
-      amountUsdc: 320,
+      amountUsdc: ssin.opening,
       format: "릴스 1개 (30초 내외)",
       status: "new",
       note: "루프가 조건 확인 중",
@@ -398,9 +471,9 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
       draft,
       "ssin",
       "brand",
-      `씬님 에이전트님 안녕하세요, ${bName}의 ${agentName(brand)}예요. ${product} 런칭 릴스, 320 USDC 어때요?`,
-      "뷰티 무드 정합 최상(94) → 예산 여유분 우선 배정. 한도의 71%에서 시작.",
-      320,
+      `씬님 에이전트님 안녕하세요, ${bName}의 ${agentName(brand)}예요. ${product} 런칭 릴스, ${ssin.opening} USDC 어때요?`,
+      `뷰티 무드 정합 최상(94) → 예산 여유분 우선 배정. 한도의 ${pct(NEGOTIATION_TRAITS.ssin.openRatio)}에서 시작.`,
+      ssin.opening,
     );
     patchOffer(draft, "offer-moodbeam", { status: "negotiating", note: "루프가 협상 중" });
   });
@@ -409,47 +482,71 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
       draft,
       "ssin",
       "creator",
-      "씬님은 구독 100만 뷰티 채널이에요. 평균 조회수 7만이지만 뷰티 시청층이라 저장·전환이 다르죠. 씬님이 정해둔 기준선은 400입니다 — 이 아래론 저도 못 내려가요.",
-      "사람이 정한 최소 단가 400. 에이전트 권한으로도 내릴 수 없는 선.",
-      400,
+      `씬님은 구독 100만 뷰티 채널이에요. 평균 조회수 7만이지만 뷰티 시청층이라 저장·전환이 다르죠. 씬님이 정해둔 기준선은 ${ssin.floor}입니다 — 이 아래론 저도 못 내려가요.`,
+      `사람이 정한 최소 단가 ${ssin.floor}. 에이전트 권한으로도 내릴 수 없는 선.`,
+      ssin.floor,
     ),
   );
-  step(2100, (draft) =>
-    a2a(
-      draft,
-      "ssin",
-      "brand",
-      "방금 전환 데이터 확인했어요 — 저장률이 카테고리 평균의 3배네요. 400이면 제 권한(딜당 450) 안이라 승인 없이 체결 가능해요. 콜.",
-      "성과 데이터 검증 통과. 400 ≤ 450 → 자율 체결 가능.",
-      400,
-    ),
-  );
-  step(1900, (draft) =>
-    a2a(
-      draft,
-      "ssin",
-      "creator",
-      "좋아요. 대신 성과 보너스 조항 하나만 — 조회수 15만(평균 7만의 2배) 넘으면 +40 어때요?",
-      "기준 규칙: 평균 조회수 2배(15만) 초과 시 +10% 보너스 요구.",
-      440,
-    ),
-  );
-  step(1800, (draft) => {
-    a2a(
-      draft,
-      "ssin",
-      "brand",
-      "합리적이네요. 보너스는 에스크로에 조건부로 걸어둘게요. 계약 묶습니다 🪢",
-      "체결가 400 + 조건부 보너스 40 = 최대 440 ≤ 한도 450.",
-      400,
+  if (ssin.agreed) {
+    step(2100, (draft) =>
+      a2a(
+        draft,
+        "ssin",
+        "brand",
+        `방금 전환 데이터 확인했어요 — 저장률이 카테고리 평균의 3배네요. ${ssin.amount}이면 제 권한(딜당 ${cap}) 안이라 승인 없이 체결 가능해요. 콜.`,
+        `성과 데이터 검증 통과. ${ssin.amount} ≤ ${cap} → 자율 체결 가능.`,
+        ssin.amount,
+      ),
     );
-    draft.campaign!.negotiations.ssin.status = "agreed";
-    draft.campaign!.negotiations.ssin.agreedUsdc = 400;
-    patchOffer(draft, "offer-moodbeam", { status: "agreed", amountUsdc: 400, note: "400 + 보너스 조항 — 브랜드 승인 대기" });
-    feed(draft, "🪢", "@ssin 체결 — 400 USDC + 보너스 조항 (4라운드)", "ok");
-  });
+    step(1900, (draft) =>
+      a2a(
+        draft,
+        "ssin",
+        "creator",
+        `좋아요. 대신 성과 보너스 조항 하나만 — 조회수 15만(평균 7만의 2배) 넘으면 +${bonus} 어때요?`,
+        "기준 규칙: 평균 조회수 2배(15만) 초과 시 +10% 보너스 요구.",
+        ssin.amount + bonus,
+      ),
+    );
+    step(1800, (draft) => {
+      a2a(
+        draft,
+        "ssin",
+        "brand",
+        "합리적이네요. 보너스는 에스크로에 조건부로 걸어둘게요. 계약 묶습니다 🪢",
+        `체결가 ${ssin.amount} + 조건부 보너스 ${bonus} = 최대 ${ssin.amount + bonus} ≤ 한도 ${cap}.`,
+        ssin.amount,
+      );
+      draft.campaign!.negotiations.ssin.status = "agreed";
+      draft.campaign!.negotiations.ssin.agreedUsdc = ssin.amount;
+      patchOffer(draft, "offer-moodbeam", {
+        status: "agreed",
+        amountUsdc: ssin.amount,
+        note: `${ssin.amount} + 보너스 조항 — 브랜드 승인 대기`,
+      });
+      feed(draft, "🪢", `@ssin 체결 — ${ssin.amount} USDC + 보너스 조항 (4라운드)`, "ok");
+    });
+  } else {
+    step(1900, (draft) =>
+      a2a(
+        draft,
+        "ssin",
+        "policy",
+        `정책 차단 — 요구액 ${ssin.floor} USDC가 딜당 한도 ${cap}을 초과`,
+        "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
+        ssin.floor,
+      ),
+    );
+    step(1800, (draft) => {
+      a2a(draft, "ssin", "brand", `${ssin.floor}은 제 권한 밖이라 이번 건은 접을게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇`, "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.");
+      draft.campaign!.negotiations.ssin.status = "blocked";
+      draft.campaign!.negotiations.ssin.blockedReason = `딜당 한도 ${cap} 초과 (요구 ${ssin.floor})`;
+      patchOffer(draft, "offer-moodbeam", { status: "declined", note: `한도 ${cap} 초과 — 자율 철수` });
+      feed(draft, "🛡️", "@ssin 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
+    });
+  }
 
-  // -- 리사배: 한도 초과 → 정책 차단 (자율성의 경계) --
+  // -- 리사배: 프리미엄 하드 플로어 (한도가 넘으면만 체결) --
   step(1100, (draft) => {
     draft.campaign!.negotiations.risabae.status = "contacting";
   });
@@ -458,9 +555,9 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
       draft,
       "risabae",
       "brand",
-      `RISABAE 팀 에이전트님, ${bName} ${product} 런칭 협업 제안드려요. 340 USDC부터 시작해볼까요?`,
-      "구독 268만 메가 채널 → 프리미엄 단가 예상, 한도의 76%에서 높게 시작.",
-      340,
+      `RISABAE 팀 에이전트님, ${bName} ${product} 런칭 협업 제안드려요. ${risabae.opening} USDC부터 시작해볼까요?`,
+      `구독 268만 메가 채널 → 프리미엄 단가 예상, 한도의 ${pct(NEGOTIATION_TRAITS.risabae.openRatio)}에서 높게 시작.`,
+      risabae.opening,
     ),
   );
   step(1900, (draft) =>
@@ -468,46 +565,63 @@ export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
       draft,
       "risabae",
       "creator",
-      "리사배님 브랜드 협업 최소 단가는 800이에요. 268만 채널 기준이라 그 아래는 논의하지 않습니다.",
-      "채널 정책: 800 미만 제안 자동 거절.",
-      800,
+      `리사배님 브랜드 협업 최소 단가는 ${risabae.floor}이에요. 268만 채널 기준이라 그 아래는 논의하지 않습니다.`,
+      `채널 정책: ${risabae.floor} 미만 제안 자동 거절.`,
+      risabae.floor,
     ),
   );
-  step(1600, (draft) =>
-    a2a(
-      draft,
-      "risabae",
-      "policy",
-      "정책 차단 — 요구액 800 USDC가 딜당 한도 450을 초과",
-      "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
-      800,
-    ),
-  );
-  step(1700, (draft) => {
-    a2a(
-      draft,
-      "risabae",
-      "brand",
-      "800은 제 권한 밖이라 이번 건은 접을게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇",
-      "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.",
-      null,
+  if (risabae.agreed) {
+    step(1600, (draft) => {
+      a2a(draft, "risabae", "brand", `${risabae.amount}이면 제 권한(딜당 ${cap}) 안이에요. 바로 갑니다 🪢`, `${risabae.amount} ≤ 한도 ${cap} → 자율 체결 가능.`, risabae.amount);
+      draft.campaign!.negotiations.risabae.status = "agreed";
+      draft.campaign!.negotiations.risabae.agreedUsdc = risabae.amount;
+      feed(draft, "🪢", `@RISABAE 체결 — ${risabae.amount} USDC (3라운드)`, "ok");
+    });
+  } else {
+    step(1600, (draft) =>
+      a2a(
+        draft,
+        "risabae",
+        "policy",
+        `정책 차단 — 요구액 ${risabae.floor} USDC가 딜당 한도 ${cap}을 초과`,
+        "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
+        risabae.floor,
+      ),
     );
-    draft.campaign!.negotiations.risabae.status = "blocked";
-    draft.campaign!.negotiations.risabae.blockedReason = "딜당 한도 450 초과 (요구 800)";
-    feed(draft, "🛡️", "@RISABAE 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
-  });
+    step(1700, (draft) => {
+      a2a(draft, "risabae", "brand", `${risabae.floor}은 제 권한 밖이라 이번 건은 접을게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇`, "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.");
+      draft.campaign!.negotiations.risabae.status = "blocked";
+      draft.campaign!.negotiations.risabae.blockedReason = `딜당 한도 ${cap} 초과 (요구 ${risabae.floor})`;
+      feed(draft, "🛡️", "@RISABAE 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
+    });
+  }
 
-  // -- 귀환 보고 --
+  // -- 귀환 보고 (실제 결과를 그대로 읽어서 만든다 — 대사가 결과와 어긋나면 버그) --
   step(1500, (draft) => {
+    const negs = Object.values(draft.campaign!.negotiations);
+    const agreedCount = negs.filter((n) => n.status === "agreed").length;
     draft.campaign!.status = "pending_approval";
-    feed(draft, "🎒", "탐험 귀환 — 딜 2건 확보, 승인 대기", "money");
+    feed(draft, "🎒", `탐험 귀환 — 딜 ${agreedCount}건 확보, 승인 대기`, "money");
   });
   step(600, typing);
   step(1300, (draft) => {
-    agentSays(
-      draft,
-      "탐험 다녀왔어요! 3명 만나서 2건 물어왔습니다 — 씬님 400(+보너스 조항), 긱블 260. 합계 660 USDC로 예산의 66%예요. RISABAE는 800을 불러서 제 권한 밖이라 접었어요. 승인해주시면 에스크로 걸고 바로 시작합니다.",
-    );
+    const negs = draft.campaign!.negotiations;
+    const agreed = Object.values(negs).filter((n) => n.status === "agreed");
+    const blocked = Object.values(negs).filter((n) => n.status === "blocked");
+    const total = agreed.reduce((sum, n) => sum + (n.agreedUsdc ?? 0), 0);
+    const budgetPct = Math.round((total / draft.campaign!.spec.budgetUsdc) * 100);
+    const nameOf = (id: string) => creatorById(id).name;
+    const agreedLine = agreed
+      .map((n) => `${nameOf(n.creatorId)} ${n.agreedUsdc}${n.creatorId === "ssin" ? "(+보너스 조항)" : ""}`)
+      .join(", ");
+    const blockedLine = blocked.map((n) => nameOf(n.creatorId)).join(", ");
+    const text =
+      agreed.length === 0
+        ? `탐험 다녀왔는데 이번엔 다들 한도(${cap} USDC)를 넘겨서 체결된 딜이 없어요. 한도를 올려주시면 다시 시도해볼게요.`
+        : `탐험 다녀왔어요! ${CREATORS.length}명 만나서 ${agreed.length}건 물어왔습니다 — ${agreedLine}. 합계 ${total} USDC로 예산의 ${budgetPct}%예요.${
+            blocked.length ? ` ${blockedLine}는 한도를 넘겨서 제 권한 밖이라 접었어요.` : ""
+          } 승인해주시면 에스크로 걸고 바로 시작합니다.`;
+    agentSays(draft, text);
   });
   return S;
 }
@@ -526,46 +640,37 @@ export function knotSequence(brand: BrandProfile | null): SequenceStep[] {
     const c = draft.campaign!;
     c.status = "active";
     c.brief = taskBriefFor(brand);
-    c.deals = [
-      {
-        creatorId: "ssin",
-        amountUsdc: 400,
-        termsHash: "sha256:9f2c41a8…b3",
-        milestones: [
-          { id: "m1", label: "계약 체결", pct: 30, usdc: 120, status: "active" },
-          { id: "m2", label: "게시물 검증", pct: 70, usdc: 280, status: "locked" },
-        ],
-        starPct: 10,
-        bonusUsdc: null,
-        postUrl: null,
-        awaitingPost: false,
-        verify: null,
-        metrics: null,
-        txs: [{ label: "에스크로 예치 400 USDC", hash: txHash("lock-ssin") }],
-      },
-      {
-        creatorId: "geekble",
-        amountUsdc: 260,
-        termsHash: "sha256:5d18ce02…7a",
-        milestones: [
-          { id: "m1", label: "계약 체결", pct: 30, usdc: 78, status: "active" },
-          { id: "m2", label: "게시물 검증", pct: 70, usdc: 182, status: "locked" },
-        ],
-        starPct: 10,
-        bonusUsdc: null,
-        postUrl: null,
-        awaitingPost: false,
-        verify: null,
-        metrics: null,
-        txs: [{ label: "에스크로 예치 260 USDC", hash: txHash("lock-geekble") }],
-      },
-    ];
-    feed(draft, "🔒", "에스크로 예치 660 USDC (devnet)", "money");
+    // 실제로 체결된(agreed) 딜만 — 몇 명이 됐는지는 딜당 한도에 달려 있다.
+    c.deals = Object.values(c.negotiations)
+      .filter((n) => n.status === "agreed" && n.agreedUsdc != null)
+      .map((n) => {
+        const amount = n.agreedUsdc!;
+        const m1 = Math.round(amount * 0.3);
+        return {
+          creatorId: n.creatorId,
+          amountUsdc: amount,
+          termsHash: txHash(`terms-${n.creatorId}`),
+          milestones: [
+            { id: "m1", label: "계약 체결", pct: 30, usdc: m1, status: "active" as const },
+            { id: "m2", label: "게시물 검증", pct: 70, usdc: amount - m1, status: "locked" as const },
+          ],
+          starPct: 10,
+          bonusUsdc: null,
+          postUrl: null,
+          awaitingPost: false,
+          verify: null,
+          metrics: null,
+          txs: [{ label: `에스크로 예치 ${amount} USDC`, hash: txHash(`lock-${n.creatorId}`) }],
+        };
+      });
+    const totalLocked = c.deals.reduce((sum, d) => sum + d.amountUsdc, 0);
+    feed(draft, "🔒", `에스크로 예치 ${totalLocked} USDC (devnet)`, "money");
     feed(draft, "📦", "A2A 태스크 브리프 전송 — 기준 3 · 태스크 3 · 레퍼런스 3", "info");
   });
 
-  // 마일스톤 1 (계약 체결 30%) 즉시 릴리즈
+  // 마일스톤 1 (계약 체결 30%) 즉시 릴리즈 — 딜이 몇 건이든 전부
   step(2200, (draft) => {
+    let m1Sum = 0;
     for (const deal of draft.campaign!.deals) {
       deal.milestones[0].status = "released";
       deal.milestones[1].status = "active";
@@ -574,34 +679,46 @@ export function knotSequence(brand: BrandProfile | null): SequenceStep[] {
         label: `마일스톤 1 릴리즈 ${deal.milestones[0].usdc} USDC`,
         hash: txHash(`m1-${deal.creatorId}`),
       });
+      m1Sum += deal.milestones[0].usdc;
     }
-    draft.creatorWalletUsdc += 120;
-    feed(draft, "💸", "마일스톤 1 자동 릴리즈 — 198 USDC 지급", "money");
+    const ssinDeal = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (ssinDeal) draft.creatorWalletUsdc += ssinDeal.milestones[0].usdc;
+    feed(draft, "💸", `마일스톤 1 자동 릴리즈 — ${m1Sum} USDC 지급`, "money");
   });
 
-  // 씬님: 촬영 시작 → 실제 게시물 URL 제출 대기 (크리에이터 창 게이트)
+  // 씬님(주인공): 촬영 시작 → 실제 게시물 URL 제출 대기 (크리에이터 창 게이트) — 딜이 있을 때만
   step(2600, (draft) => {
-    const ssin = draft.campaign!.deals[0];
+    const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (!ssin) return;
     ssin.starPct = 45;
     feed(draft, "🎬", "@ssin 촬영 시작 — 브리프 레퍼런스 2번 무드로 간대요", "info");
   });
   step(2600, (draft) => {
-    const ssin = draft.campaign!.deals[0];
+    const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (!ssin) return;
     ssin.starPct = 55;
     ssin.awaitingPost = true;
     feed(draft, "📤", "@ssin 업로드 대기 — 크리에이터가 게시물 URL을 제출하면 검증이 시작돼요", "info");
   });
 
-  // 긱블 딜은 자동으로 마무리 (NPC)
-  step(5200, (draft) => {
-    const geekble = draft.campaign!.deals[1];
-    geekble.milestones[1].status = "released";
-    geekble.starPct = 100;
-    geekble.postUrl = `youtube.com/watch?v=geekble-${brandHandle(brand)}`;
-    geekble.metrics = { views: "26.4만", saves: "2,300", ctr: "2.1%", cpmDelta: "-18%" };
-    geekble.txs.push({ label: "마일스톤 2 릴리즈 182 USDC", hash: txHash("m2-geekble") });
-    feed(draft, "🧶", "@geekble_kr 타래 완성 — 182 USDC 릴리즈", "money");
-  });
+  // 나머지 딜(긱블, 드물게 리사배)은 NPC로 자동 마무리 — 있을 때만
+  const NPC_METRICS: Record<string, { views: string; saves: string; ctr: string; cpmDelta: string }> = {
+    geekble: { views: "26.4만", saves: "2,300", ctr: "2.1%", cpmDelta: "-18%" },
+    risabae: { views: "41.8만", saves: "6,150", ctr: "1.6%", cpmDelta: "-9%" },
+  };
+  const npcDelay: Record<string, number> = { geekble: 5200, risabae: 6400 };
+  for (const npcId of ["geekble", "risabae"]) {
+    step(npcDelay[npcId], (draft) => {
+      const deal = draft.campaign!.deals.find((d) => d.creatorId === npcId);
+      if (!deal) return;
+      deal.milestones[1].status = "released";
+      deal.starPct = 100;
+      deal.postUrl = `youtube.com/watch?v=${npcId}-${brandHandle(brand)}`;
+      deal.metrics = NPC_METRICS[npcId];
+      deal.txs.push({ label: `마일스톤 2 릴리즈 ${deal.milestones[1].usdc} USDC`, hash: txHash(`m2-${npcId}`) });
+      feed(draft, "🧶", `${creatorById(npcId).handle} 타래 완성 — ${deal.milestones[1].usdc} USDC 릴리즈`, "money");
+    });
+  }
   return S;
 }
 
@@ -626,7 +743,7 @@ export function postSubmittedSequence(url: string, brand: BrandProfile | null): 
   const passed = checks.every((c) => c.ok);
 
   step(0, (draft) => {
-    const ssin = draft.campaign?.deals[0];
+    const ssin = draft.campaign?.deals.find((d) => d.creatorId === HERO_ID);
     if (!ssin || !ssin.awaitingPost) return;
     ssin.postUrl = url.trim();
     ssin.verify = null;
@@ -635,7 +752,8 @@ export function postSubmittedSequence(url: string, brand: BrandProfile | null): 
     feed(draft, "📤", "@ssin 게시물 제출 — 증빙 검증 시작", "info");
   });
   step(1600, (draft) => {
-    const ssin = draft.campaign!.deals[0];
+    const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (!ssin) return;
     ssin.verify = checks;
     if (!passed) {
       ssin.awaitingPost = true;
@@ -650,22 +768,25 @@ export function postSubmittedSequence(url: string, brand: BrandProfile | null): 
   if (!passed) return S;
 
   step(2200, (draft) => {
-    const ssin = draft.campaign!.deals[0];
+    const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (!ssin) return;
     ssin.milestones[1].status = "released";
     ssin.starPct = 100;
-    ssin.txs.push({ label: "마일스톤 2 릴리즈 280 USDC", hash: txHash("m2-ssin") });
-    draft.creatorWalletUsdc += 280;
+    ssin.txs.push({ label: `마일스톤 2 릴리즈 ${ssin.milestones[1].usdc} USDC`, hash: txHash("m2-ssin") });
+    draft.creatorWalletUsdc += ssin.milestones[1].usdc;
     draft.burstSeq += 1;
-    feed(draft, "🧶", "@ssin 타래 완성 — 280 USDC 릴리즈", "money");
+    feed(draft, "🧶", `@ssin 타래 완성 — ${ssin.milestones[1].usdc} USDC 릴리즈`, "money");
   });
   step(2800, (draft) => {
-    const ssin = draft.campaign!.deals[0];
+    const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
+    if (!ssin) return;
+    const bonus = round10(ssin.amountUsdc * 0.1);
     ssin.metrics = { views: "18.2만", saves: "1,540", ctr: "2.4%", cpmDelta: "-31%" };
-    ssin.bonusUsdc = 40;
-    ssin.txs.push({ label: "성과 보너스 릴리즈 40 USDC", hash: txHash("bonus-ssin") });
-    draft.creatorWalletUsdc += 40;
+    ssin.bonusUsdc = bonus;
+    ssin.txs.push({ label: `성과 보너스 릴리즈 ${bonus} USDC`, hash: txHash("bonus-ssin") });
+    draft.creatorWalletUsdc += bonus;
     draft.burstSeq += 1;
-    feed(draft, "🎁", "조회수 18.2만 (조건 15만 초과) — 보너스 40 USDC 자동 지급", "money");
+    feed(draft, "🎁", `조회수 18.2만 (조건 15만 초과) — 보너스 ${bonus} USDC 자동 지급`, "money");
   });
   step(2400, (draft) => {
     draft.campaign!.status = "completed";

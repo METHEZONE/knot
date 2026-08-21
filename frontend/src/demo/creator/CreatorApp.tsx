@@ -14,6 +14,7 @@ import type { InboundOffer, Mood } from "@/demo/engine/types";
 import { Yarn, KnotTie, StarBurst, YarnMeter } from "@/demo/character/Yarn";
 import { Badge, SectionLabel, LiveDot, usdc } from "@/demo/ui/primitives";
 import { IdentityBlock } from "@/demo/auth/IdentityBlock";
+import { RealChainCard } from "@/demo/real/RealChainCard";
 import { A2ALog, Face, TxRow } from "@/demo/ui/bits";
 
 const hero = creatorById(HERO_ID);
@@ -307,6 +308,8 @@ export function CreatorApp() {
                   </div>
                 </div>
               </div>
+
+              <RealChainCard role="creator" />
 
               {/* 게시물 제출 게이트 — 실제 URL을 내야 다음 스텝 */}
               {deal.awaitingPost && (
