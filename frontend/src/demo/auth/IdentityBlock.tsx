@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { connectPhantom } from "@/features/wallet/phantom";
 import { signOutFirebase, firebaseConfigured } from "@/auth/firebaseClient";
 import { withBase } from "@/demo/ui/asset";
+import { useUsdcBalance, formatUsdc } from "@/demo/wallet/balance";
 import { clearSession, shortAddress, updateSession, useKnotSession } from "./session";
 
 const METHOD_LABEL = {
@@ -44,6 +45,7 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
   const router = useRouter();
   const session = useKnotSession();
   const [busy, setBusy] = useState(false);
+  const { balance: realUsdc, failed: balanceFailed } = useUsdcBalance(session?.wallet);
   if (!session) return null;
 
   const logout = async () => {
@@ -79,6 +81,9 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
         {session.wallet ? (
           <span className="k-mono rounded-md bg-black/[0.05] px-1.5 py-0.5 text-[10px] text-[var(--k-muted)]">
             {shortAddress(session.wallet)}
+            {realUsdc !== null && (
+              <span className="ml-1 font-bold text-emerald-700">{formatUsdc(realUsdc)} USDC</span>
+            )}
           </span>
         ) : (
           <button
@@ -119,9 +124,17 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
       </div>
       <div className="mt-2">
         {session.wallet ? (
-          <div className="k-mono flex items-center justify-between rounded-lg bg-black/[0.04] px-2 py-1.5 text-[10.5px]">
-            <span className="text-[var(--k-muted)]">Solana</span>
-            <span className="font-bold">{shortAddress(session.wallet)}</span>
+          <div className="space-y-1">
+            <div className="k-mono flex items-center justify-between rounded-lg bg-black/[0.04] px-2 py-1.5 text-[10.5px]">
+              <span className="text-[var(--k-muted)]">Solana</span>
+              <span className="font-bold">{shortAddress(session.wallet)}</span>
+            </div>
+            <div className="k-mono flex items-center justify-between rounded-lg bg-emerald-50 px-2 py-1.5 text-[10.5px]">
+              <span className="text-emerald-700">USDC · devnet</span>
+              <span className="font-bold text-emerald-800">
+                {realUsdc !== null ? formatUsdc(realUsdc) : balanceFailed ? "—" : "조회 중…"}
+              </span>
+            </div>
           </div>
         ) : (
           <button

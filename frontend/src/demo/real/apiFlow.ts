@@ -17,13 +17,30 @@ import {
   connectPhantomWallet,
   sendPreparedSolanaTransaction,
   signPhantomMessage,
+  type PhantomWallet,
 } from "@/features/wallet/phantom";
+import { updateSession } from "@/demo/auth/session";
 import type { BrandProfile, CampaignSpec } from "@/demo/engine/types";
 
 const client = new ProductApiClient();
 
 export function explorerUrl(signature: string, network = "devnet") {
   return `https://explorer.solana.com/tx/${signature}?cluster=${network}`;
+}
+
+/**
+ * 지갑 소유 증명 후 계정에 등록 — 플랫폼이 키를 보관하지 않으므로(docs/17 D7) 이
+ * 서명만이 주소 소유를 보증한다. 브랜드 예치·크리에이터 정산 등록 둘 다 이 과정이 필요하다.
+ * KnotSession에도 반영해 잔액 UI 등 다른 화면이 같은 주소를 즉시 알 수 있게 한다.
+ */
+async function proveAndSaveWallet(wallet: PhantomWallet) {
+  const { challenge } = await client.createWalletChallenge(wallet.address);
+  const signature = await signPhantomMessage(challenge.message);
+  await client.saveWalletAddress(wallet.address, {
+    challengeId: challenge.challengeId,
+    signature,
+  });
+  updateSession({ wallet: wallet.address });
 }
 
 export async function createRealPromotionAndAgreement(brand: BrandProfile, spec: CampaignSpec) {
@@ -52,6 +69,7 @@ export async function createRealPromotionAndAgreement(brand: BrandProfile, spec:
 
 export async function fundRealEscrow(agreementId: string) {
   const wallet = await connectPhantomWallet();
+  await proveAndSaveWallet(wallet);
   const prepared = await client.prepareEscrowFunding(
     agreementId,
     `demo-fund-${agreementId}-${wallet.address}`,
@@ -77,12 +95,7 @@ export async function fundRealEscrow(agreementId: string) {
 
 export async function registerCreatorWallet() {
   const wallet = await connectPhantomWallet();
-  const { challenge } = await client.createWalletChallenge(wallet.address);
-  const signature = await signPhantomMessage(challenge.message);
-  await client.saveWalletAddress(wallet.address, {
-    challengeId: challenge.challengeId,
-    signature,
-  });
+  await proveAndSaveWallet(wallet);
   return wallet.address;
 }
 

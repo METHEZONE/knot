@@ -114,23 +114,39 @@ export function buildBrandProfile(url: string): BrandProfile {
     .split("/")[0];
   const isDefault = /moodbeam|무드빔/i.test(domain) || domain.length === 0;
   const fallbackName = domain.split(".")[0] || "moodbeam";
+  if (isDefault) {
+    // 데모 기본 브랜드(무드빔)일 때만 풀 목업을 쓴다.
+    return {
+      url: domain || "moodbeam.kr",
+      name: "무드빔",
+      tagline: "방의 공기를 바꾸는 조명",
+      intro:
+        "방의 분위기를 바꾸는 조명을 만드는 팀입니다. 달빛과 노을을 모티프로, 1인 가구의 저녁 시간을 디자인합니다.",
+      tone: ["따뜻한", "미니멀", "저녁의"],
+      products: [
+        { name: "문라이트 램프", desc: "달빛 색온도 재현 무드등" },
+        { name: "선셋 프로젝터", desc: "노을 그라데이션 프로젝션" },
+      ],
+      audience: "1인 가구 · 인테리어 감성 20-34",
+      images: [],
+      color: "#d9a441",
+      logo: "/demo/moodbeam.svg",
+      agentName: "타래",
+    };
+  }
+  // 실제 URL인데 스캔/LLM이 실패한 경우 — 다른 브랜드의 목업(조명 제품 등)을
+  // 절대 뒤집어씌우지 않는다. 이름만 도메인에서 따고 나머지는 비워서 정직하게.
   return {
-    url: domain || "moodbeam.kr",
-    name: isDefault
-      ? "무드빔"
-      : fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1),
-    tagline: "방의 공기를 바꾸는 조명",
-    intro:
-      "방의 분위기를 바꾸는 조명을 만드는 팀입니다. 달빛과 노을을 모티프로, 1인 가구의 저녁 시간을 디자인합니다.",
-    tone: ["따뜻한", "미니멀", "저녁의"],
-    products: [
-      { name: "문라이트 램프", desc: "달빛 색온도 재현 무드등" },
-      { name: "선셋 프로젝터", desc: "노을 그라데이션 프로젝션" },
-    ],
-    audience: "1인 가구 · 인테리어 감성 20-34",
+    url: domain,
+    name: fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1),
+    tagline: "",
+    intro: "",
+    tone: [],
+    products: [],
+    audience: "",
     images: [],
     color: "#d9a441",
-    logo: "/demo/moodbeam.svg",
+    logo: "/icon.svg",
     agentName: "타래",
   };
 }
