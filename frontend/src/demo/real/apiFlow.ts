@@ -43,7 +43,55 @@ async function proveAndSaveWallet(wallet: PhantomWallet) {
   updateSession({ wallet: wallet.address });
 }
 
+/**
+ * 이 데모용 Firebase 계정은 백엔드에 처음 보는 uid일 수 있다(예: 새로 배포된
+ * knot-api가 데모 시드와 다른 Firebase 프로젝트를 쓸 때) — role/profile이 없으면
+ * 먼저 최소 온보딩을 마쳐야 프로모션 생성·discovery가 작동한다.
+ */
+async function ensureBrandOnboarded(brand: BrandProfile) {
+  const me = await client.getMe();
+  if (me.account.role === "BRAND" && me.account.onboardingStatus === "COMPLETED") return;
+  if (me.account.role !== "BRAND") {
+    await client.selectMyRole("BRAND", `demo-role-brand-${Date.now()}`);
+  }
+  await client.createMyBrandProfile(
+    {
+      brandName: brand.name || "브랜드",
+      websiteUrl: /^https?:\/\//.test(brand.url) ? brand.url : `https://${brand.url || "example.com"}`,
+      categories: (brand.tone.length ? brand.tone : ["lifestyle"]).slice(0, 3),
+      targetAudience: brand.audience || "20-34 관심 고객",
+      description: brand.intro || brand.tagline || "",
+      restrictedClaims: [],
+    },
+    `demo-brand-profile-${Date.now()}`,
+  );
+}
+
+/**
+ * 크리에이터도 마찬가지 — 게다가 discovery에 걸리려면 카테고리/최소가가 프로모션과
+ * 맞아야 하니, 웬만한 브랜드 카테고리와 겹치도록 넉넉하게 잡는다.
+ */
+async function ensureCreatorOnboarded() {
+  const me = await client.getMe();
+  if (me.account.role === "CREATOR" && me.account.onboardingStatus === "COMPLETED") return;
+  if (me.account.role !== "CREATOR") {
+    await client.selectMyRole("CREATOR", `demo-role-creator-${Date.now()}`);
+  }
+  await client.createMyCreatorProfile(
+    {
+      creatorName: me.account.displayName || "데모 크리에이터",
+      snsUrl: "https://instagram.com/knot.demo.creator",
+      categories: ["lifestyle", "beauty", "food"],
+      minimumUsdc: 10,
+      blockedDomains: [],
+      preferredContent: ["reel", "short", "post"],
+    },
+    `demo-creator-profile-${Date.now()}`,
+  );
+}
+
 export async function createRealPromotionAndAgreement(brand: BrandProfile, spec: CampaignSpec) {
+  await ensureBrandOnboarded(brand);
   const promotion = await client.createBrandPromotion(
     {
       productName: brand.name || "협찬 제품",
@@ -94,6 +142,7 @@ export async function fundRealEscrow(agreementId: string) {
 }
 
 export async function registerCreatorWallet() {
+  await ensureCreatorOnboarded();
   const wallet = await connectPhantomWallet();
   await proveAndSaveWallet(wallet);
   return wallet.address;
