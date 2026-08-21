@@ -49,10 +49,10 @@ escrow or settlement state.
 5. [x] Add demo creator settlement wallet fields to the persona seed output so
    refreshed dev/prod demo data can pass escrow prepare.
 6. [x] Verify local typecheck, tests, and production build.
-7. [ ] Refresh deployed Firestore demo seed after explicit approval.
-8. [ ] Deploy only `knot-web` after explicit approval, with API mode and existing
+7. [x] Refresh deployed Firestore demo seed after explicit approval.
+8. [x] Deploy only `knot-web` after explicit approval, with API mode and existing
    Cloud Run API URL.
-9. [ ] QA the deployed Cloud Run web URL:
+9. [x] QA the deployed Cloud Run web URL:
    - page routes
    - `/api/v1` proxy
    - demo promotion read

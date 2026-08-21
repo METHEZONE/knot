@@ -1876,3 +1876,44 @@ Updated: 2026-08-20 KST
 - The deployed Firestore seed must be refreshed before live funding, otherwise
   existing creator personas may still lack `walletAddress` and escrow prepare
   will return `CREATOR_WALLET_REQUIRED`.
+
+### Deploy And Live QA
+
+- Refreshed Firestore demo persona seed after approval:
+  146 documents written, 26 Firebase Auth users updated, no validation errors.
+- Deployed `knot-web` image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:0745014` to Cloud
+  Run revision `knot-web-00030-h5n`, serving 100% traffic.
+- Live Cloud Run web URL:
+  `https://knot-web-7k3walthgq-uc.a.run.app`
+- Live route smoke:
+  - `/b`: 200
+  - `/c`: 200
+  - `/b/graph`: 200
+  - `/api/v1/promotions/promotion-demo-cheriexx`: 200
+- Live API smoke from deployed web proxy:
+  - Matching run `match-c33a3f3a-6b7f-4029-a96e-c9d7683adaf0` completed with
+    5 candidates.
+  - pay.sh/x402 sandbox verification receipt was recorded with
+    `status=SETTLED`, `amountUsdc=0.02`.
+  - A2A negotiation
+    `negotiation-c8140ea4-2d1c-4ae5-b90c-3786eb532462` completed
+    `AGREED` through the Cloud Run Creator Agent HTTP endpoint.
+  - Agreement `agreement-3bca7dfd-ec3a-4329-92ee-4f433451c96f` was created
+    with `status=FUNDING_REQUIRED`.
+  - Agreement escrow read returned `escrow=null`, `settlements=[]`, which is
+    expected before the Brand signs the Phantom funding transaction.
+  - Authenticated demo brand `/api/v1/me` returned
+    `uid=user-brand-demo-cheriexx`, `role=BRAND`,
+    `brandId=brand-demo-cheriexx`, `agentId=agent-demo-brand-cheriexx`.
+  - Deployed Firestore creator profile `creator-demo-ssin` contains
+    `walletAddress=BTsMioiaKhxQzPBJV2hNYp6xHovY85dnE73v6CSqRQsX`,
+    `walletNetwork=devnet`, and
+    `walletCustody=DEMO_SEEDED_DESTINATION`.
+
+### Remaining Live Step
+
+- Final escrow funding and settlement release still require an operator with
+  Phantom on devnet to sign the funding transaction from the Brand wallet and
+  then submit a valid content URL. The UI is now wired to call the real prepare,
+  confirm, evidence, verify, and settlement paths for that signed flow.
