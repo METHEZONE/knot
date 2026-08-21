@@ -142,4 +142,19 @@ escrow or settlement state.
    of exposing the backend English detail.
 3. [x] Add frontend API client coverage for the user-facing error mapping.
 4. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
-5. [ ] Deploy the error-copy build after explicit approval.
+5. [x] Deploy the error-copy build after explicit approval.
+
+### Deployment Result
+
+- Built web image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:daabc81`
+  with Cloud Build `388528e0-6722-4a34-a401-5e6290969f9c`.
+- Deployed Cloud Run service `knot-web` revision `knot-web-00032-xd2` with
+  100% traffic.
+- Live URL: `https://knot-web-7k3walthgq-uc.a.run.app`.
+
+### Live QA
+
+- `GET /auth`: 200.
+- `GET /b`: 200.
+- Latest ready revision: `knot-web-00032-xd2`, serving 100% traffic.

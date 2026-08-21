@@ -2029,3 +2029,16 @@ Updated: 2026-08-20 KST
 - `npm --prefix frontend test`: 22 passed.
 - `npm --prefix frontend run build`: passed.
 - `git diff --check`: passed.
+
+### Deploy And Live QA
+
+- Built web image
+  `us-central1-docker.pkg.dev/knot-dev-503505/knot/knot-web:daabc81`
+  with Cloud Build `388528e0-6722-4a34-a401-5e6290969f9c`.
+- Deployed Cloud Run service `knot-web` revision `knot-web-00032-xd2`, serving
+  100% traffic.
+- Live Cloud Run web URL:
+  `https://knot-web-7k3walthgq-uc.a.run.app`
+- Live route smoke:
+  - `/auth`: 200
+  - `/b`: 200
