@@ -194,14 +194,30 @@ const NEGOTIATION_TRAITS: Record<string, { floor: number; openRatio: number }> =
 const round10 = (n: number) => Math.max(10, Math.round(n / 10) * 10);
 const pct = (ratio: number) => `${Math.round(ratio * 100)}%`;
 
-type NegotiationOutcome = { cap: number; floor: number; opening: number; agreed: boolean; amount: number };
+type NegotiationOutcome = {
+  cap: number;
+  floor: number;
+  opening: number;
+  agreed: boolean;
+  amount: number;
+  blockReason: "cap" | "budget" | null;
+};
 
-function negotiate(creatorId: string, cap: number): NegotiationOutcome {
+const roundMoney = (n: number) => (n >= 100 ? Math.round(n / 10) * 10 : Math.max(1, Math.round(n)));
+
+type BlockReason = "cap" | "budget" | null;
+
+function negotiate(creatorId: string, cap: number, remainingBudget: number): NegotiationOutcome {
   const trait = NEGOTIATION_TRAITS[creatorId];
-  const opening = round10(cap * trait.openRatio);
-  const agreed = trait.floor <= cap;
-  const amount = agreed ? Math.min(cap, Math.max(opening, trait.floor)) : 0;
-  return { cap, floor: trait.floor, opening, agreed, amount };
+  // 기준선은 한도에 비례해 스케일된다(앵커 450 — 프리셋에선 기존 250/400/800 그대로).
+  // 20 USDC 지갑 같은 실예산에서도 "체결 + 차단" 서사가 유지된다.
+  const floor = Math.min(trait.floor, roundMoney((cap * trait.floor) / 450));
+  const opening = roundMoney(Math.min(cap, remainingBudget) * trait.openRatio);
+  // 한도와 예산 잔여를 둘 다 지켜야 체결 — 총예산 초과 에스크로는 실지갑에서 불가능하다.
+  const blockReason: BlockReason = floor > cap ? "cap" : floor > remainingBudget ? "budget" : null;
+  const agreed = blockReason === null;
+  const amount = agreed ? Math.min(cap, remainingBudget, Math.max(opening, floor)) : 0;
+  return { cap, floor, opening, agreed, amount, blockReason };
 }
 
 export function taskBriefFor(brand: BrandProfile | null): TaskBrief {
@@ -371,10 +387,15 @@ export function expeditionSequence(
   const bName = brandName(brand);
   const product = productName(brand);
   const cap = budget.maxPerDealUsdc;
-  const geekble = negotiate("geekble", cap);
-  const ssin = negotiate("ssin", cap);
-  const risabae = negotiate("risabae", cap);
-  const bonus = round10(ssin.floor * 0.1);
+  // 예산 배분은 적합도 순(ssin 우선) — "예산 여유분 우선 배정" 대사와 일치한다.
+  const ssin = negotiate("ssin", cap, budget.budgetUsdc);
+  const bonus = ssin.agreed
+    ? Math.max(0, Math.min(Math.round(ssin.amount * 0.1), cap - ssin.amount, budget.budgetUsdc - ssin.amount))
+    : 0;
+  const afterSsin = budget.budgetUsdc - (ssin.agreed ? ssin.amount + bonus : 0);
+  const geekble = negotiate("geekble", cap, afterSsin);
+  const afterGeekble = afterSsin - (geekble.agreed ? geekble.amount : 0);
+  const risabae = negotiate("risabae", cap, afterGeekble);
 
   // -- 출발 + 스카우팅 --
   step(0, (draft) => {
@@ -440,6 +461,7 @@ export function expeditionSequence(
       feed(draft, "🪢", `@geekble_kr 체결 — ${geekble.amount} USDC (2라운드)`, "ok");
     });
   } else {
+    const isBudget = geekble.blockReason === "budget";
     step(1700, (draft) =>
       a2a(
         draft,
@@ -455,16 +477,30 @@ export function expeditionSequence(
         draft,
         "geekble",
         "policy",
-        `정책 차단 — 요구액 ${geekble.floor} USDC가 딜당 한도 ${cap}을 초과`,
-        "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
+        isBudget
+          ? `정책 차단 — 캠페인 예산 잔여가 ${geekble.floor} USDC에 못 미침`
+          : `정책 차단 — 요구액 ${geekble.floor} USDC가 딜당 한도 ${cap}을 초과`,
+        isBudget
+          ? "총예산을 넘는 에스크로는 걸 수 없다 — 지갑에 있는 만큼만 쓴다."
+          : "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
         geekble.floor,
       ),
     );
     step(1400, (draft) => {
-      a2a(draft, "geekble", "brand", `${geekble.floor}은 제 권한 밖이라 이번 건은 접을게요.`, "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.");
+      a2a(
+        draft,
+        "geekble",
+        "brand",
+        isBudget
+          ? "이번 캠페인 예산이 다 차서 이번 건은 보류할게요. 다음 캠페인에서 꼭 다시 인사드릴게요."
+          : `${geekble.floor}은 제 권한 밖이라 이번 건은 접을게요.`,
+        isBudget ? "예산 잔여 부족 시 자율 보류 — 초과 집행 금지." : "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.",
+      );
       draft.campaign!.negotiations.geekble.status = "blocked";
-      draft.campaign!.negotiations.geekble.blockedReason = `딜당 한도 ${cap} 초과 (요구 ${geekble.floor})`;
-      feed(draft, "🛡️", "@geekble_kr 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
+      draft.campaign!.negotiations.geekble.blockedReason = isBudget
+        ? `예산 잔여 부족 (필요 ${geekble.floor})`
+        : `딜당 한도 ${cap} 초과 (요구 ${geekble.floor})`;
+      feed(draft, "🛡️", isBudget ? "@geekble_kr 협상 보류 — 예산 잔여 부족" : "@geekble_kr 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
     });
   }
 
@@ -514,23 +550,29 @@ export function expeditionSequence(
         ssin.amount,
       ),
     );
-    step(1900, (draft) =>
-      a2a(
-        draft,
-        "ssin",
-        "creator",
-        `좋아요. 대신 성과 보너스 조항 하나만 — 조회수 15만(평균 7만의 2배) 넘으면 +${bonus} 어때요?`,
-        "기준 규칙: 평균 조회수 2배(15만) 초과 시 +10% 보너스 요구.",
-        ssin.amount + bonus,
-      ),
-    );
+    if (bonus > 0) {
+      step(1900, (draft) =>
+        a2a(
+          draft,
+          "ssin",
+          "creator",
+          `좋아요. 대신 성과 보너스 조항 하나만 — 조회수 15만(평균 7만의 2배) 넘으면 +${bonus} 어때요?`,
+          "기준 규칙: 평균 조회수 2배(15만) 초과 시 +10% 보너스 요구.",
+          ssin.amount + bonus,
+        ),
+      );
+    }
     step(1800, (draft) => {
       a2a(
         draft,
         "ssin",
         "brand",
-        "합리적이네요. 보너스는 에스크로에 조건부로 걸어둘게요. 계약 묶습니다 🪢",
-        `체결가 ${ssin.amount} + 조건부 보너스 ${bonus} = 최대 ${ssin.amount + bonus} ≤ 한도 ${cap}.`,
+        bonus > 0
+          ? "합리적이네요. 보너스는 에스크로에 조건부로 걸어둘게요. 계약 묶습니다 🪢"
+          : "좋아요, 그 조건으로 계약 묶습니다 🪢",
+        bonus > 0
+          ? `체결가 ${ssin.amount} + 조건부 보너스 ${bonus} = 최대 ${ssin.amount + bonus} ≤ 한도 ${cap}.`
+          : `체결가 ${ssin.amount} ≤ 한도 ${cap}.`,
         ssin.amount,
       );
       draft.campaign!.negotiations.ssin.status = "agreed";
@@ -538,9 +580,16 @@ export function expeditionSequence(
       patchOffer(draft, "offer-moodbeam", {
         status: "agreed",
         amountUsdc: ssin.amount,
-        note: `${ssin.amount} + 보너스 조항 — 브랜드 승인 대기`,
+        note: bonus > 0 ? `${ssin.amount} + 보너스 조항 — 브랜드 승인 대기` : `${ssin.amount} — 브랜드 승인 대기`,
       });
-      feed(draft, "🪢", `@ssin 체결 — ${ssin.amount} USDC + 보너스 조항 (4라운드)`, "ok");
+      feed(
+        draft,
+        "🪢",
+        bonus > 0
+          ? `@ssin 체결 — ${ssin.amount} USDC + 보너스 조항 (4라운드)`
+          : `@ssin 체결 — ${ssin.amount} USDC (3라운드)`,
+        "ok",
+      );
     });
   } else {
     step(1900, (draft) =>
@@ -594,21 +643,36 @@ export function expeditionSequence(
       feed(draft, "🪢", `@RISABAE 체결 — ${risabae.amount} USDC (3라운드)`, "ok");
     });
   } else {
+    const rIsBudget = risabae.blockReason === "budget";
     step(1600, (draft) =>
       a2a(
         draft,
         "risabae",
         "policy",
-        `정책 차단 — 요구액 ${risabae.floor} USDC가 딜당 한도 ${cap}을 초과`,
-        "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
+        rIsBudget
+          ? `정책 차단 — 캠페인 예산 잔여가 ${risabae.floor} USDC에 못 미침`
+          : `정책 차단 — 요구액 ${risabae.floor} USDC가 딜당 한도 ${cap}을 초과`,
+        rIsBudget
+          ? "총예산을 넘는 에스크로는 걸 수 없다 — 지갑에 있는 만큼만 쓴다."
+          : "한도는 사람이 정한 숫자. 에이전트는 넘을 수 없고, 넘으려면 사람이 한도를 올려야 함.",
         risabae.floor,
       ),
     );
     step(1700, (draft) => {
-      a2a(draft, "risabae", "brand", `${risabae.floor}은 제 권한 밖이라 이번 건은 접을게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇`, "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.");
+      a2a(
+        draft,
+        "risabae",
+        "brand",
+        rIsBudget
+          ? "이번 캠페인 예산이 다 차서 이번 건은 보류할게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇"
+          : `${risabae.floor}은 제 권한 밖이라 이번 건은 접을게요. 다음 캠페인 예산에서 다시 인사드릴게요 🙇`,
+        rIsBudget ? "예산 잔여 부족 시 자율 보류 — 초과 집행 금지." : "한도 초과 시 승인 요청 대신 철수 — 예산 보호가 기본 동작.",
+      );
       draft.campaign!.negotiations.risabae.status = "blocked";
-      draft.campaign!.negotiations.risabae.blockedReason = `딜당 한도 ${cap} 초과 (요구 ${risabae.floor})`;
-      feed(draft, "🛡️", "@RISABAE 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
+      draft.campaign!.negotiations.risabae.blockedReason = rIsBudget
+        ? `예산 잔여 부족 (필요 ${risabae.floor})`
+        : `딜당 한도 ${cap} 초과 (요구 ${risabae.floor})`;
+      feed(draft, "🛡️", rIsBudget ? "@RISABAE 협상 보류 — 예산 잔여 부족" : "@RISABAE 협상 종료 — 정책 한도 초과로 자율 철수", "warn");
     });
   }
 
@@ -630,12 +694,17 @@ export function expeditionSequence(
     const agreedLine = agreed
       .map((n) => `${nameOf(n.creatorId)} ${n.agreedUsdc}${n.creatorId === "ssin" ? "(+보너스 조항)" : ""}`)
       .join(", ");
-    const blockedLine = blocked.map((n) => nameOf(n.creatorId)).join(", ");
+    const capBlocked = blocked.filter((n) => !n.blockedReason?.includes("예산"));
+    const budgetBlocked = blocked.filter((n) => n.blockedReason?.includes("예산"));
+    const blockedParts = [
+      capBlocked.length ? `${capBlocked.map((n) => nameOf(n.creatorId)).join(", ")}는 한도를 넘겨서 접었고` : "",
+      budgetBlocked.length ? `${budgetBlocked.map((n) => nameOf(n.creatorId)).join(", ")}는 예산이 다 차서 다음 캠페인으로 보류했어요` : "",
+    ].filter(Boolean);
     const text =
       agreed.length === 0
-        ? `탐험 다녀왔는데 이번엔 다들 한도(${cap} USDC)를 넘겨서 체결된 딜이 없어요. 한도를 올려주시면 다시 시도해볼게요.`
+        ? `탐험 다녀왔는데 이번엔 조건이 안 맞아서 체결된 딜이 없어요. 한도나 예산을 올려주시면 다시 시도해볼게요.`
         : `탐험 다녀왔어요! ${CREATORS.length}명 만나서 ${agreed.length}건 물어왔습니다 — ${agreedLine}. 합계 ${total} USDC로 예산의 ${budgetPct}%예요.${
-            blocked.length ? ` ${blockedLine}는 한도를 넘겨서 제 권한 밖이라 접었어요.` : ""
+            blockedParts.length ? ` ${blockedParts.join(", ")}.` : ""
           } 승인해주시면 에스크로 걸고 바로 시작합니다.`;
     agentSays(draft, text);
   });
@@ -796,13 +865,17 @@ export function postSubmittedSequence(url: string, brand: BrandProfile | null): 
   step(2800, (draft) => {
     const ssin = draft.campaign!.deals.find((d) => d.creatorId === HERO_ID);
     if (!ssin) return;
-    const bonus = round10(ssin.amountUsdc * 0.1);
     ssin.metrics = { views: "18.2만", saves: "1,540", ctr: "2.4%", cpmDelta: "-31%" };
-    ssin.bonusUsdc = bonus;
-    ssin.txs.push({ label: `성과 보너스 릴리즈 ${bonus} USDC`, hash: txHash("bonus-ssin") });
-    draft.creatorWalletUsdc += bonus;
-    draft.burstSeq += 1;
-    feed(draft, "🎁", `조회수 18.2만 (조건 15만 초과) — 보너스 ${bonus} USDC 자동 지급`, "money");
+    // 보너스는 체결가의 10%를 한도 잔여분으로 클램프 — 작은 실예산에서도 한도를 안 넘는다
+    const cap = draft.campaign!.spec.maxPerDealUsdc;
+    const bonus = Math.max(0, Math.min(Math.round(ssin.amountUsdc * 0.1), cap - ssin.amountUsdc));
+    if (bonus > 0) {
+      ssin.bonusUsdc = bonus;
+      ssin.txs.push({ label: `성과 보너스 릴리즈 ${bonus} USDC`, hash: txHash("bonus-ssin") });
+      draft.creatorWalletUsdc += bonus;
+      draft.burstSeq += 1;
+      feed(draft, "🎁", `조회수 18.2만 (조건 15만 초과) — 보너스 ${bonus} USDC 자동 지급`, "money");
+    }
   });
   step(2400, (draft) => {
     draft.campaign!.status = "completed";
@@ -812,9 +885,12 @@ export function postSubmittedSequence(url: string, brand: BrandProfile | null): 
   step(600, typing);
   step(1400, (draft) => {
     const r = REPORT_SUMMARY;
+    const spent = draft.campaign!.deals.reduce((sum, d) => sum + d.amountUsdc + (d.bonusUsdc ?? 0), 0);
+    const budget = draft.campaign!.spec.budgetUsdc;
+    const savedPct = Math.max(0, Math.round((1 - spent / budget) * 100));
     agentSays(
       draft,
-      `리포트 가져왔어요. 조회수 합계 ${r.totalViews}(목표 ${r.targetViews}), 저장 ${r.totalSaves}, 평균 CPM은 업계 대비 ${r.cpmVsIndustry}예요. 집행은 ${r.spentUsdc}/${r.budgetUsdc.toLocaleString()} USDC — 협상으로 예산 ${r.savedPct}%를 아꼈어요. 다음엔 오토파일럿을 켜보세요. 한도 안에서는 승인 클릭조차 제가 대신할게요.`,
+      `리포트 가져왔어요. 조회수 합계 ${r.totalViews}(목표 ${r.targetViews}), 저장 ${r.totalSaves}, 평균 CPM은 업계 대비 ${r.cpmVsIndustry}예요. 집행은 ${spent}/${budget.toLocaleString()} USDC — 협상으로 예산 ${savedPct}%를 아꼈어요. 다음엔 오토파일럿을 켜보세요. 한도 안에서는 승인 클릭조차 제가 대신할게요.`,
       [{ id: "toggle-autopilot", label: "🚀 오토파일럿 켜기" }],
     );
   });
