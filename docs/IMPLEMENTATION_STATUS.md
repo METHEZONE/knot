@@ -2009,3 +2009,23 @@ Updated: 2026-08-20 KST
 - Escrow read smoke returned `escrow=null`, `settlements=[]` for a
   `FUNDING_REQUIRED` Agreement. No Phantom signature, escrow funding, or
   settlement release was executed.
+
+## 2026-08-21 One-Role Account Error Copy
+
+### Changed
+
+- Preserved the backend v1 account invariant: one Firebase account can only
+  select one KNOT role.
+- Mapped the Product API `ROLE_ALREADY_SELECTED` problem code to Korean
+  user-facing guidance:
+  "KNOT v1에서는 한 계정에 하나의 역할만 사용할 수 있습니다. 브랜드 데모는
+  t1, 크리에이터 데모는 c1 계정으로 각각 입장해 주세요."
+- Added frontend API client test coverage so the backend English detail is not
+  exposed directly in role-conflict flows.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 22 passed.
+- `npm --prefix frontend run build`: passed.
+- `git diff --check`: passed.

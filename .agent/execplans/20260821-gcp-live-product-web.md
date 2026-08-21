@@ -133,3 +133,13 @@ escrow or settlement state.
     `apify-instagram-profile-scraper`, no fallback.
 - Escrow read path returned `escrow=null`, `settlements=[]` for a
   `FUNDING_REQUIRED` Agreement, which is expected before Phantom signs funding.
+
+## 2026-08-21 One-Role Account Error Copy
+
+1. [x] Keep the backend v1 invariant that one Firebase account has one KNOT
+   role.
+2. [x] Map `ROLE_ALREADY_SELECTED` API errors to Korean demo guidance instead
+   of exposing the backend English detail.
+3. [x] Add frontend API client coverage for the user-facing error mapping.
+4. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
+5. [ ] Deploy the error-copy build after explicit approval.
