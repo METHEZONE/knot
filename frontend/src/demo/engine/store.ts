@@ -372,6 +372,14 @@ export function submitBudget(budgetUsdc: number, maxPerDealUsdc: number) {
   askNext(composeFlowFor(state.brand).content, "content");
 }
 
+/** 오토파일럿 토글 — 끄면 진행 중인 런 카드도 같이 치운다. */
+export function setAutopilot(on: boolean) {
+  mutate((d) => {
+    d.autopilot = on;
+    if (!on) d.autopilotRun = null;
+  });
+}
+
 export function approveDeals() {
   playSequence(knotSequence(state.brand));
 }
