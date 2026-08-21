@@ -32,18 +32,35 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const url = new URL(request.url);
   const target = new URL(`/api/v1/${path.join("/")}${url.search}`, API_BASE_URL);
   const body = request.method === "GET" ? undefined : await request.text();
-  const response = await fetch(target, {
-    method: request.method,
-    body,
-    cache: "no-store",
-    headers: forwardedHeaders(request),
-  });
-  return new Response(await response.arrayBuffer(), {
-    status: response.status,
-    headers: {
-      "Content-Type": response.headers.get("Content-Type") ?? "application/json",
-    },
-  });
+  try {
+    const response = await fetch(target, {
+      method: request.method,
+      body,
+      cache: "no-store",
+      headers: forwardedHeaders(request),
+    });
+    return new Response(await response.arrayBuffer(), {
+      status: response.status,
+      headers: {
+        "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+      },
+    });
+  } catch (caught) {
+    // Surface a readable error instead of an opaque empty 500 — most commonly
+    // KNOT_API_BASE_URL isn't set/reachable from this deployment.
+    return Response.json(
+      {
+        detail: {
+          title: "Backend unreachable",
+          code: "UPSTREAM_UNREACHABLE",
+          detail: `Proxy to ${target.origin} failed: ${
+            caught instanceof Error ? caught.message : String(caught)
+          }`,
+        },
+      },
+      { status: 502 },
+    );
+  }
 }
 
 function forwardedHeaders(request: NextRequest) {
