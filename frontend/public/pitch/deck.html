@@ -12,7 +12,7 @@
   /* ── 이서윤체: 헤드라인 전용 (손글씨지만 정자체라 가독성 확보) ── */
   @font-face {
     font-family: 'LeeSeoyun';
-    src: url('/knotpitch/LeeSeoyun.woff2') format('woff2'),
+    src: url('LeeSeoyun.woff2') format('woff2'),
          url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2202-2@1.0/LeeSeoyun.woff') format('woff');
     font-weight: normal;
     font-style: normal;
@@ -526,6 +526,10 @@
     pointer-events: none;
   }
   .doodle path, .doodle circle { fill: none; stroke: #3a3a3a; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── 손그림 흔들림 (랜딩과 동일) ── */
+  .squig-1 { filter: url(#squiggle-1); }
+  .squig-2 { filter: url(#squiggle-2); }
   .d-star   { top: 10vh; left: 9vw; }
   .d-spiral { top: 16vh; right: 10vw; }
   .d-smile  { bottom: 9vh;  left: 15vw; }
@@ -624,6 +628,7 @@
       animation: none !important; opacity: 1 !important; transform: none !important;
       stroke-dashoffset: 0 !important;
     }
+    .squig-1, .squig-2 { filter: none !important; }
   }
 
   @media print {
@@ -654,6 +659,27 @@
     display: flex; align-items: center; justify-content: center;
   }
   .photo-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+  /* ── 발표자 경험담: 락인커피 실물 사진, 왼쪽 절반 페이드 ── */
+  #s3 .hero-photo {
+    position: absolute; top: 0; left: 0; width: 54%; height: 100%;
+    background-image:
+      linear-gradient(180deg, #fffdf8 0%, rgba(255,253,248,.2) 22%, rgba(255,253,248,.2) 78%, #fffdf8 100%),
+      linear-gradient(to right, rgba(255,253,248,.3) 0%, rgba(255,253,248,.3) 40%, #fffdf8 97%),
+      url('logos/lockincoffee.jpg');
+    background-size: cover, cover, cover;
+    background-position: center, center, center 22%;
+    z-index: 0;
+  }
+  #s3 .hero-photo-cap {
+    position: absolute; left: 4vw; bottom: 6vh;
+    font-family: 'Caveat', cursive;
+    font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+    color: #fffdf8;
+    text-shadow: 0 2px 12px rgba(0,0,0,.5);
+  }
+  #s3 .slide-title { text-shadow: 0 2px 16px rgba(255,253,248,.9); }
+  #s3 .slide-content { position: relative; z-index: 2; }
 
   /* 조건 체크리스트 */
   .cond { display: flex; flex-direction: column; gap: 1.1rem; }
@@ -711,6 +737,24 @@
 </style>
 <body>
 
+<!-- ════ squigglevision filter bank (랜딩과 동일한 손그림 흔들림 효과) ════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="squiggle-1" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="turbulence" baseFrequency="0.02" numOctaves="2" seed="1" result="noise">
+        <animate attributeName="seed" values="1;3;5;7;9" dur="0.45s" calcMode="discrete" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.5"/>
+    </filter>
+    <filter id="squiggle-2" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="turbulence" baseFrequency="0.035" numOctaves="2" seed="2" result="noise">
+        <animate attributeName="seed" values="2;6;10;14" dur="0.38s" calcMode="discrete" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5"/>
+    </filter>
+  </defs>
+</svg>
+
 <div class="nav-hint">← → 슬라이드 이동 · P 인쇄</div>
 
 <!-- ══════ 1. 표지 (랜딩 페이지와 동일한 톤) ══════ -->
@@ -752,7 +796,7 @@
     <p class="ask-line">
       혹시 <span class="q">브랜드 운영</span>하시는 분?<br/>
       <span class="q">인플루언서 마케팅</span> 해보신 분?<br/>
-      <span style="color:#b00;">뭐가 제일 힘드셨어요?</span>
+      <span class="squig-2" style="color:#b00;">뭐가 제일 힘드셨어요?</span>
     </p>
   </div>
   <div class="slide-number"></div>
@@ -760,23 +804,11 @@
 
 <!-- ══════ 3. 발표자 경험담 ══════ -->
 <section class="slide" id="s3">
+  <div class="hero-photo"><span class="hero-photo-cap">락인커피</span></div>
   <h2 class="slide-title">저도 브랜드를 운영합니다</h2>
   <div class="slide-content">
     <div class="two-col">
-      <div style="text-align:center;">
-        <div class="photo-frame" style="height: min(46vh, 420px); width: min(360px, 40vw); margin: 0 auto;">
-          <img src="/knotpitch/logos/lockincoffee.jpg" alt="락인커피"
-               onerror="this.style.display='none'; this.parentNode.querySelector('svg').style.display='block';" />
-          <svg class="draw" viewBox="0 0 300 320" style="display:none; width:70%;">
-            <path d="M120 26 L180 26 L180 62 L192 86 L192 286 C192 296 184 302 174 302 L126 302 C116 302 108 296 108 286 L108 86 L120 62 Z" stroke-width="3.5"/>
-            <rect x="116" y="14" width="68" height="16" rx="4" stroke-width="3.5"/>
-            <rect x="112" y="128" width="76" height="96" rx="5" stroke-width="2.5"/>
-            <text x="150" y="168" text-anchor="middle" font-family="LeeSeoyun" font-size="21" fill="#0a0a0a" stroke="none">락인</text>
-            <text x="150" y="200" text-anchor="middle" font-family="LeeSeoyun" font-size="21" fill="#0a0a0a" stroke="none">커피</text>
-          </svg>
-        </div>
-        <p style="margin-top:0.8rem; font-size:clamp(1.2rem,2vw,1.65rem); color:#777;">락인커피</p>
-      </div>
+      <div aria-hidden="true"></div>
       <div>
         <div class="sketchbox" style="font-size:clamp(1.7rem,2.8vw,2.4rem);">
           “저도 브랜드 운영 중인데,<br/><b>시간이 엄청 빠지더라고요</b>”
@@ -797,7 +829,7 @@
   <div class="slide-content">
     <div class="two-col" style="align-items:center;">
       <div class="photo-frame" style="max-height: 58vh;">
-        <img src="/knotpitch/logos/instagram_dm_outreach_mock.png" alt="인플루언서 마케팅 콜드DM" />
+        <img src="logos/instagram_dm_outreach_mock.png" alt="인플루언서 마케팅 콜드DM" />
       </div>
       <div class="dm-pile" style="height:56vh;">
         <div class="dm dead" style="top:4%; left:2%;">안녕하세요! 협찬 제안드려요 🙏</div>
@@ -820,19 +852,19 @@
   <div class="slide-content">
     <div class="logo-row">
       <div class="logo-item">
-        <div class="logo-box"><img src="/knotpitch/logos/crycheeseburger.png" alt="크라이치즈버거" /></div>
+        <div class="logo-box"><img src="logos/crycheeseburger.png" alt="크라이치즈버거" /></div>
         <span>F&amp;B · 프랜차이즈</span>
         <span class="who">인플루언서 마케터 원지웅</span>
         <div class="pain-bubble">“하루 4시간은 일정 조율에 씁니다<span class="sub">그마저도 절반은 다시 조율</span>”</div>
       </div>
       <div class="logo-item">
-        <div class="logo-box"><img src="/knotpitch/logos/cherryxx.png" alt="체리엑스엑스" /></div>
+        <div class="logo-box"><img src="logos/cherryxx.png" alt="체리엑스엑스" /></div>
         <span>뷰티 · 코스메틱</span>
         <span class="who">대표 고유안</span>
         <div class="pain-bubble">“뷰티는 단가가 계속 널뛰어서<span class="sub">협상·조율에만 공수가 많이 듭니다</span>”</div>
       </div>
       <div class="logo-item">
-        <div class="logo-box"><img src="/knotpitch/logos/branderjean.png" alt="브랜더진" /></div>
+        <div class="logo-box"><img src="logos/branderjean.png" alt="브랜더진" /></div>
         <span>패션 · 크리에이터 마케팅</span>
         <span class="who">인플루언서 마케터 조민서</span>
         <div class="pain-bubble">“하루 100명씩 DM 보내고<span class="sub">엑셀 정리까지, 너무 힘듭니다</span>”</div>
@@ -1105,9 +1137,9 @@
       </div>
     </div>
     <div class="ev-row">
-      <div class="ev"><img src="/knotpitch/logos/paysh.svg" alt="pay.sh" onerror="this.remove()"/><b>pay.sh · x402</b><span>검증 API를 사람 승인 없이 구매</span></div>
-      <div class="ev"><img src="/knotpitch/logos/anchor.png" alt="Anchor" onerror="this.remove()"/><b>Anchor 에스크로</b><span>마일스톤 30/70 분할 · 조건부 잠금</span></div>
-      <div class="ev"><img src="/knotpitch/logos/usdc.svg" alt="USDC" onerror="this.remove()"/><b>USDC-SPL</b><span>자금 이동을 누구나 Explorer에서 증명</span></div>
+      <div class="ev"><img src="logos/paysh.svg" alt="pay.sh" onerror="this.remove()"/><b>pay.sh · x402</b><span>검증 API를 사람 승인 없이 구매</span></div>
+      <div class="ev"><img src="logos/anchor.png" alt="Anchor" onerror="this.remove()"/><b>Anchor 에스크로</b><span>마일스톤 30/70 분할 · 조건부 잠금</span></div>
+      <div class="ev"><img src="logos/usdc.svg" alt="USDC" onerror="this.remove()"/><b>USDC-SPL</b><span>자금 이동을 누구나 Explorer에서 증명</span></div>
     </div>
   </div>
   <div class="slide-number"></div>
@@ -1123,7 +1155,7 @@
         <p>API 호출마다 결제, 협상 라운드마다 메시지 — <b>수수료가 건당 비용을 넘으면</b> 이 루프 자체가 성립하지 않습니다</p>
       </div>
       <div class="sol-card hi">
-        <img src="/knotpitch/logos/solana.svg" alt="Solana" class="sol-logo" onerror="this.remove()"/>
+        <img src="logos/solana.svg" alt="Solana" class="sol-logo" onerror="this.remove()"/>
         <div class="sol-n">Solana</div>
         <p>수수료 <b>사실상 0</b><br/>파이널리티 <b>1초 미만</b><br/>에이전트가 사람 기다리듯 기다리지 않습니다</p>
       </div>
@@ -1226,10 +1258,10 @@
       </div>
       <span class="down">↓</span>
       <div class="layer gcp">
-        <span class="tag"><img src="/knotpitch/logos/googlecloud.svg" alt="Google Cloud" class="tag-logo" onerror="this.replaceWith(document.createTextNode('Google Cloud'))"/></span>
+        <span class="tag"><img src="logos/googlecloud.svg" alt="Google Cloud" class="tag-logo" onerror="this.replaceWith(document.createTextNode('Google Cloud'))"/></span>
         <div class="chips">
-          <span class="chip with-logo"><img src="/knotpitch/logos/gemini.svg" alt="" onerror="this.remove()"/>Vertex AI Gemini</span><span class="chip">Cloud Run</span>
-          <span class="chip with-logo"><img src="/knotpitch/logos/youtube.svg" alt="" onerror="this.remove()"/>YouTube Data API</span><span class="chip">Firestore</span>
+          <span class="chip with-logo"><img src="logos/gemini.svg" alt="" onerror="this.remove()"/>Vertex AI Gemini</span><span class="chip">Cloud Run</span>
+          <span class="chip with-logo"><img src="logos/youtube.svg" alt="" onerror="this.remove()"/>YouTube Data API</span><span class="chip">Firestore</span>
           <span class="chip">Firebase Auth</span><span class="chip">Secret Manager</span>
         </div>
       </div>
@@ -1241,14 +1273,14 @@
       <span class="down">↓</span>
       <div class="layer pay">
         <span class="tag">결제 레일</span>
-        <div class="chips"><span class="chip with-logo"><img src="/knotpitch/logos/paysh.svg" alt="pay.sh" style="height:1.5em" onerror="this.replaceWith(document.createTextNode('pay.sh'))"/></span><span class="chip">x402</span><span class="chip">호출당 자율 결제</span></div>
+        <div class="chips"><span class="chip with-logo"><img src="logos/paysh.svg" alt="pay.sh" style="height:1.5em" onerror="this.replaceWith(document.createTextNode('pay.sh'))"/></span><span class="chip">x402</span><span class="chip">호출당 자율 결제</span></div>
       </div>
       <span class="down">↓</span>
       <div class="layer chain">
         <span class="tag">온체인</span>
         <div class="chips">
-          <span class="chip with-logo"><img src="/knotpitch/logos/solana.svg" alt="" onerror="this.remove()"/>Solana Devnet</span><span class="chip with-logo"><img src="/knotpitch/logos/anchor.png" alt="" onerror="this.remove()"/>Anchor (Rust) 에스크로</span>
-          <span class="chip with-logo"><img src="/knotpitch/logos/usdc.svg" alt="" onerror="this.remove()"/>USDC-SPL</span><span class="chip">anchorpy / solders</span>
+          <span class="chip with-logo"><img src="logos/solana.svg" alt="" onerror="this.remove()"/>Solana Devnet</span><span class="chip with-logo"><img src="logos/anchor.png" alt="" onerror="this.remove()"/>Anchor (Rust) 에스크로</span>
+          <span class="chip with-logo"><img src="logos/usdc.svg" alt="" onerror="this.remove()"/>USDC-SPL</span><span class="chip">anchorpy / solders</span>
         </div>
       </div>
     </div>
@@ -1338,11 +1370,11 @@
         <span class="v">결제까지 <b>실행</b>한다<br/>추천만 하는 챗봇이 아니라</span>
       </div>
       <div class="edge" style="border-color:#1a73e8;">
-        <img src="/knotpitch/logos/googlecloud.svg" alt="" style="height:1.5em;margin-bottom:.3em" onerror="this.remove()"/><span class="k" style="color:#1a73e8;display:block">Google AI</span>
+        <img src="logos/googlecloud.svg" alt="" style="height:1.5em;margin-bottom:.3em" onerror="this.remove()"/><span class="k" style="color:#1a73e8;display:block">Google AI</span>
         <span class="v">에이전트의 <b>두뇌</b><br/>Gemini 분석 · 협상 판단</span>
       </div>
       <div class="edge" style="border-color:#0a7d38;">
-        <img src="/knotpitch/logos/solana.svg" alt="" style="height:1.5em;margin-bottom:.3em" onerror="this.remove()"/><span class="k" style="color:#0a7d38;display:block">Solana</span>
+        <img src="logos/solana.svg" alt="" style="height:1.5em;margin-bottom:.3em" onerror="this.remove()"/><span class="k" style="color:#0a7d38;display:block">Solana</span>
         <span class="v">수초 내 <b>정산</b><br/>수수료 사실상 0</span>
       </div>
       <div class="edge" style="border-color:#b00;">
