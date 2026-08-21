@@ -70,3 +70,29 @@ escrow or settlement state.
    and hash wrap inside the card instead of pushing the template width.
 4. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
 5. [ ] Deploy the UI polish build after explicit approval.
+
+## 2026-08-21 Real Onboarding API Follow-Up
+
+1. [x] Audit the demo auth and onboarding path for successful local/mock
+   fallbacks.
+2. [x] Connect `/auth` success paths to the real Product API account and role
+   endpoints:
+   - `GET /api/v1/me`
+   - `POST /api/v1/me/role`
+3. [x] Remove Phantom-only login as a successful local session path. Phantom is
+   now presented as an escrow/settlement wallet connection step after account
+   login.
+4. [x] Require `/b` and `/c` to have both a local demo session and an
+   authenticated backend role before rendering the demo workspace.
+5. [x] Replace `/b` onboarding scan fallback with the real Product API profile
+   path:
+   - `POST /api/v1/analyses/product`
+   - `POST /api/v1/analyses/{analysisId}:confirm`
+   - `POST /api/v1/me/brand-profile`
+6. [x] Make scan failures visible in the onboarding UI instead of silently
+   completing with deterministic demo data.
+7. [x] Register wallet connections from the demo identity block through
+   backend wallet challenge/signature verification before updating the local
+   session display.
+8. [x] Re-run frontend typecheck, tests, production build, and whitespace check.
+9. [ ] Deploy the real onboarding build after explicit approval.

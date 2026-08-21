@@ -24,6 +24,8 @@ export type BrandProfile = {
   /** 사이트에서 추출한 브랜드 로고 (로컬 에셋) */
   logo: string;
   agentName: string;
+  analysisProvider?: string;
+  analysisFallbackReason?: string | null;
 };
 
 export type CampaignSpec = {
@@ -193,6 +195,7 @@ export type OnboardScan = {
   /** 추출 카드가 하나씩 켜진다: 0=none … 5=완료 */
   step: number;
   done: boolean;
+  error?: string | null;
 };
 
 export type InboundOfferStatus = "new" | "negotiating" | "declined" | "agreed";

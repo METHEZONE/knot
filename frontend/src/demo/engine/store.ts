@@ -7,6 +7,7 @@
 
 import { useSyncExternalStore } from "react";
 import { openReport } from "@/demo/reportClient";
+import { ProductApiClient, type AnalysisJob } from "@/product/apiClient";
 import {
   applySettlementsToDeal,
   fundLiveAgreementEscrow,
@@ -18,7 +19,6 @@ import {
 import type { ChatChip, DemoAction, DemoState, FeedTone, SequenceStep } from "./types";
 import {
   autopilotSequence,
-  buildBrandProfile,
   CAMPAIGN_SPEC,
   composeFlowFor,
   enterWorkspaceSequence,
@@ -31,6 +31,7 @@ import {
   scanSequence,
   taskBriefFor,
 } from "./script";
+import type { BrandProfile } from "./types";
 
 const LS_KEY = "knot-demo-state-v1";
 const CHANNEL = "knot-demo-v1";
@@ -210,92 +211,48 @@ export function startScan(url: string) {
 }
 
 /**
- * 실제 사이트 스캔 — /api/knot/scan이 진짜 프로필을 주면 그걸 쓰고,
- * 실패하면 힌트 병합 → 결정론 목업 순으로 폴백한다.
+ * 실제 사이트 스캔 — Product API의 분석/프로필 생성 경로만 사용한다.
  * Cloud Run 콜드스타트 + Vertex로 22초를 넘기는 경우가 실제로 있어서
- * 타임아웃 60초 + 실패 시 1회 재시도. 결과가 도착하면 brand를 먼저 확정하고
+ * 실패 시 1회 재시도. 결과가 도착하면 brand를 먼저 확정하고
  * 추출 카드를 400ms 간격으로 공개한 뒤 부화로 넘어간다.
  */
-async function fetchBrandProfile(url: string, fallback: ReturnType<typeof buildBrandProfile>) {
-  const res = await fetch("/api/knot/scan", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const data = (await res.json()) as {
-    ok: boolean;
-    profile?: {
-      name: string;
-      tagline: string;
-      intro?: string;
-      tone: string[];
-      products: { name: string; desc: string }[];
-      audience: string;
-      color: string;
-    };
-    logo?: string | null;
-    images?: string[];
-    finalUrl?: string;
-    hints?: { title?: string | null; description?: string | null; siteName?: string | null; logo?: string | null } | null;
-  };
-  const domain = (data.finalUrl ?? url)
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split("/")[0];
-  const images = (data.images ?? []).slice(0, 8);
-  if (data.ok && data.profile) {
-    const p = data.profile;
-    return {
-      url: domain || fallback.url,
-      name: p.name || fallback.name,
-      tagline: p.tagline || fallback.tagline,
-      intro: p.intro || fallback.intro,
-      tone: (p.tone ?? []).slice(0, 3).length ? p.tone.slice(0, 3) : fallback.tone,
-      products: (p.products ?? []).slice(0, 4).length ? p.products.slice(0, 4) : fallback.products,
-      audience: p.audience || fallback.audience,
-      images,
-      color: /^#[0-9a-f]{6}$/i.test(p.color ?? "") ? p.color : fallback.color,
-      logo: data.logo || fallback.logo,
-      agentName: fallback.agentName,
-    };
-  }
-  if (data.hints) {
-    // LLM 없이도 실제 사이트 정보는 반영
-    return {
-      ...fallback,
-      url: domain || fallback.url,
-      name: data.hints.siteName || data.hints.title?.split(/[|·—-]/)[0].trim() || fallback.name,
-      tagline: data.hints.description?.slice(0, 40) || fallback.tagline,
-      intro: data.hints.description || fallback.intro,
-      images,
-      logo: data.hints.logo || fallback.logo,
-    };
-  }
-  return fallback;
-}
-
 async function finishScan(url: string) {
-  const fallback = buildBrandProfile(url);
-  let profile = fallback;
+  let profile: BrandProfile | null = null;
+  const request = analyzeAndCreateBrandProfile(url)
+    .then((result) => {
+      profile = result;
+    })
+    .catch(async () => {
+      profile = await analyzeAndCreateBrandProfile(url);
+    });
 
-  const request = (async () => {
-    try {
-      profile = await fetchBrandProfile(url, fallback);
-    } catch {
-      try {
-        profile = await fetchBrandProfile(url, fallback); // 콜드스타트 타임아웃 대비 1회 재시도
-      } catch {
-        // 재시도까지 실패 → 목업 폴백
-      }
-    }
-  })();
+  try {
+    await Promise.all([request, sleep(3600)]);
+  } catch (error) {
+    mutate((d) => {
+      if (!d.scan) return;
+      d.scan.error = readableError(error);
+      d.scan.done = false;
+    });
+    return;
+  }
 
-  await Promise.all([request, sleep(3600)]);
+  if (!profile) {
+    mutate((d) => {
+      if (!d.scan) return;
+      d.scan.error = "브랜드 분석 결과가 비어 있습니다. URL을 확인한 뒤 다시 시도해 주세요.";
+      d.scan.done = false;
+    });
+    return;
+  }
+
   // 실데이터 도착 — 브랜드 확정 후 카드 5장 순차 공개 → 부화
   mutate((d) => {
     d.brand = profile;
-    if (d.scan) d.scan.step = 0;
+    if (d.scan) {
+      d.scan.step = 0;
+      d.scan.error = null;
+    }
   });
   const reveal: SequenceStep[] = [];
   for (let i = 1; i <= 5; i += 1) {
@@ -314,6 +271,144 @@ async function finishScan(url: string) {
     },
   });
   playSequence(reveal);
+}
+
+async function analyzeAndCreateBrandProfile(url: string): Promise<BrandProfile> {
+  const normalizedUrl = normalizeSourceUrl(url);
+  const client = new ProductApiClient();
+  const analysis = await client.analyzeProduct(
+    normalizedUrl,
+    stableKey("demo-brand-analysis", normalizedUrl),
+  );
+  await client.confirmAnalysis(
+    analysis.analysisId,
+    {
+      confirmedFields: ["brand.name", "product.name", "product.category", "product.summary"],
+      edits: {},
+    },
+    stableKey("demo-brand-analysis-confirm", analysis.analysisId),
+  );
+  const profile = brandProfileFromAnalysis(analysis);
+  const created = await client.createMyBrandProfile(
+    {
+      brandName: profile.name,
+      websiteUrl: normalizedUrl,
+      categories: [firstCategory(analysis) || "lifestyle"],
+      customCategory: profile.tone.join(", "),
+      targetAudience: profile.audience,
+      description: profile.intro,
+      restrictedClaims: ["검증되지 않은 효능 표현", "결과 보장 표현", "무단 2차 활용"],
+    },
+    stableKey("demo-brand-profile", normalizedUrl, profile.name),
+  );
+  const brand = asRecord(created.brand);
+  return {
+    ...profile,
+    name: stringValue(brand.name) || stringValue(brand.displayName) || profile.name,
+    agentName: `${stringValue(brand.name) || profile.name} 매니저`,
+  };
+}
+
+function brandProfileFromAnalysis(analysis: AnalysisJob): BrandProfile {
+  const draft = asRecord(analysis.draft);
+  const brand = asRecord(draft.brand);
+  const product = asRecord(draft.product);
+  const sourceUrl = stringValue(draft.sourceUrl) || analysis.sourceUrl;
+  const domain = domainFromUrl(sourceUrl);
+  const brandName = fieldString(brand.name) || domainLabel(domain);
+  const productName = fieldString(product.name) || "대표 제품";
+  const summary = fieldString(product.summary) || "공개 페이지 분석 결과를 확인했습니다.";
+  const keywords = fieldStringArray(product.keywords).slice(0, 3);
+  const features = fieldStringArray(product.features).slice(0, 4);
+  const audience = fieldStringArray(product.targetAudience).slice(0, 2).join(" · ");
+  return {
+    url: domain,
+    name: brandName,
+    tagline: summary.length > 44 ? `${summary.slice(0, 44)}…` : summary,
+    intro: summary,
+    tone: keywords.length ? keywords : ["실사용", "브랜드핏", "콘텐츠형"],
+    products: [
+      {
+        name: productName,
+        desc: features[0] || summary,
+      },
+      ...features.slice(1, 4).map((feature) => ({ name: feature, desc: "사이트 분석에서 추출한 제품 특징" })),
+    ].slice(0, 4),
+    audience: audience || "제품 무드와 가까운 크리에이터",
+    images: [],
+    color: colorFromString(brandName),
+    logo: faviconForDomain(domain),
+    agentName: `${brandName} 매니저`,
+    analysisProvider: analysis.provider,
+    analysisFallbackReason: analysis.fallbackReason,
+  };
+}
+
+function normalizeSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/^http:\/\//i, "https://");
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
+function domainFromUrl(value: string) {
+  try {
+    const parsed = new URL(normalizeSourceUrl(value));
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return value.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || "brand";
+  }
+}
+
+function domainLabel(domain: string) {
+  const label = domain.split(".")[0] || "Brand";
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function faviconForDomain(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function firstCategory(analysis: AnalysisJob) {
+  return fieldString(asRecord(asRecord(analysis.draft).product).category);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function fieldString(value: unknown): string | null {
+  const fieldValue = asRecord(value).value;
+  return stringValue(fieldValue);
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function fieldStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && !!item.trim());
+  const fieldValue = asRecord(value).value;
+  if (Array.isArray(fieldValue)) return fieldValue.filter((item): item is string => typeof item === "string" && !!item.trim());
+  const single = stringValue(fieldValue);
+  return single ? [single] : [];
+}
+
+function colorFromString(value: string) {
+  const palette = ["#d9a441", "#e8896b", "#7ba05b", "#6b7fd7", "#b58cd9", "#4a9aa8"];
+  let hash = 0;
+  for (const char of value) hash = Math.imul(hash ^ char.charCodeAt(0), 31);
+  return palette[Math.abs(hash) % palette.length];
+}
+
+function stableKey(prefix: string, ...parts: string[]) {
+  let hash = 0x811c9dc5;
+  for (const part of parts.join("|")) {
+    hash ^= part.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${prefix}-${(hash >>> 0).toString(16)}`;
 }
 
 export function hatchDone() {

@@ -4,8 +4,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { connectPhantom } from "@/features/wallet/phantom";
+import { connectPhantom, signPhantomMessage } from "@/features/wallet/phantom";
 import { signOutFirebase, firebaseConfigured } from "@/auth/firebaseClient";
+import { ProductApiClient } from "@/product/apiClient";
 import { withBase } from "@/demo/ui/asset";
 import { clearSession, shortAddress, updateSession, useKnotSession } from "./session";
 
@@ -44,6 +45,7 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
   const router = useRouter();
   const session = useKnotSession();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!session) return null;
 
   const logout = async () => {
@@ -61,11 +63,19 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
   const connectWallet = async () => {
     if (busy) return;
     setBusy(true);
+    setError(null);
     try {
       const address = await connectPhantom();
-      updateSession({ wallet: address });
-    } catch {
-      // 사용자가 취소 — 조용히 무시
+      const client = new ProductApiClient();
+      const { challenge } = await client.createWalletChallenge(address);
+      const signature = await signPhantomMessage(challenge.message);
+      const saved = await client.saveWalletAddress(address, {
+        challengeId: challenge.challengeId,
+        signature,
+      });
+      updateSession({ wallet: saved.wallet.walletAddress });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setBusy(false);
     }
@@ -88,6 +98,11 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
             {busy ? "…" : "지갑 연결"}
           </button>
         )}
+        {error ? (
+          <span className="max-w-[160px] truncate text-[10px] font-semibold text-red-600" title={error}>
+            {error}
+          </span>
+        ) : null}
         <button
           onClick={logout}
           title="로그아웃"
@@ -131,6 +146,11 @@ export function IdentityBlock({ variant }: { variant: "sidebar" | "header" }) {
             {busy ? "지갑 연결 중…" : "👛 Phantom 지갑 연결"}
           </button>
         )}
+        {error ? (
+          <p className="mt-1.5 text-[10.5px] font-semibold leading-snug text-red-600">
+            {error}
+          </p>
+        ) : null}
       </div>
     </div>
   );

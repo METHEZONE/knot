@@ -1940,3 +1940,37 @@ Updated: 2026-08-20 KST
 ### Scope Guard
 
 - No deployed environment or on-chain state was changed by this UI polish pass.
+
+## 2026-08-21 Demo Onboarding Real API Wiring
+
+### Changed
+
+- Removed the successful local/mock fallback from the `/b` brand onboarding
+  scan path. The demo onboarding now completes only after the real Product API
+  creates or returns the authenticated user's Brand profile and Brand Agent.
+- Connected `/auth` login/signup/persona entry to the backend account role
+  path. After Firebase login, the UI calls `GET /api/v1/me` and, when needed,
+  `POST /api/v1/me/role` before routing into `/b` or `/c`.
+- Disabled Phantom-only login as a successful account path because the product
+  does not currently issue Firebase custom auth tokens from wallet signatures.
+  Phantom remains a real wallet connection step for escrow funding and
+  settlement.
+- Added backend-role guards to `/b` and `/c`, so stale local demo sessions no
+  longer open the workspace without a matching authenticated Product API role.
+- Updated the demo identity wallet connection to save the wallet through
+  backend challenge/signature verification before updating the local display.
+
+### Verification
+
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend test`: 21 passed.
+- `npm --prefix frontend run build`: passed.
+- `git diff --check`: passed.
+
+### Scope Guard
+
+- No deployment, Firestore write, Secret Manager change, wallet funding, or
+  Solana transaction was performed in this pass.
+- Creator onboarding was already wired to `POST /api/v1/analyses/creator-profile`
+  and `POST /api/v1/me/creator-profile`; this pass focused on the demo `/auth`,
+  `/b`, and `/c` paths that could previously succeed with local state alone.

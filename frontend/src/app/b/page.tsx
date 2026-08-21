@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/demo/demo.css";
+import { useAuth } from "@/auth/AuthProvider";
 import { useDemo, initDemo } from "@/demo/engine/store";
 import { useKnotSession } from "@/demo/auth/session";
 import { Onboard } from "@/demo/brand/Onboard";
@@ -14,6 +15,7 @@ export default function BrandDemoPage() {
   const router = useRouter();
   const s = useDemo();
   const session = useKnotSession();
+  const auth = useAuth();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -22,10 +24,13 @@ export default function BrandDemoPage() {
   }, []);
 
   useEffect(() => {
-    if (ready && !session) router.replace("/auth?role=brand");
-  }, [ready, session, router]);
+    if (!ready || auth.status === "loading") return;
+    if (!session || auth.status !== "authenticated" || auth.context?.account.role !== "BRAND") {
+      router.replace("/auth?role=brand");
+    }
+  }, [auth.context?.account.role, auth.status, ready, session, router]);
 
-  if (!ready || !session) {
+  if (!ready || auth.status === "loading" || !session || auth.context?.account.role !== "BRAND") {
     return <div data-knot-demo className="min-h-screen" />;
   }
   return (
