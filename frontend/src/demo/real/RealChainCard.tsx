@@ -74,14 +74,23 @@ export function RealChainCard({ role }: { role: "brand" | "creator" }) {
         )}
       </div>
 
-      {!real || real.status === "idle" ? (
+      {!real || real.status === "idle" || real.status === "error" || real.status === "waiting_creator" ? (
         role === "brand" ? (
           <div className="mt-3 flex flex-col gap-2">
             <p className="text-[12.5px] text-[var(--k-muted)]">
               대본 연출과 별개로, 실제 백엔드에 프로모션을 만들고 devnet에서 진짜 에스크로·정산을 실행합니다.
             </p>
+            {real?.error ? (
+              <p className="rounded-lg bg-red-50 px-2.5 py-1.5 text-[12px] font-semibold text-red-600">
+                {real.error}
+              </p>
+            ) : null}
             <Button size="sm" onClick={() => withBusy(startRealChain)} disabled={busy || !s.brand}>
-              {busy ? "처리 중…" : "실제 devnet으로 진행하기"}
+              {busy
+                ? "처리 중…"
+                : real?.status === "error" || real?.status === "waiting_creator"
+                  ? "다시 시도"
+                  : "실제 devnet으로 진행하기"}
             </Button>
           </div>
         ) : (
