@@ -194,8 +194,8 @@ function Approval({ c }: { c: CampaignState }) {
                 <span className="k-mono text-[15px] font-bold">{usdc(n.agreedUsdc ?? 0)}</span>
               </div>
               <div className="mt-2 space-y-1 text-[12px] text-[var(--k-ink-soft)]">
-                <div>· 릴스 1개 (30초 내외) · 마일스톤 30/70</div>
-                {isHero && <div>· 성과 보너스: 조회수 50만 초과 시 +40</div>}
+                <div>· {c.spec.contentType} · 마일스톤 30/70</div>
+                {isHero && <div>· 성과 보너스: 조회수 15만 초과 시 +40</div>}
                 <div>· {cr.fitReason}</div>
                 <div className="text-[11px] text-[var(--k-muted)]">
                   평균 뷰 {cr.insights.avgViews} · 저장 {cr.insights.saves30d}/30일 · 성장{" "}

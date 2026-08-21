@@ -286,6 +286,18 @@
   .logo-row img { max-height: 100%; max-width: 100%; width: auto; object-fit: contain; }
   .logo-row .logo-item { text-align: center; }
   .logo-row .logo-item span { display: block; margin-top: 0.7rem; font-size: clamp(1.05rem, 1.7vw, 1.4rem); color: #777; }
+  .logo-row .logo-item .who { margin-top: 0.3rem; font-size: clamp(0.95rem, 1.5vw, 1.15rem); color: #b00; font-weight: 700; }
+  .pain-bubble {
+    margin-top: 1.1rem;
+    padding: 1rem 1.3rem;
+    border: 2px solid #0a0a0a;
+    border-radius: 14px 14px 14px 4px;
+    background: #fffdf8;
+    font-size: clamp(1.02rem, 1.5vw, 1.28rem);
+    line-height: 1.55;
+    text-align: left;
+    max-width: 260px;
+  }
 
   /* ── Team ── */
   .team-row { display: flex; gap: 3.5vw; justify-content: center; width: 100%; }
@@ -521,16 +533,24 @@
   .slide.cover.is-active .d-star   { animation-delay: .55s; }
   .slide.cover.is-active .d-spiral { animation-delay: .70s; }
   .slide.cover.is-active .d-smile  { animation-delay: .85s; }
-  .slide.cover.is-active .cover-knot { animation: fadeIn .9s both; }
-  .slide.cover.is-active .cover-word { animation: riseIn .8s cubic-bezier(.2,.7,.3,1) both; animation-delay: .25s; }
-  .slide.cover.is-active .cover-tag  { animation: riseIn .7s cubic-bezier(.2,.7,.3,1) both; animation-delay: .45s; }
-  .slide.cover.is-active .cover-sub  { animation: riseIn .7s cubic-bezier(.2,.7,.3,1) both; animation-delay: .60s; }
+  .cover-knot .knot-line { stroke-dasharray: 1000; stroke-dashoffset: 1000; }
+  .cover-knot circle, .cover-knot text { opacity: 0; }
+  .slide.cover.is-active .cover-knot .knot-line {
+    animation: knotDraw 1.3s cubic-bezier(.65,.05,.36,1) both;
+    animation-delay: .1s;
+  }
+  .slide.cover.is-active .cover-knot circle,
+  .slide.cover.is-active .cover-knot text { animation: fadeIn .5s both; animation-delay: 1.3s; }
+  .slide.cover.is-active .cover-word { animation: riseIn .8s cubic-bezier(.2,.7,.3,1) both; animation-delay: 1.55s; }
+  .slide.cover.is-active .cover-tag  { animation: riseIn .7s cubic-bezier(.2,.7,.3,1) both; animation-delay: 1.75s; }
+  .slide.cover.is-active .cover-sub  { animation: riseIn .7s cubic-bezier(.2,.7,.3,1) both; animation-delay: 1.9s; }
 
   /* ══ 애니메이션 ══ */
   @keyframes riseIn { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes popIn  { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
   @keyframes drawIn { to { stroke-dashoffset: 0; } }
+  @keyframes knotDraw { to { stroke-dashoffset: 0; } }
 
   /* 활성 슬라이드의 요소들이 순차 등장 */
   .slide.is-active .slide-title { animation: riseIn .55s cubic-bezier(.2,.7,.3,1) both; }
@@ -599,8 +619,10 @@
     .slide .flow-horizontal .step, .slide .flow-horizontal .arrow, .slide .metric,
     .slide .col-card, .slide .edge, .slide .logo-item, .slide .team-member,
     .slide .cond .row, .slide .layer, .slide .dm, .slide .stack .down,
-    .slide .draw path, .slide .draw line, .slide .draw circle, .slide .draw rect {
+    .slide .draw path, .slide .draw line, .slide .draw circle, .slide .draw rect,
+    .slide .cover-knot .knot-line, .slide .cover-knot circle, .slide .cover-knot text {
       animation: none !important; opacity: 1 !important; transform: none !important;
+      stroke-dashoffset: 0 !important;
     }
   }
 
@@ -707,7 +729,7 @@
 
   <div class="slide-title">
     <svg viewBox="0 0 400 200" class="cover-knot" style="width: min(560px, 62vw); margin: 0 auto 2.2rem;">
-      <path d="M22 118 C70 116 108 110 146 96 C196 78 250 50 268 80 C284 108 246 146 210 138 C180 131 172 100 200 84 C238 62 300 84 322 104 C344 124 362 126 380 120"
+      <path class="knot-line" pathLength="1000" d="M22 118 C70 116 108 110 146 96 C196 78 250 50 268 80 C284 108 246 146 210 138 C180 131 172 100 200 84 C238 62 300 84 322 104 C344 124 362 126 380 120"
             stroke-width="9" stroke="#0a0a0a" fill="none" stroke-linecap="round"/>
       <circle cx="22" cy="118" r="7" fill="none" stroke="#0a0a0a" stroke-width="3"/>
       <circle cx="380" cy="120" r="7" fill="none" stroke="#0a0a0a" stroke-width="3"/>
@@ -800,14 +822,20 @@
       <div class="logo-item">
         <div class="logo-box"><img src="/knotpitch/logos/crycheeseburger.png" alt="크라이치즈버거" /></div>
         <span>F&amp;B · 프랜차이즈</span>
+        <span class="who">인플루언서 마케터 원지웅</span>
+        <div class="pain-bubble">“하루 4시간은 일정 조율에 씁니다<span class="sub">그마저도 절반은 다시 조율</span>”</div>
       </div>
       <div class="logo-item">
         <div class="logo-box"><img src="/knotpitch/logos/cherryxx.png" alt="체리엑스엑스" /></div>
         <span>뷰티 · 코스메틱</span>
+        <span class="who">대표 고유안</span>
+        <div class="pain-bubble">“뷰티는 단가가 계속 널뛰어서<span class="sub">협상·조율에만 공수가 많이 듭니다</span>”</div>
       </div>
       <div class="logo-item">
         <div class="logo-box"><img src="/knotpitch/logos/branderjean.png" alt="브랜더진" /></div>
         <span>패션 · 크리에이터 마케팅</span>
+        <span class="who">인플루언서 마케터 조민서</span>
+        <div class="pain-bubble">“하루 100명씩 DM 보내고<span class="sub">엑셀 정리까지, 너무 힘듭니다</span>”</div>
       </div>
     </div>
     <div class="sketchbox" style="margin-top:3rem; max-width:900px; text-align:center;">

@@ -12,9 +12,13 @@ export type BrandProfile = {
   url: string;
   name: string;
   tagline: string;
+  /** 사이트에서 추출한 회사 소개 2~3문장 */
+  intro: string;
   tone: string[];
   products: { name: string; desc: string }[];
   audience: string;
+  /** 사이트 본문에서 수집한 제품/브랜드 이미지 URL (외부 URL) */
+  images: string[];
   /** 캐릭터 실 색 — 사이트에서 "추출"한 브랜드 컬러라는 설정 */
   color: string;
   /** 사이트에서 추출한 브랜드 로고 (로컬 에셋) */

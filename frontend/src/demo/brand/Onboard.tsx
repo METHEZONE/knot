@@ -82,7 +82,10 @@ export function Onboard() {
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && startScan(url || "moodbeam.kr")}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                if (e.key === "Enter") startScan(url || "moodbeam.kr");
+              }}
               placeholder="moodbeam.kr"
               className="h-12 flex-1 rounded-xl border border-[var(--k-line-strong)] bg-white px-4 text-[15px] outline-none transition-colors focus:border-[var(--k-ink)]"
             />

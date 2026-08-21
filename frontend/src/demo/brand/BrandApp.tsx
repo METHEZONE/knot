@@ -16,15 +16,17 @@ import { Home } from "./Home";
 import { Expedition } from "./Expedition";
 import { Deals } from "./Deals";
 import { Performance } from "./Performance";
+import { BrandPage } from "./BrandPage";
 import { ChatDock } from "./ChatDock";
 
-type View = "home" | "campaign" | "deals" | "performance";
+type View = "home" | "campaign" | "deals" | "performance" | "brand";
 
 const NAV: { key: View; label: string; icon: string }[] = [
   { key: "home", label: "홈", icon: "M3 10.5 12 3l9 7.5V21h-6v-6h-6v6H3z" },
   { key: "campaign", label: "캠페인", icon: "M12 2l2.4 6.9H21l-5.4 4.2 2 6.9-5.6-4.1L6.4 20l2-6.9L3 8.9h6.6z" },
   { key: "deals", label: "딜", icon: "M4 5h16v4H4zm0 6h16v4H4zm0 6h10v2H4z" },
   { key: "performance", label: "성과", icon: "M4 20v-8h3.4v8H4zm6.3 0V4h3.4v16h-3.4zm6.3 0v-5h3.4v5h-3.4z" },
+  { key: "brand", label: "브랜드", icon: "M4 21V5l8-3 8 3v16h-6v-5h-4v5H4zm5-10h2V9H9v2zm4 0h2V9h-2v2zM9 15h2v-2H9v2zm4 0h2v-2h-2v2z" },
 ];
 
 export function BrandApp() {
@@ -133,7 +135,7 @@ export function BrandApp() {
               <span className="text-[12px] font-bold">오토파일럿</span>
               <button
                 onClick={() => {
-                  if (!s.autopilot && !autopilotBusy) playSequence(autopilotSequence());
+                  if (!s.autopilot && !autopilotBusy) playSequence(autopilotSequence(s.brand));
                 }}
                 disabled={s.autopilot || autopilotBusy}
                 className={`relative h-5 w-9 rounded-full transition-colors ${
@@ -181,6 +183,7 @@ export function BrandApp() {
           {view === "campaign" && <Expedition onOpenLog={openWindow} />}
           {view === "deals" && <Deals />}
           {view === "performance" && <Performance />}
+          {view === "brand" && <BrandPage />}
         </div>
       </main>
 

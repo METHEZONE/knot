@@ -67,6 +67,9 @@ function WindowFrame({
 function AgentChatWindow({ onClose }: { onClose: () => void }) {
   const s = useDemo();
   const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  // 한글 IME Enter가 keydown을 두 번 발화시키는 케이스 2차 방어
+  const lastSent = useRef<{ text: string; at: number }>({ text: "", at: 0 });
   const scrollRef = useAutoScroll(`${s.chat.length}-${s.agentTyping}`);
   const agentName = s.brand?.agentName ?? "타래";
   const color = s.brand?.color ?? "#d9a441";
@@ -74,7 +77,11 @@ function AgentChatWindow({ onClose }: { onClose: () => void }) {
   const submit = () => {
     const t = text.trim();
     if (!t) return;
+    const now = Date.now();
+    if (t === lastSent.current.text && now - lastSent.current.at < 1500) return;
+    lastSent.current = { text: t, at: now };
     setText("");
+    inputRef.current?.focus();
     sendFreeText(t);
   };
 
@@ -92,9 +99,13 @@ function AgentChatWindow({ onClose }: { onClose: () => void }) {
         <div className="border-t border-[var(--k-line)] p-2.5">
           <div className="flex items-center gap-2 rounded-xl bg-black/[0.04] px-3 py-1">
             <input
+              ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                if (e.key === "Enter") submit();
+              }}
               placeholder={`${agentName}에게 무엇이든 물어보세요`}
               className="h-9 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-[var(--k-muted)]"
             />

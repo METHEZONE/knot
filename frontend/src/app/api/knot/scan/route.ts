@@ -13,6 +13,7 @@ export const maxDuration = 60;
 type ScanProfile = {
   name: string;
   tagline: string;
+  intro: string;
   tone: string[];
   products: { name: string; desc: string }[];
   audience: string;
@@ -48,6 +49,26 @@ async function fetchSite(url: string) {
   }
 }
 
+/** 본문 <img>에서 제품/브랜드 이미지 후보 수집 — svg·ico·데이터URI·1px 픽셀 제외, 최대 8개 */
+function extractImages(html: string, baseUrl: string) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /<img\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.length < 8) {
+    const tag = m[0];
+    const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1];
+    if (!src || src.startsWith("data:")) continue;
+    if (/\.(svg|ico)(\?|#|$)/i.test(src)) continue;
+    if (/\b(?:width|height)=["']?1(?:px)?["'\s>]/i.test(tag)) continue;
+    const abs = absolutize(src, baseUrl);
+    if (!abs || !/^https?:/i.test(abs) || seen.has(abs)) continue;
+    seen.add(abs);
+    out.push(abs);
+  }
+  return out;
+}
+
 function extractHints(html: string, baseUrl: string) {
   const pick = (re: RegExp) => html.match(re)?.[1]?.trim() ?? null;
   const meta = (name: string) =>
@@ -68,6 +89,7 @@ function extractHints(html: string, baseUrl: string) {
     siteName: meta("og:site_name"),
     themeColor: meta("theme-color"),
     logo: logoRaw ? absolutize(logoRaw, baseUrl) : null,
+    images: extractImages(html, baseUrl),
     text,
   };
 }
@@ -113,7 +135,7 @@ export async function POST(req: Request) {
 
   if (!llmConfigured()) {
     // 키가 없으면 LLM 없이 힌트만 돌려준다 — 클라이언트가 목업과 병합.
-    return NextResponse.json({ ok: false, reason: "no-key", hints, finalUrl });
+    return NextResponse.json({ ok: false, reason: "no-key", hints, images: hints.images, finalUrl });
   }
 
   try {
@@ -121,8 +143,9 @@ export async function POST(req: Request) {
       system:
         "당신은 브랜드 전략가입니다. 웹사이트에서 추출한 텍스트를 읽고 브랜드 프로필을 만듭니다. " +
         "반드시 아래 형태의 JSON만 출력하세요 (코드펜스·설명 금지). 한국어로, 톤은 간결하고 감각적으로:\n" +
-        '{"name":"브랜드명(한글 우선)","tagline":"12자 내외 한줄","tone":["형용사","형용사","형용사"],' +
-        '"products":[{"name":"제품/서비스명","desc":"10자 내외"},{"name":"...","desc":"..."}],' +
+        '{"name":"브랜드명(한글 우선)","tagline":"12자 내외 한줄","intro":"회사 소개 2~3문장 (무엇을 만들고 누구를 위한 브랜드인지)",' +
+        '"tone":["형용사","형용사","형용사"],' +
+        '"products":[{"name":"제품/서비스명","desc":"15자 내외"}] (본문에서 확인되는 실제 제품 최대 4개),' +
         '"audience":"타깃 한 줄","color":"#rrggbb (브랜드 무드에 맞는 색)"}',
       turns: [
         {
@@ -134,12 +157,12 @@ export async function POST(req: Request) {
       maxTokens: 2000,
     });
     if (!raw) {
-      return NextResponse.json({ ok: false, reason: "llm-failed", hints, finalUrl });
+      return NextResponse.json({ ok: false, reason: "llm-failed", hints, images: hints.images, finalUrl });
     }
     const json = raw.replace(/^```(?:json)?/m, "").replace(/```\s*$/m, "").trim();
     const profile = JSON.parse(json) as ScanProfile;
-    return NextResponse.json({ ok: true, profile, logo: hints.logo, finalUrl });
+    return NextResponse.json({ ok: true, profile, logo: hints.logo, images: hints.images, finalUrl });
   } catch {
-    return NextResponse.json({ ok: false, reason: "llm-failed", hints, finalUrl });
+    return NextResponse.json({ ok: false, reason: "llm-failed", hints, images: hints.images, finalUrl });
   }
 }

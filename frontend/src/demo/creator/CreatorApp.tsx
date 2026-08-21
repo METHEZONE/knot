@@ -325,6 +325,7 @@ export function CreatorApp() {
                       value={postUrlInput}
                       onChange={(e) => setPostUrlInput(e.target.value)}
                       onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                         if (e.key === "Enter" && postUrlInput.trim()) submitPost(postUrlInput);
                       }}
                       placeholder="https://instagram.com/reel/…"

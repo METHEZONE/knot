@@ -197,7 +197,10 @@ function AuthInner() {
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && emailReady && emailAuth()}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter" && emailReady) emailAuth();
+            }}
             placeholder="비밀번호 (6자 이상)"
             type="password"
             className="h-11 w-full rounded-xl border border-[var(--k-line-strong)] bg-white px-3.5 text-[14px] outline-none transition-colors focus:border-[var(--k-ink)]"

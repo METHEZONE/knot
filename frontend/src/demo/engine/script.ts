@@ -120,17 +120,32 @@ export function buildBrandProfile(url: string): BrandProfile {
       ? "무드빔"
       : fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1),
     tagline: "방의 공기를 바꾸는 조명",
+    intro:
+      "방의 분위기를 바꾸는 조명을 만드는 팀입니다. 달빛과 노을을 모티프로, 1인 가구의 저녁 시간을 디자인합니다.",
     tone: ["따뜻한", "미니멀", "저녁의"],
     products: [
       { name: "문라이트 램프", desc: "달빛 색온도 재현 무드등" },
       { name: "선셋 프로젝터", desc: "노을 그라데이션 프로젝션" },
     ],
     audience: "1인 가구 · 인테리어 감성 20-34",
+    images: [],
     color: "#d9a441",
     logo: "/demo/moodbeam.svg",
     agentName: "타래",
   };
 }
+
+/* --------------------------- 브랜드 기반 대사 헬퍼 --------------------------- */
+/* 캠페인 플로우의 모든 브랜드 언급은 실제 스캔된 brand에서 만든다 — 고정 문구 금지. */
+
+/** 브랜드 계정 핸들 — 도메인 첫 파트 (moodbeam.kr → @moodbeam) */
+export const brandHandle = (brand: Pick<BrandProfile, "url"> | null | undefined) =>
+  (brand?.url ?? "").split(".")[0] || "brand";
+
+const brandName = (brand: BrandProfile | null) => brand?.name ?? "브랜드";
+const agentName = (brand: BrandProfile | null) => brand?.agentName ?? "타래";
+const productName = (brand: BrandProfile | null, i = 0) =>
+  brand?.products[i]?.name ?? brand?.products[0]?.name ?? "신제품";
 
 export const CAMPAIGN_SPEC: CampaignSpec = {
   goal: "신제품 런칭 붐업",
@@ -140,23 +155,25 @@ export const CAMPAIGN_SPEC: CampaignSpec = {
   deadlineLabel: "2주 안에",
 };
 
-export const TASK_BRIEF: TaskBrief = {
-  criteria: [
-    "#광고 표기 필수 (게시물 상단)",
-    "제품 실사용 컷 3초 이상",
-    "@moodbeam 계정 태그",
-  ],
-  tasks: [
-    "릴스 1개 업로드 (30초 내외)",
-    "업로드 후 게시물 URL 제출",
-    "48시간 인사이트 공유 동의",
-  ],
-  references: [
-    { title: "선셋 무드 전환 릴스", length: "0:27", note: "전환 컷 리듬 참고" },
-    { title: "침실 무드등 ASMR", length: "0:31", note: "저조도 연출 참고" },
-    { title: "룸투어 엔딩 훅", length: "0:24", note: "마지막 3초 CTA 참고" },
-  ],
-};
+export function taskBriefFor(brand: BrandProfile | null): TaskBrief {
+  return {
+    criteria: [
+      "#광고 표기 필수 (게시물 상단)",
+      "제품 실사용 컷 3초 이상",
+      `@${brandHandle(brand)} 계정 태그`,
+    ],
+    tasks: [
+      "릴스 1개 업로드 (30초 내외)",
+      "업로드 후 게시물 URL 제출",
+      "48시간 인사이트 공유 동의",
+    ],
+    references: [
+      { title: `${productName(brand)} 첫인상 릴스`, length: "0:27", note: "전환 컷 리듬 참고" },
+      { title: `${productName(brand, 1)} 실사용 브이로그`, length: "0:31", note: "실사용 연출 참고" },
+      { title: "엔딩 CTA 훅 모음", length: "0:24", note: "마지막 3초 CTA 참고" },
+    ],
+  };
+}
 
 /* -------------------------------- 상태 헬퍼 -------------------------------- */
 
@@ -242,9 +259,12 @@ export function enterWorkspaceSequence(): SequenceStep[] {
     {
       d: 1200,
       run: (draft) => {
+        const b = draft.brand;
+        const toneLine = b?.tone.length ? `${b.tone.slice(0, 3).join("·")} 톤, 마음에 들어요` : "브랜드 결이 마음에 들어요";
+        const productLine = b?.products[0]?.name ? ` ${b.products[0].name}도 눈여겨봤고요.` : "";
         agentSays(
           draft,
-          `안녕하세요, ${draft.brand?.name ?? "브랜드"}의 에이전트 ${draft.brand?.agentName ?? "타래"}예요. 사이트 다 읽었어요 — 따뜻하고 미니멀한 톤, 마음에 들어요. 첫 캠페인 시작해볼까요?`,
+          `안녕하세요, ${brandName(b)}의 에이전트 ${agentName(b)}예요. 사이트 다 읽었어요 — ${toneLine}.${productLine} 첫 캠페인 시작해볼까요?`,
           [{ id: "start-campaign", label: "새 캠페인 만들기" }],
         );
       },
@@ -254,50 +274,53 @@ export function enterWorkspaceSequence(): SequenceStep[] {
 
 /* --------------------------- 2. 캠페인 생성 (칩 대화) --------------------------- */
 
-export const composeFlow = {
-  goal: {
-    question: "좋아요. 이번 캠페인 목표가 뭐예요?",
-    chips: [
-      { id: "goal-launch", label: "신제품 런칭 붐업" },
-      { id: "goal-aware", label: "브랜드 인지도" },
-      { id: "goal-conv", label: "전환 · 판매" },
-    ],
-  },
-  budget: {
-    question:
-      "선셋 프로젝터 런칭이군요. 예산은 어떻게 잡을까요? 딜당 한도는 제가 넘을 수 없는 선이에요 — 그 안에선 승인 없이 제가 알아서 체결해요.",
-    chips: [
-      { id: "budget-500", label: "총 500 · 딜당 300" },
-      { id: "budget-1000", label: "총 1,000 · 딜당 450" },
-      { id: "budget-2000", label: "총 2,000 · 딜당 600" },
-    ],
-  },
-  content: {
-    question: "콘텐츠 형식은요?",
-    chips: [
-      { id: "content-reel", label: "릴스 1개" },
-      { id: "content-reel-story", label: "릴스 + 스토리" },
-      { id: "content-shorts", label: "유튜브 쇼츠" },
-    ],
-  },
-  confirm: {
-    question:
-      "정리하면 — 신제품 런칭 · 총 1,000 USDC (딜당 450) · 릴스 1개 · 2주 안에. 이 조건으로 크리에이터 탐험 다녀올게요. 물어오는 딜은 승인만 해주시면 돼요.",
-    chips: [{ id: "launch-expedition", label: "🧭 탐험 보내기" }],
-  },
-} as const;
+export function composeFlowFor(brand: BrandProfile | null) {
+  const product = productName(brand);
+  return {
+    goal: {
+      question: "좋아요. 이번 캠페인 목표가 뭐예요?",
+      chips: [
+        { id: "goal-launch", label: `${product} 런칭 붐업` },
+        { id: "goal-aware", label: "브랜드 인지도" },
+        { id: "goal-conv", label: "전환 · 판매" },
+      ],
+    },
+    budget: {
+      question: `${product} 캠페인이군요. 예산은 어떻게 잡을까요? 딜당 한도는 제가 넘을 수 없는 선이에요 — 그 안에선 승인 없이 제가 알아서 체결해요.`,
+      chips: [
+        { id: "budget-500", label: "총 500 · 딜당 300" },
+        { id: "budget-1000", label: "총 1,000 · 딜당 450" },
+        { id: "budget-2000", label: "총 2,000 · 딜당 600" },
+      ],
+    },
+    content: {
+      question: "콘텐츠 형식은요?",
+      chips: [
+        { id: "content-reel", label: "릴스 1개" },
+        { id: "content-reel-story", label: "릴스 + 스토리" },
+        { id: "content-shorts", label: "유튜브 쇼츠" },
+      ],
+    },
+    confirm: {
+      question: `정리하면 — ${product} 런칭 · 총 1,000 USDC (딜당 450) · 릴스 1개 · 2주 안에. 이 조건으로 크리에이터 탐험 다녀올게요. 물어오는 딜은 승인만 해주시면 돼요.`,
+      chips: [{ id: "launch-expedition", label: "🧭 탐험 보내기" }],
+    },
+  } as const;
+}
 
 /* ------------------------------- 3. 탐험 대본 ------------------------------- */
 
-export function expeditionSequence(): SequenceStep[] {
+export function expeditionSequence(brand: BrandProfile | null): SequenceStep[] {
   const S: SequenceStep[] = [];
   const step = (d: number, run: SequenceStep["run"]) => S.push({ d, run });
+  const bName = brandName(brand);
+  const product = productName(brand);
 
   // -- 출발 + 스카우팅 --
   step(0, (draft) => {
     draft.composeStep = "done";
     draft.campaign = {
-      spec: { ...CAMPAIGN_SPEC },
+      spec: { ...CAMPAIGN_SPEC, goal: `${product} 런칭 붐업` },
       status: "scouting",
       discovered: [],
       negotiations: {},
@@ -334,7 +357,7 @@ export function expeditionSequence(): SequenceStep[] {
       draft,
       "geekble",
       "brand",
-      "안녕하세요 긱블 에이전트님! 무드빔 선셋 프로젝터 런칭 릴스 1건, 260 USDC로 제안드려요.",
+      `안녕하세요 긱블 에이전트님! ${bName} ${product} 런칭 릴스 1건, 260 USDC로 제안드려요.`,
       "긱블 평균 조회수 28.6만 — CPM 효율 최상 구간. 딜당 한도 450의 58%에서 시작.",
       260,
     ),
@@ -344,7 +367,7 @@ export function expeditionSequence(): SequenceStep[] {
       draft,
       "geekble",
       "creator",
-      "빛을 다루는 제품이라 긱블 결이랑 맞네요. 기준선 250 넘었고 제작 슬롯도 비어 있어요 — 가격 맞으면 바로 갑니다. 콜.",
+      `${product}, 직접 만져보고 보여줄 수 있는 아이템이라 긱블 결이랑 맞네요. 기준선 250 넘었고 제작 슬롯도 비어 있어요 — 가격 맞으면 바로 갑니다. 콜.`,
       "최소 단가 250 충족 + 카테고리 적합 → 즉시 수락.",
       260,
     ),
@@ -375,7 +398,7 @@ export function expeditionSequence(): SequenceStep[] {
       draft,
       "ssin",
       "brand",
-      "씬님 에이전트님 안녕하세요, 무드빔의 타래예요. 선셋 프로젝터 런칭 릴스, 320 USDC 어때요?",
+      `씬님 에이전트님 안녕하세요, ${bName}의 ${agentName(brand)}예요. ${product} 런칭 릴스, 320 USDC 어때요?`,
       "뷰티 무드 정합 최상(94) → 예산 여유분 우선 배정. 한도의 71%에서 시작.",
       320,
     );
@@ -435,7 +458,7 @@ export function expeditionSequence(): SequenceStep[] {
       draft,
       "risabae",
       "brand",
-      "RISABAE 팀 에이전트님, 무드빔 런칭 협업 제안드려요. 340 USDC부터 시작해볼까요?",
+      `RISABAE 팀 에이전트님, ${bName} ${product} 런칭 협업 제안드려요. 340 USDC부터 시작해볼까요?`,
       "구독 268만 메가 채널 → 프리미엄 단가 예상, 한도의 76%에서 높게 시작.",
       340,
     ),
@@ -491,7 +514,7 @@ export function expeditionSequence(): SequenceStep[] {
 
 /* ---------------------------- 4. 승인 → 매듭 → 진행 ---------------------------- */
 
-export function knotSequence(): SequenceStep[] {
+export function knotSequence(brand: BrandProfile | null): SequenceStep[] {
   const S: SequenceStep[] = [];
   const step = (d: number, run: SequenceStep["run"]) => S.push({ d, run });
 
@@ -502,7 +525,7 @@ export function knotSequence(): SequenceStep[] {
   step(2600, (draft) => {
     const c = draft.campaign!;
     c.status = "active";
-    c.brief = TASK_BRIEF;
+    c.brief = taskBriefFor(brand);
     c.deals = [
       {
         creatorId: "ssin",
@@ -560,7 +583,7 @@ export function knotSequence(): SequenceStep[] {
   step(2600, (draft) => {
     const ssin = draft.campaign!.deals[0];
     ssin.starPct = 45;
-    feed(draft, "🎬", "@ssin 촬영 시작 — 레퍼런스 2번 저조도 무드로 간대요", "info");
+    feed(draft, "🎬", "@ssin 촬영 시작 — 브리프 레퍼런스 2번 무드로 간대요", "info");
   });
   step(2600, (draft) => {
     const ssin = draft.campaign!.deals[0];
@@ -574,7 +597,7 @@ export function knotSequence(): SequenceStep[] {
     const geekble = draft.campaign!.deals[1];
     geekble.milestones[1].status = "released";
     geekble.starPct = 100;
-    geekble.postUrl = "youtube.com/watch?v=geekble-moodbeam";
+    geekble.postUrl = `youtube.com/watch?v=geekble-${brandHandle(brand)}`;
     geekble.metrics = { views: "26.4만", saves: "2,300", ctr: "2.1%", cpmDelta: "-18%" };
     geekble.txs.push({ label: "마일스톤 2 릴리즈 182 USDC", hash: txHash("m2-geekble") });
     feed(draft, "🧶", "@geekble_kr 타래 완성 — 182 USDC 릴리즈", "money");
@@ -585,21 +608,21 @@ export function knotSequence(): SequenceStep[] {
 /* ------------------------- 4.5 게시물 제출 → 검증 → 정산 ------------------------- */
 
 /** 증빙 판정 — 하드 게이트. 통과 못 하면 다음 스텝으로 못 넘어간다. */
-export function verifyPostUrl(url: string): { label: string; ok: boolean }[] {
+export function verifyPostUrl(url: string, brand: BrandProfile | null): { label: string; ok: boolean }[] {
   const t = url.trim();
   const reachable = /^https?:\/\/\S+\.\S+/i.test(t) || /^\S+\.(com|kr|net|io)\/\S+/i.test(t);
   const isSocial = /instagram\.com|youtube\.com|youtu\.be|tiktok\.com/i.test(t);
   return [
     { label: "URL 접근 가능", ok: reachable },
     { label: "지원 플랫폼 (인스타 · 유튜브 · 틱톡)", ok: isSocial },
-    { label: "#광고 표기 · @moodbeam 태그", ok: reachable && isSocial },
+    { label: `#광고 표기 · @${brandHandle(brand)} 태그`, ok: reachable && isSocial },
   ];
 }
 
-export function postSubmittedSequence(url: string): SequenceStep[] {
+export function postSubmittedSequence(url: string, brand: BrandProfile | null): SequenceStep[] {
   const S: SequenceStep[] = [];
   const step = (d: number, run: SequenceStep["run"]) => S.push({ d, run });
-  const checks = verifyPostUrl(url);
+  const checks = verifyPostUrl(url, brand);
   const passed = checks.every((c) => c.ok);
 
   step(0, (draft) => {
@@ -663,7 +686,7 @@ export function postSubmittedSequence(url: string): SequenceStep[] {
 
 /* ------------------------------ 5. 오토파일럿 런 ------------------------------ */
 
-export function autopilotSequence(): SequenceStep[] {
+export function autopilotSequence(brand: BrandProfile | null): SequenceStep[] {
   const S: SequenceStep[] = [];
   const step = (d: number, run: SequenceStep["run"]) => S.push({ d, run });
   const push = (draft: DemoState, text: string, tone: FeedTone = "info") => {
@@ -673,7 +696,7 @@ export function autopilotSequence(): SequenceStep[] {
   step(0, (draft) => {
     draft.autopilot = true;
     draft.autopilotRun = {
-      label: "캠페인 #2 — 문라이트 램프 상시 캠페인",
+      label: `캠페인 #2 — ${productName(brand, 1)} 상시 캠페인`,
       items: [],
       spentUsdc: 0,
       dealCount: 0,

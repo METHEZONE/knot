@@ -11,7 +11,7 @@ import type { ChatChip, DemoAction, DemoState, SequenceStep } from "./types";
 import {
   autopilotSequence,
   buildBrandProfile,
-  composeFlow,
+  composeFlowFor,
   enterWorkspaceSequence,
   expeditionSequence,
   knotSequence,
@@ -123,7 +123,14 @@ export function initDemo(mode: "host" | "mirror") {
   try {
     const raw = localStorage.getItem(LS_KEY);
     // 이전 버전 상태에 없는 필드는 초기값으로 채운다 (배포 갱신 후 미러 크래시 방지)
-    if (raw) state = { ...initialState(), ...(JSON.parse(raw) as DemoState) };
+    if (raw) {
+      state = { ...initialState(), ...(JSON.parse(raw) as DemoState) };
+      // 구버전 brand에는 intro/images가 없다 — 기본값으로 채워서 머지
+      if (state.brand) {
+        state.brand.intro ??= "";
+        state.brand.images ??= [];
+      }
+    }
   } catch {
     state = initialState();
   }
@@ -195,12 +202,14 @@ async function fetchBrandProfile(url: string, fallback: ReturnType<typeof buildB
     profile?: {
       name: string;
       tagline: string;
+      intro?: string;
       tone: string[];
       products: { name: string; desc: string }[];
       audience: string;
       color: string;
     };
     logo?: string | null;
+    images?: string[];
     finalUrl?: string;
     hints?: { title?: string | null; description?: string | null; siteName?: string | null; logo?: string | null } | null;
   };
@@ -208,15 +217,18 @@ async function fetchBrandProfile(url: string, fallback: ReturnType<typeof buildB
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split("/")[0];
+  const images = (data.images ?? []).slice(0, 8);
   if (data.ok && data.profile) {
     const p = data.profile;
     return {
       url: domain || fallback.url,
       name: p.name || fallback.name,
       tagline: p.tagline || fallback.tagline,
+      intro: p.intro || fallback.intro,
       tone: (p.tone ?? []).slice(0, 3).length ? p.tone.slice(0, 3) : fallback.tone,
-      products: (p.products ?? []).slice(0, 2).length ? p.products.slice(0, 2) : fallback.products,
+      products: (p.products ?? []).slice(0, 4).length ? p.products.slice(0, 4) : fallback.products,
       audience: p.audience || fallback.audience,
+      images,
       color: /^#[0-9a-f]{6}$/i.test(p.color ?? "") ? p.color : fallback.color,
       logo: data.logo || fallback.logo,
       agentName: fallback.agentName,
@@ -229,6 +241,8 @@ async function fetchBrandProfile(url: string, fallback: ReturnType<typeof buildB
       url: domain || fallback.url,
       name: data.hints.siteName || data.hints.title?.split(/[|·—-]/)[0].trim() || fallback.name,
       tagline: data.hints.description?.slice(0, 40) || fallback.tagline,
+      intro: data.hints.description || fallback.intro,
+      images,
       logo: data.hints.logo || fallback.logo,
     };
   }
@@ -313,24 +327,25 @@ export function clickChip(chip: ChatChip) {
     for (const m of d.chat) if (m.chips) delete m.chips;
     d.chat.push({ id: nextId(), role: "user", text: chip.label, at: Date.now() });
   });
-  if (chip.id === "start-campaign") askNext(composeFlow.goal, "goal");
-  else if (chip.id.startsWith("goal-")) askNext(composeFlow.budget, "budget");
-  else if (chip.id.startsWith("budget-")) askNext(composeFlow.content, "content");
-  else if (chip.id.startsWith("content-")) askNext(composeFlow.confirm, "confirm");
-  else if (chip.id === "launch-expedition") playSequence(expeditionSequence());
-  else if (chip.id === "toggle-autopilot") playSequence(autopilotSequence());
+  const flow = composeFlowFor(state.brand);
+  if (chip.id === "start-campaign") askNext(flow.goal, "goal");
+  else if (chip.id.startsWith("goal-")) askNext(flow.budget, "budget");
+  else if (chip.id.startsWith("budget-")) askNext(flow.content, "content");
+  else if (chip.id.startsWith("content-")) askNext(flow.confirm, "confirm");
+  else if (chip.id === "launch-expedition") playSequence(expeditionSequence(state.brand));
+  else if (chip.id === "toggle-autopilot") playSequence(autopilotSequence(state.brand));
   else if (chip.id === "open-report") openReport(state); // 새 탭은 클릭 시점에 — 팝업 차단 회피
 }
 
 export function approveDeals() {
-  playSequence(knotSequence());
+  playSequence(knotSequence(state.brand));
 }
 
 /** 호스트에서 실행 — 게시물 검증 시퀀스 시작 (중복 제출 가드). */
 function handleSubmitPost(url: string) {
   const hero = state.campaign?.deals[0];
   if (!hero?.awaitingPost) return;
-  playSequence(postSubmittedSequence(url));
+  playSequence(postSubmittedSequence(url, state.brand));
 }
 
 /** 크리에이터 창에서 호출 — 게시물 URL 제출. 미러면 호스트로 보낸다. */
@@ -346,7 +361,14 @@ export function submitPost(url: string) {
  * 자유 입력 — /api/knot/chat(진짜 LLM)으로 대답하고,
  * 키가 없거나 실패하면 결정론 상태 응답으로 폴백한다.
  */
+let lastFreeText = { text: "", at: 0 };
+let answeringFreeText = false;
+
 export function sendFreeText(text: string) {
+  // 이중 답장 방어: 입력 핸들러가 같은 텍스트를 연속 발화하면(2초 내) 무시
+  const now = Date.now();
+  if (text === lastFreeText.text && now - lastFreeText.at < 2000) return;
+  lastFreeText = { text, at: now };
   mutate((d) => {
     d.chat.push({ id: nextId(), role: "user", text, at: Date.now() });
     d.agentTyping = true;
@@ -358,7 +380,14 @@ function chatContextSummary() {
   const c = state.campaign;
   return {
     brand: state.brand
-      ? { name: state.brand.name, agentName: state.brand.agentName, url: state.brand.url, tone: state.brand.tone }
+      ? {
+          name: state.brand.name,
+          agentName: state.brand.agentName,
+          url: state.brand.url,
+          tone: state.brand.tone,
+          intro: state.brand.intro,
+          products: state.brand.products,
+        }
       : null,
     campaign: c
       ? {
@@ -390,6 +419,16 @@ function chatContextSummary() {
 }
 
 async function answerFreeText() {
+  if (answeringFreeText) return; // 중복 실행 방지 — 답장은 한 번만
+  answeringFreeText = true;
+  try {
+    await answerFreeTextInner();
+  } finally {
+    answeringFreeText = false;
+  }
+}
+
+async function answerFreeTextInner() {
   const turns = state.chat
     .slice(-14)
     .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.text }));
@@ -412,7 +451,7 @@ async function answerFreeText() {
         d.chat.push({ id: nextId(), role: "agent", text: data.text!, chips, at: Date.now() });
       });
       if (data.action === "START_CAMPAIGN" && !state.campaign && state.composeStep !== "goal") {
-        askNext(composeFlow.goal, "goal");
+        askNext(composeFlowFor(state.brand).goal, "goal");
       }
       return;
     }
